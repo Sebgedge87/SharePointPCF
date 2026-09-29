@@ -184,7 +184,13 @@ const UrlEditor: React.FC<EditorProps<UrlValue | null>> = ({ column, value, onCh
  * Editor registry: picks the editor for the column's EditorKind. Anything
  * without an editor renders `fallback` (the display value).
  */
-export const FieldEditor: React.FC<EditorProps & { error?: string; fallback?: React.ReactNode }> = ({ error, fallback, ...props }) => {
+export const FieldEditor: React.FC<EditorProps & { error?: string; fallback?: React.ReactNode; label?: string; required?: boolean }> = ({
+    error,
+    fallback,
+    label,
+    required,
+    ...props
+}) => {
     const styles = useStyles();
     const pickers = React.useContext(PickerContext);
     let editor: React.ReactNode;
@@ -232,7 +238,7 @@ export const FieldEditor: React.FC<EditorProps & { error?: string; fallback?: Re
     }
     if (editor === null) return <>{fallback}</>;
     return (
-        <Field className={styles.field} size="small" validationState={error ? "error" : "none"} validationMessage={error}>
+        <Field className={styles.field} size="small" label={label} required={required} validationState={error ? "error" : "none"} validationMessage={error}>
             {editor}
         </Field>
     );

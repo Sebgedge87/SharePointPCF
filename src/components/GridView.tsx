@@ -17,6 +17,9 @@ import { ErrorState } from "./StatusViews";
 import { PickerProvider, PickerServices } from "./editors/Pickers";
 import { LookupSearch, PeopleSearch } from "../services/sharepoint/pickers";
 import { TermStoreClient } from "../services/graph/termStore";
+import { DropZone } from "./DropZone";
+import { UploadDialog, toPlanned } from "./UploadDialog";
+import { PlannedFile } from "../model/uploadPlan";
 
 const useStyles = makeStyles({
     dirty: { backgroundColor: tokens.colorPaletteYellowBackground1 },
@@ -46,6 +49,8 @@ export const GridView: React.FC<GridViewProps> = ({ session, services, onPickLoc
     const data = useGridData(session);
     const editing = useEditing(session, () => void data.reload());
     const locked = editing.dirtyCount > 0;
+    const [pending, setPending] = React.useState<PlannedFile[]>();
+    const fileInput = React.useRef<HTMLInputElement>(null);
 
     React.useEffect(() => {
         const e = data.error ?? editing.error;
@@ -97,20 +102,44 @@ export const GridView: React.FC<GridViewProps> = ({ session, services, onPickLoc
                 current={session.folder}
                 onPickLocation={onPickLocation}
                 busy={data.loading || locked}
+                onUploadClick={() => fileInput.current?.click()}
+            />
+            <input
+                ref={fileInput}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (files.length) setPending(toPlanned(files));
+                }}
             />
             <SaveBar dirtyCount={editing.dirtyCount} saving={editing.saving} onSave={() => void editing.saveAll()} onDiscard={editing.discardAll} />
             {editing.error && !AUTH_KINDS.has(editing.error.kind) && <ErrorState error={editing.error} />}
-            <MetadataGrid
-                session={session}
-                data={data}
-                actions={actions}
-                renderCell={renderCell}
-                locked={locked}
-                onRowDoubleClick={(row) => void editing.startEdit(row)}
-                rowClassName={(row) =>
-                    editing.isDirty(row) ? mergeClasses(styles.dirty) : editing.isEditing(row) ? mergeClasses(styles.editing) : undefined
-                }
-            />
+            <DropZone disabled={locked} onFiles={(files) => setPending(toPlanned(files))}>
+                <MetadataGrid
+                    session={session}
+                    data={data}
+                    actions={actions}
+                    renderCell={renderCell}
+                    locked={locked}
+                    onRowDoubleClick={(row) => void editing.startEdit(row)}
+                    rowClassName={(row) =>
+                        editing.isDirty(row) ? mergeClasses(styles.dirty) : editing.isEditing(row) ? mergeClasses(styles.editing) : undefined
+                    }
+                />
+            </DropZone>
+            {pending && (
+                <UploadDialog
+                    session={session}
+                    files={pending}
+                    onClose={(uploaded) => {
+                        setPending(undefined);
+                        if (uploaded) void data.reload();
+                    }}
+                />
+            )}
         </PickerProvider>
     );
 };

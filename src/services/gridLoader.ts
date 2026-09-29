@@ -21,6 +21,7 @@ export interface GridSession {
     contentTypes: ContentTypeInfo[];
     regional: RegionalSettings;
     columns: ColumnModel[];
+    columnConfig: ColumnConfig;
     warnings: string[];
 }
 
@@ -121,6 +122,7 @@ export async function loadGridSession(input: LoadInput): Promise<GridSession> {
         contentTypes,
         regional,
         columns: built.columns,
+        columnConfig: input.columnConfig,
         warnings,
     };
 }
