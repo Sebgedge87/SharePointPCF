@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SharePointMetadataGrid_Display" xml:space="preserve">
+    <value>SharePoint Metadata Grid</value>
+  </data>
+  <data name="SharePointMetadataGrid_Desc" xml:space="preserve">
+    <value>Editable grid of SharePoint document metadata for this record's folder, driven by a SharePoint view.</value>
+  </data>
+  <data name="dummy_Display" xml:space="preserve">
+    <value>Bound field</value>
+  </data>
+  <data name="dummy_Desc" xml:space="preserve">
+    <value>Required by the manifest only. Bind to any single line of text column.</value>
+  </data>
+  <data name="clientId_Display" xml:space="preserve">
+    <value>Entra app client ID</value>
+  </data>
+  <data name="clientId_Desc" xml:space="preserve">
+    <value>Application (client) ID of the SPA app registration. Not a secret.</value>
+  </data>
+  <data name="tenantId_Display" xml:space="preserve">
+    <value>Entra tenant ID</value>
+  </data>
+  <data name="tenantId_Desc" xml:space="preserve">
+    <value>Directory (tenant) ID. Not a secret.</value>
+  </data>
+  <data name="viewName_Display" xml:space="preserve">
+    <value>SharePoint view name</value>
+  </data>
+  <data name="viewName_Desc" xml:space="preserve">
+    <value>Name of the library view whose columns the grid shows.</value>
+  </data>
+  <data name="libraryName_Display" xml:space="preserve">
+    <value>Library name (optional)</value>
+  </data>
+  <data name="libraryName_Desc" xml:space="preserve">
+    <value>Library title or URL name. Filters document locations; required for the template folder mode.</value>
+  </data>
+  <data name="siteUrl_Display" xml:space="preserve">
+    <value>Site URL (optional)</value>
+  </data>
+  <data name="siteUrl_Desc" xml:space="preserve">
+    <value>Absolute SharePoint site URL. Overrides the site resolved from document locations.</value>
+  </data>
+  <data name="folderMode_Display" xml:space="preserve">
+    <value>Folder mode</value>
+  </data>
+  <data name="folderMode_Desc" xml:space="preserve">
+    <value>Where the folder resolution chain starts.</value>
+  </data>
+  <data name="folderMode_documentLocation" xml:space="preserve">
+    <value>Document location</value>
+  </data>
+  <data name="folderMode_template" xml:space="preserve">
+    <value>Template</value>
+  </data>
+  <data name="folderMode_override" xml:space="preserve">
+    <value>Override</value>
+  </data>
+  <data name="fallbackTemplate_Display" xml:space="preserve">
+    <value>Folder template</value>
+  </data>
+  <data name="fallbackTemplate_Desc" xml:space="preserve">
+    <value>Folder path template, e.g. {library}/{contactnumber}. Tokens are column logical names on the record.</value>
+  </data>
+  <data name="autoCreateFolder_Display" xml:space="preserve">
+    <value>Auto-create folder</value>
+  </data>
+  <data name="autoCreateFolder_Desc" xml:space="preserve">
+    <value>Create the folder from the template (and a document location row) when none exists.</value>
+  </data>
+  <data name="folderUrlOverride_Display" xml:space="preserve">
+    <value>Folder URL override</value>
+  </data>
+  <data name="folderUrlOverride_Desc" xml:space="preserve">
+    <value>Escape hatch: absolute URL of the SharePoint folder to show.</value>
+  </data>
+  <data name="columnConfig_Display" xml:space="preserve">
+    <value>Column configuration (JSON)</value>
+  </data>
+  <data name="columnConfig_Desc" xml:space="preserve">
+    <value>Per-column overrides: requiredOnUpload, readOnly, hidden, editor, label, default.</value>
+  </data>
+</root>

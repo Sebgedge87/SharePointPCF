@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Namespace / publisher prefix is a PLACEHOLDER. Confirm the real value before packaging.
+  See README.md "Before packaging".
+-->
+<manifest>
+  <control namespace="PLACEHOLDER" constructor="SharePointMetadataGrid" version="1.0.0"
+           display-name-key="SharePointMetadataGrid_Display" description-key="SharePointMetadataGrid_Desc"
+           control-type="virtual">
+    <external-service-usage enabled="true">
+      <domain>sharepoint.com</domain>
+      <domain>graph.microsoft.com</domain>
+      <domain>login.microsoftonline.com</domain>
+    </external-service-usage>
+
+    <property name="dummy" display-name-key="dummy_Display" description-key="dummy_Desc"
+              of-type="SingleLine.Text" usage="bound" required="true" />
+
+    <property name="clientId" display-name-key="clientId_Display" description-key="clientId_Desc"
+              of-type="SingleLine.Text" usage="input" required="true" />
+    <property name="tenantId" display-name-key="tenantId_Display" description-key="tenantId_Desc"
+              of-type="SingleLine.Text" usage="input" required="true" />
+    <property name="viewName" display-name-key="viewName_Display" description-key="viewName_Desc"
+              of-type="SingleLine.Text" usage="input" required="true" />
+    <property name="libraryName" display-name-key="libraryName_Display" description-key="libraryName_Desc"
+              of-type="SingleLine.Text" usage="input" required="false" />
+    <property name="siteUrl" display-name-key="siteUrl_Display" description-key="siteUrl_Desc"
+              of-type="SingleLine.Text" usage="input" required="false" />
+    <property name="folderMode" display-name-key="folderMode_Display" description-key="folderMode_Desc"
+              of-type="Enum" usage="input" required="false" default-value="documentLocation">
+      <value name="documentLocation" display-name-key="folderMode_documentLocation" default="true">documentLocation</value>
+      <value name="template" display-name-key="folderMode_template">template</value>
+      <value name="override" display-name-key="folderMode_override">override</value>
+    </property>
+    <property name="fallbackTemplate" display-name-key="fallbackTemplate_Display" description-key="fallbackTemplate_Desc"
+              of-type="SingleLine.Text" usage="input" required="false" />
+    <property name="autoCreateFolder" display-name-key="autoCreateFolder_Display" description-key="autoCreateFolder_Desc"
+              of-type="TwoOptions" usage="input" required="false" default-value="false" />
+    <property name="folderUrlOverride" display-name-key="folderUrlOverride_Display" description-key="folderUrlOverride_Desc"
+              of-type="SingleLine.Text" usage="bound" required="false" />
+    <property name="columnConfig" display-name-key="columnConfig_Display" description-key="columnConfig_Desc"
+              of-type="Multiple" usage="input" required="false" />
+
+    <resources>
+      <code path="index.ts" order="1" />
+      <platform-library name="React" version="16.14.0" />
+      <platform-library name="Fluent" version="9.68.0" />
+      <resx path="strings/SharePointMetadataGrid.1033.resx" version="1.0.0" />
+    </resources>
+
+    <feature-usage>
+      <uses-feature name="WebAPI" required="true" />
+      <uses-feature name="Utility" required="true" />
+    </feature-usage>
+  </control>
+</manifest>

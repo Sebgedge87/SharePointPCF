@@ -1,0 +1,8 @@
+node_modules/
+out/
+bin/
+obj/
+generated/
+coverage/
+*.zip
+.DS_Store
