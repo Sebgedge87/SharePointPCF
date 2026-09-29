@@ -14,6 +14,9 @@ import { useEditing } from "./useEditing";
 import { FieldEditor } from "./editors/FieldEditor";
 import { SaveBar } from "./SaveBar";
 import { ErrorState } from "./StatusViews";
+import { PickerProvider, PickerServices } from "./editors/Pickers";
+import { LookupSearch, PeopleSearch } from "../services/sharepoint/pickers";
+import { TermStoreClient } from "../services/graph/termStore";
 
 const useStyles = makeStyles({
     dirty: { backgroundColor: tokens.colorPaletteYellowBackground1 },
@@ -30,8 +33,16 @@ export interface GridViewProps {
 
 const AUTH_KINDS = new Set(["auth-required", "popup-blocked", "auth-cancelled", "auth-failed"]);
 
-export const GridView: React.FC<GridViewProps> = ({ session, onPickLocation, onAuthError }) => {
+export const GridView: React.FC<GridViewProps> = ({ session, services, onPickLocation, onAuthError }) => {
     const styles = useStyles();
+    const pickers: PickerServices = React.useMemo(
+        () => ({
+            lookups: new LookupSearch(session.sp),
+            people: new PeopleSearch(session.sp),
+            terms: services.http ? new TermStoreClient(services.http, session.sp) : undefined,
+        }),
+        [session, services],
+    );
     const data = useGridData(session);
     const editing = useEditing(session, () => void data.reload());
     const locked = editing.dirtyCount > 0;
@@ -76,7 +87,7 @@ export const GridView: React.FC<GridViewProps> = ({ session, onPickLocation, onA
     );
 
     return (
-        <>
+        <PickerProvider services={pickers}>
             <GridToolbar
                 columns={session.columns}
                 filters={data.filters}
@@ -100,6 +111,6 @@ export const GridView: React.FC<GridViewProps> = ({ session, onPickLocation, onA
                     editing.isDirty(row) ? mergeClasses(styles.dirty) : editing.isEditing(row) ? mergeClasses(styles.editing) : undefined
                 }
             />
-        </>
+        </PickerProvider>
     );
 };

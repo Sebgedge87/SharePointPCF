@@ -1,5 +1,6 @@
 import { HttpClient, RequestOptions } from "../httpClient";
 import { assertSharePointUrl } from "../auth/hostAllowlist";
+import { AppError } from "../../utils/errors";
 
 /** OData string literal: 'O''Brien'. */
 export function odataString(value: string): string {
@@ -71,6 +72,15 @@ export class SharePointRest {
                       ? (body as BodyInit)
                       : JSON.stringify(body),
         });
+    }
+
+    /** GET an absolute URL returned by SharePoint (e.g. odata.nextLink). Must be on this site's host. */
+    getAbsolute<T>(url: string, options: RequestOptions = {}): Promise<T> {
+        const u = assertSharePointUrl(url, "Paging URL");
+        if (u.origin.toLowerCase() !== this.origin.toLowerCase()) {
+            throw new AppError("host-not-allowed", "Paging URL is not on the site's host.");
+        }
+        return this.http.json<T>(url, options);
     }
 
     raw(apiPath: string, options: RequestOptions = {}): Promise<Response> {
