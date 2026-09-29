@@ -120,6 +120,8 @@ export class AuthService {
     private readonly inflight = new Map<string, Promise<string>>();
     /** Set once silent+popup failed; further calls fail fast until the user clicks Sign in. */
     private interactionNeeded = false;
+    /** The scope that last needed interaction: what a "Sign in" click should request. */
+    lastInteractiveScope?: string;
 
     constructor(client: MsalClientLike, loginHint?: LoginHint) {
         this.client = client;
@@ -214,6 +216,7 @@ export class AuthService {
         } catch (e) {
             if (!isAppError(e, "auth-required")) throw e;
         }
+        this.lastInteractiveScope = scope;
         if (this.interactionNeeded) {
             throw new AppError("auth-required", "Sign-in is required.");
         }

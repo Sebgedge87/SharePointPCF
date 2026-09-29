@@ -3,6 +3,7 @@ import { AuthService, validateAuthSettings } from "./auth/authService";
 import { HttpClient } from "./httpClient";
 import { scopeForUrl } from "./auth/scopes";
 import { SharePointRest } from "./sharepoint/spRest";
+import { AbsoluteUrlFn, DataverseApi, FolderResolver, RecordRef } from "./dataverse/folderResolver";
 
 export type FolderMode = "documentLocation" | "template" | "override";
 
@@ -50,6 +51,7 @@ export function validateControlConfig(c: ControlConfig): string[] {
 
 export interface AppServices {
     auth?: AuthService;
+    resolver?: FolderResolver;
     http?: HttpClient;
     /** SharePoint REST client for a web URL (validated against the host allowlist). */
     sharePoint(webUrl: string): SharePointRest;
@@ -99,10 +101,42 @@ export function createServices(context: ComponentFramework.Context<IInputs>, con
         loginHint: () => resolveLoginHint(context),
     });
     const http = new HttpClient({ tokenProvider: auth.tokenProvider, scopeFor: scopeForUrl });
+    const resolver = new FolderResolver(context.webAPI as unknown as DataverseApi, retrieveAbsoluteUrl(orgRedirectUri(context)));
     return {
         auth,
         http,
+        resolver,
         configProblems,
         sharePoint: (webUrl: string) => new SharePointRest(http, webUrl),
+    };
+}
+
+/** The record the form is showing. Undefined on a create form (not saved yet). */
+export function currentRecord(context: ComponentFramework.Context<IInputs>): RecordRef | undefined {
+    const info = (context.mode as unknown as { contextInfo?: { entityId?: string; entityTypeName?: string } }).contextInfo;
+    const id = info?.entityId?.replace(/[{}]/g, "");
+    if (!id || !info?.entityTypeName || /^0{8}-/.test(id)) return undefined;
+    return { entityName: info.entityTypeName, id };
+}
+
+export async function entitySetName(context: ComponentFramework.Context<IInputs>, entityName: string): Promise<string> {
+    const md = await context.utils.getEntityMetadata(entityName);
+    return (md as unknown as { EntitySetName: string }).EntitySetName;
+}
+
+/**
+ * RetrieveAbsoluteAndSiteCollectionUrl shortcut: a same-origin Dataverse call
+ * (session cookie; no SharePoint token involved).
+ */
+export function retrieveAbsoluteUrl(orgUrl: string): AbsoluteUrlFn {
+    return async (locationId) => {
+        const id = locationId.replace(/[{}]/g, "");
+        const res = await fetch(
+            `${orgUrl}/api/data/v9.2/sharepointdocumentlocations(${id})/Microsoft.Dynamics.CRM.RetrieveAbsoluteAndSiteCollectionUrl()`,
+            { credentials: "same-origin", headers: { Accept: "application/json", "OData-Version": "4.0", "OData-MaxVersion": "4.0" } },
+        );
+        if (!res.ok) return undefined;
+        const body = (await res.json()) as { AbsoluteUrl?: string; SiteCollectionUrl?: string };
+        return body.AbsoluteUrl ? { absoluteUrl: body.AbsoluteUrl, siteCollectionUrl: body.SiteCollectionUrl ?? "" } : undefined;
     };
 }
