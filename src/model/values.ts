@@ -149,5 +149,6 @@ export function serializeValue(editor: EditorKind, value: EditValue | undefined,
 
 /** Shallow-structural equality for dirty tracking. */
 export function valuesEqual(a: EditValue | undefined, b: EditValue | undefined): boolean {
+    if (Number.isNaN(a) || Number.isNaN(b)) return false;
     return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }

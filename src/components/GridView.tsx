@@ -1,12 +1,25 @@
 import * as React from "react";
+import { makeStyles, mergeClasses, Spinner, Text, tokens } from "@fluentui/react-components";
 import { GridSession } from "../services/gridLoader";
 import { AppServices } from "../services/appServices";
 import { ResolvedFolder } from "../services/dataverse/folderResolver";
 import { AppError } from "../utils/errors";
 import { RenderRow } from "../services/sharepoint/items";
+import { ColumnModel } from "../model/columns";
+import { rowId } from "../model/display";
 import { GridToolbar } from "./GridToolbar";
 import { MetadataGrid, RowActions, fileUrl } from "./MetadataGrid";
 import { useGridData } from "./useGridData";
+import { useEditing } from "./useEditing";
+import { FieldEditor } from "./editors/FieldEditor";
+import { SaveBar } from "./SaveBar";
+import { ErrorState } from "./StatusViews";
+
+const useStyles = makeStyles({
+    dirty: { backgroundColor: tokens.colorPaletteYellowBackground1 },
+    editing: { backgroundColor: tokens.colorNeutralBackground1Selected },
+    rowError: { color: tokens.colorPaletteRedForeground1, display: "block" },
+});
 
 export interface GridViewProps {
     session: GridSession;
@@ -18,17 +31,48 @@ export interface GridViewProps {
 const AUTH_KINDS = new Set(["auth-required", "popup-blocked", "auth-cancelled", "auth-failed"]);
 
 export const GridView: React.FC<GridViewProps> = ({ session, onPickLocation, onAuthError }) => {
+    const styles = useStyles();
     const data = useGridData(session);
+    const editing = useEditing(session, () => void data.reload());
+    const locked = editing.dirtyCount > 0;
 
     React.useEffect(() => {
-        if (data.error && AUTH_KINDS.has(data.error.kind)) onAuthError(data.error);
-    }, [data.error, onAuthError]);
+        const e = data.error ?? editing.error;
+        if (e && AUTH_KINDS.has(e.kind)) onAuthError(e);
+    }, [data.error, editing.error, onAuthError]);
 
     const actions: RowActions = React.useMemo(
         () => ({
             onOpen: (row: RenderRow) => window.open(fileUrl(session, row), "_blank", "noopener,noreferrer"),
+            onEdit: (row: RenderRow) => void editing.startEdit(row),
         }),
-        [session],
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [session, editing.startEdit],
+    );
+
+    const renderCell = React.useCallback(
+        (column: ColumnModel, row: RenderRow, display: React.ReactNode) => {
+            const edit = editing.rows.get(rowId(row));
+            if (!edit) return display;
+            if (edit.loading) return column === session.columns[0] ? <Spinner size="extra-tiny" /> : display;
+            const rowErr = column === session.columns[0] && edit.rowError ? <Text className={styles.rowError}>{edit.rowError}</Text> : null;
+            // Read-only/system/calculated columns render but never enter edit mode.
+            if (!column.editable || !(column.key in edit.current)) return <>{display}{rowErr}</>;
+            return (
+                <div onDoubleClick={(e) => e.stopPropagation()}>
+                    <FieldEditor
+                        column={column}
+                        value={edit.current[column.key]}
+                        onChange={(v) => editing.setValue(row, column.key, v)}
+                        disabled={edit.saving}
+                        error={edit.errors[column.key]}
+                        fallback={display}
+                    />
+                    {rowErr}
+                </div>
+            );
+        },
+        [editing, session, styles.rowError],
     );
 
     return (
@@ -41,9 +85,21 @@ export const GridView: React.FC<GridViewProps> = ({ session, onPickLocation, onA
                 candidates={session.candidates}
                 current={session.folder}
                 onPickLocation={onPickLocation}
-                busy={data.loading}
+                busy={data.loading || locked}
             />
-            <MetadataGrid session={session} data={data} actions={actions} />
+            <SaveBar dirtyCount={editing.dirtyCount} saving={editing.saving} onSave={() => void editing.saveAll()} onDiscard={editing.discardAll} />
+            {editing.error && !AUTH_KINDS.has(editing.error.kind) && <ErrorState error={editing.error} />}
+            <MetadataGrid
+                session={session}
+                data={data}
+                actions={actions}
+                renderCell={renderCell}
+                locked={locked}
+                onRowDoubleClick={(row) => void editing.startEdit(row)}
+                rowClassName={(row) =>
+                    editing.isDirty(row) ? mergeClasses(styles.dirty) : editing.isEditing(row) ? mergeClasses(styles.editing) : undefined
+                }
+            />
         </>
     );
 };

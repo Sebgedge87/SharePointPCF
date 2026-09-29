@@ -56,9 +56,13 @@ export interface MetadataGridProps {
     renderCell?: (column: ColumnModel, row: RenderRow, display: React.ReactNode) => React.ReactNode;
     /** Row highlight for dirty rows. */
     rowClassName?: (row: RenderRow) => string | undefined;
+    /** Unsaved edits: paging and sorting are paused. */
+    locked?: boolean;
+    /** Double-click a row to edit it. */
+    onRowDoubleClick?: (row: RenderRow) => void;
 }
 
-export const MetadataGrid: React.FC<MetadataGridProps> = ({ session, data, actions, renderCell, rowClassName }) => {
+export const MetadataGrid: React.FC<MetadataGridProps> = ({ session, data, actions, renderCell, rowClassName, locked, onRowDoubleClick }) => {
     const styles = useStyles();
 
     const columns: TableColumnDefinition<RenderRow>[] = React.useMemo(() => {
@@ -126,7 +130,7 @@ export const MetadataGrid: React.FC<MetadataGridProps> = ({ session, data, actio
                     sortState={data.sort ? { sortColumn: data.sort.field, sortDirection: data.sort.ascending ? "ascending" : "descending" } : undefined}
                     onSortChange={(_, s) => {
                         const col = byKey.get(String(s.sortColumn));
-                        if (col && isSortable(col)) data.setSort({ field: col.key, ascending: s.sortDirection === "ascending" });
+                        if (!locked && col && isSortable(col)) data.setSort({ field: col.key, ascending: s.sortDirection === "ascending" });
                     }}
                     resizableColumns
                     columnSizingOptions={sizing}
@@ -138,8 +142,8 @@ export const MetadataGrid: React.FC<MetadataGridProps> = ({ session, data, actio
                     </DataGridHeader>
                     <DataGridBody<RenderRow>>
                         {({ item, rowId: id }) => (
-                            <DataGridRow<RenderRow> key={id} className={rowClassName?.(item)}>
-                                {({ renderCell: rc }) => <DataGridCell>{rc(item)}</DataGridCell>}
+                            <DataGridRow<RenderRow> key={id} className={rowClassName?.(item)} onDoubleClick={() => onRowDoubleClick?.(item)}>
+                                {({ renderCell: rc }) => <DataGridCell focusMode="group">{rc(item)}</DataGridCell>}
                             </DataGridRow>
                         )}
                     </DataGridBody>
@@ -147,11 +151,11 @@ export const MetadataGrid: React.FC<MetadataGridProps> = ({ session, data, actio
                 {!data.loading && !data.rows.length && !data.error && <Text className={styles.empty}>No documents in this folder.</Text>}
             </div>
             <div className={styles.pager}>
-                <Button size="small" disabled={!data.hasPrev || data.loading} onClick={data.prev}>
+                <Button size="small" disabled={locked || !data.hasPrev || data.loading} onClick={data.prev}>
                     Previous
                 </Button>
                 <Text size={200}>Page {data.pageIndex + 1}</Text>
-                <Button size="small" disabled={!data.hasNext || data.loading} onClick={data.next}>
+                <Button size="small" disabled={locked || !data.hasNext || data.loading} onClick={data.next}>
                     Next
                 </Button>
                 {data.loading && <Loading label="Loading…" />}
