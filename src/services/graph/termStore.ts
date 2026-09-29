@@ -120,10 +120,10 @@ export class TermStoreClient {
         let level: { id?: string; path: string }[] = [{ id: anchorId, path: "" }];
         for (let depth = 0; level.length && depth < this.opts.maxDepth; depth++) {
             const nextLevel: { id?: string; path: string }[] = [];
-            for (const parent of level) {
+            for (const node of level) {
                 let kids: GraphTerm[];
                 try {
-                    kids = await this.children(childrenUrl(parent.id));
+                    kids = await this.children(childrenUrl(node.id));
                 } catch (e) {
                     if (depth === 0) throw e;
                     log.warn("Could not load child terms", e);
@@ -131,7 +131,7 @@ export class TermStoreClient {
                 }
                 for (const k of kids) {
                     const label = defaultLabel(k);
-                    const path = parent.path ? `${parent.path} > ${label}` : label;
+                    const path = node.path ? `${node.path} > ${label}` : label;
                     result.push({ label, termId: k.id, path });
                     nextLevel.push({ id: k.id, path });
                     if (result.length >= this.opts.maxTerms) return result;

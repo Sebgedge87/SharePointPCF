@@ -21,13 +21,13 @@ export interface ViewInfo {
     rowLimit: number;
 }
 
-type ListRow = {
+interface ListRow {
     Id: string;
     Title: string;
     EnableVersioning: boolean;
     ForceCheckout: boolean;
     RootFolder: { ServerRelativeUrl: string };
-};
+}
 
 const LIST_QUERY = { $select: "Id,Title,EnableVersioning,ForceCheckout,RootFolder/ServerRelativeUrl", $expand: "RootFolder" };
 

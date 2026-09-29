@@ -20,6 +20,7 @@ import { TermStoreClient } from "../services/graph/termStore";
 import { DropZone } from "./DropZone";
 import { UploadDialog, toPlanned } from "./UploadDialog";
 import { PlannedFile } from "../model/uploadPlan";
+import { DeleteDialog } from "./DeleteDialog";
 
 const useStyles = makeStyles({
     dirty: { backgroundColor: tokens.colorPaletteYellowBackground1 },
@@ -50,6 +51,7 @@ export const GridView: React.FC<GridViewProps> = ({ session, services, onPickLoc
     const editing = useEditing(session, () => void data.reload());
     const locked = editing.dirtyCount > 0;
     const [pending, setPending] = React.useState<PlannedFile[]>();
+    const [deleting, setDeleting] = React.useState<RenderRow>();
     const fileInput = React.useRef<HTMLInputElement>(null);
 
     React.useEffect(() => {
@@ -61,6 +63,7 @@ export const GridView: React.FC<GridViewProps> = ({ session, services, onPickLoc
         () => ({
             onOpen: (row: RenderRow) => window.open(fileUrl(session, row), "_blank", "noopener,noreferrer"),
             onEdit: (row: RenderRow) => void editing.startEdit(row),
+            onDelete: (row: RenderRow) => setDeleting(row),
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [session, editing.startEdit],
@@ -130,6 +133,19 @@ export const GridView: React.FC<GridViewProps> = ({ session, services, onPickLoc
                     }
                 />
             </DropZone>
+            {deleting && (
+                <DeleteDialog
+                    row={deleting}
+                    onConfirm={() => session.items.recycle(rowId(deleting))}
+                    onClose={(deleted) => {
+                        if (deleted) {
+                            editing.cancelRow(deleting);
+                            void data.reload();
+                        }
+                        setDeleting(undefined);
+                    }}
+                />
+            )}
             {pending && (
                 <UploadDialog
                     session={session}

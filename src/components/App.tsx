@@ -59,7 +59,11 @@ export const App: React.FC<AppProps> = ({ context, config, services }) => {
     );
 };
 
-const Loader: React.FC<AppProps> = ({ context, config, services }) => {
+const Loader: React.FC<AppProps> = ({ context, config: configProp, services }) => {
+    // updateView hands us a fresh config object on every host render; only reload when a value changes.
+    const configKey = JSON.stringify(configProp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const config = React.useMemo(() => configProp, [configKey]);
     const record = currentRecord(context);
     const [state, setState] = React.useState<LoadState>({ status: "loading" });
     const [warnings, setWarnings] = React.useState<string[]>([]);
