@@ -40,6 +40,7 @@ npm test        # builds first, then runs both tests. Needs Playwright + Chromiu
 | `build.py` | Inlines SheetJS, ExcelJS, JSZip, Mermaid, the logo, the template and a starting workbook |
 | `tests/smoke.js` | Load, convert, ERD, draw.io export, persistence |
 | `tests/checks.js` | Overview, every data-model check, Dataverse import (both JSON shapes, error files), Dataverse comparison, relationships on table pages, N:N in the ERD and draw.io |
+| `tests/ui.js` | Interface: ERD defaults on a 90-table model, header and menus, keyboard access, field-type trimming, severity colours, phone layout |
 | `tests/roundtrip.js` | Edit, export both ways and read back, reload, carry edits to a newer version, keep workbooks separate, structural comparison, refused partial save, CSV columns, small screens |
 
 ## Notes

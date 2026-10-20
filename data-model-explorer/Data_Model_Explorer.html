@@ -7,7 +7,7 @@
 <style>
 :root{
   --bg:#ffffff; --panel:#ffffff; --panel2:#ECF1F5; --line:#d5dee7; --line2:#e6ecf1;
-  --text:#0A4873; --muted:#4d6a82; --faint:#7d95a9;
+  --text:#1d2b36; --muted:#4d6a82; --faint:#55707f;  /* body text neutral; faint passes AA on white and grey panels */
   --accent:#0A4873; --accent-bg:#E3ECF4; --accent-ink:#0A4873; --pink:#BB1C73;
   --edit:#7B134D; --edit-bg:#F7D4E7;
   --red:#7B134D; --red-bg:#F7D4E7; --amber:#BB1C73; --amber-bg:#fff; --blue:#0A4873; --blue-bg:#E3ECF4;
@@ -19,11 +19,18 @@ html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:13.5px/1.5 Aptos,"Aptos Display","Segoe UI",Calibri,Arial,sans-serif;overflow:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
-a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+a{color:var(--accent);text-decoration:underline;text-decoration-color:rgba(10,72,115,.35);text-underline-offset:2px} a:hover{text-decoration-color:currentColor}
+/* severity: red for errors, amber for warnings, grey for info (pink stays the brand and edit colour) */
+.sev-err{background:#FEE4E2;color:#B42318;font-weight:600} .sev-warn{background:#FEF0C7;color:#93370D;box-shadow:inset 0 0 0 1px #F5C26B} .sev-info{background:var(--slate-bg);color:var(--muted)}
+.lnk{color:var(--accent);text-decoration:underline;text-decoration-color:rgba(10,72,115,.35);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.grid tbody tr:focus-visible td{background:var(--accent-bg)} .grid tbody tr{outline:none}
 .app{display:grid;grid-template-rows:56px 1fr;grid-template-columns:var(--sbw,272px) 1fr;height:100vh;height:100dvh}
 .top{grid-column:1/3;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--panel);border-bottom:2px solid var(--accent)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.01em;min-width:0;flex:0 1 auto}
-.top{overflow-x:auto;scrollbar-width:thin} .top>.btn,.top>.savestate{flex-shrink:0} .search{min-width:170px}
+.top{overflow-x:auto;scrollbar-width:thin} .top>.btn,.top>.savestate{flex-shrink:0} .search{min-width:260px}
+.brand small{display:none!important}   /* the workbook selector shows the file */
+#btnMob{display:none}
 .hidebtn{display:none!important}
 .wbname{display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 .menu .mh{padding:6px 9px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650}
@@ -55,7 +62,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .side .sfilter{padding:12px 12px 4px}
 .sexp{display:flex;gap:6px;padding:0 12px 6px}.sexp button{flex:1;border:1px solid var(--line);background:var(--panel);border-radius:7px;font-size:11.5px;padding:3px 0;color:var(--muted)}.sexp button:hover{background:var(--panel2);color:var(--accent)}
 tr.rcol .cell{max-height:3em;overflow:hidden;position:relative}
-.rt{border:0;background:transparent;color:var(--accent);padding:0 5px 0 0;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle}.rt:hover{color:var(--pink)}
+.rt{border:0;background:transparent;color:var(--accent);padding:4px 6px 4px 0;min-width:22px;min-height:24px;font-size:14px;line-height:1;cursor:pointer;vertical-align:middle}.rt:hover{color:var(--pink)}
 .side .sfilter input{width:100%;height:32px;border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:0 10px;outline:none}
 .side .sfilter input:focus{border-color:var(--accent)}
 .nav{overflow:auto;padding:0 8px 16px;flex:1}
@@ -65,8 +72,8 @@ tr.rcol .cell{max-height:3em;overflow:hidden;position:relative}
 .navitem:hover{background:var(--panel2)}
 .navitem.active{background:var(--panel2);color:var(--accent);font-weight:650;box-shadow:inset 3px 0 0 var(--pink)}
 .navitem .nm{flex:1;min-width:0;white-space:normal;word-break:break-word}
-.navitem .nm small{display:block;color:var(--faint);font-weight:400;font-size:11px;overflow-wrap:anywhere}
-.navitem .ct{font-size:11px;color:var(--muted);background:var(--slate-bg);border-radius:9px;padding:0 7px}
+.navitem .nm small{display:block;color:var(--faint);font-weight:400;font-size:12px;overflow-wrap:anywhere}
+.navitem .ct{font-size:12px;color:var(--muted);background:var(--slate-bg);border-radius:9px;padding:0 7px}
 .navitem .ed{width:7px;height:7px;border-radius:50%;background:var(--edit)}
 .navitem .ico{width:16px;color:var(--faint);flex:none;text-align:center}
 .main{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
@@ -82,7 +89,7 @@ tr.rcol .cell{max-height:3em;overflow:hidden;position:relative}
 .stat{border:1px solid var(--line);border-radius:14px;padding:6px 12px;background:var(--panel);min-width:96px;cursor:pointer;text-align:left}
 .stat:hover{border-color:var(--accent)} .stat.on{border-color:var(--accent);background:var(--accent-bg)}
 .stat b{display:block;font-size:20px;color:var(--accent);letter-spacing:-.02em;line-height:1.2}
-.stat span{font-size:11px;color:var(--muted)}
+.stat span{font-size:12px;color:var(--muted)}
 .toolbar{display:flex;gap:8px;align-items:center;padding:10px 22px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--panel)}
 .toolbar .grow{flex:1}
 .toolbar .count{color:var(--muted);font-size:12.5px}
@@ -95,7 +102,7 @@ table.grid{border-collapse:separate;border-spacing:0;table-layout:fixed;width:ma
 .grid th .th{display:flex;align-items:center;gap:4px;padding:6px 6px 6px 10px;min-height:34px}
 .grid th .lbl{flex:1;white-space:normal;line-height:1.25;cursor:pointer;user-select:none}
 .grid th .lbl:hover{color:var(--text)}
-.grid th .fbtn{border:0;background:transparent;color:var(--faint);padding:3px 4px;border-radius:5px;line-height:0}
+.grid th .fbtn{border:0;background:transparent;color:var(--faint);padding:6px;min-width:26px;min-height:26px;border-radius:5px;line-height:0}
 .grid th .fbtn:hover{background:var(--line);color:var(--text)}
 .grid th .fbtn.on{color:var(--accent);background:var(--accent-bg)}
 .grid th.hint .lbl{border-bottom:1px dotted var(--faint)}
@@ -141,7 +148,7 @@ mark{background:#F7D4E7;color:#7B134D;border-radius:2px;padding:0 1px}
 .menu button,.menu label{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:7px 9px;border-radius:6px}
 .menu button:hover,.menu label:hover{background:var(--panel2)}
 .menu button:has(small){flex-direction:column;align-items:flex-start;gap:0}
-.menu button small{color:var(--faint);font-size:11px}
+.menu button small{color:var(--faint);font-size:12px}
 .menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
 /* drawers */
 .fcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 10px;background:var(--panel)}
@@ -154,7 +161,7 @@ mark{background:#F7D4E7;color:#7B134D;border-radius:2px;padding:0 1px}
 .drawer header h3{margin:0;font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .drawer .body{overflow:auto;padding:12px 16px 40px;flex:1}
 .fld{margin-bottom:12px}
-.fld .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650;margin-bottom:2px}
+.fld .k{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650;margin-bottom:2px}
 .fld .v{padding:6px 9px;border:1px solid transparent;border-radius:7px;white-space:pre-wrap;word-break:break-word;min-height:30px;cursor:text}
 .fld .v:hover{border-color:var(--line);background:var(--panel2)}
 .fld .v.edited{background:var(--edit-bg);border-color:var(--edit)}
@@ -184,7 +191,7 @@ td.upd{background:var(--accent-bg)!important;box-shadow:inset 3px 0 0 var(--acce
 .readme th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .note2{border-left:3px solid var(--pink);background:var(--violet-bg);color:var(--edit);padding:8px 12px;border-radius:0 8px 8px 0;margin:10px 0;max-width:800px}
 .stats .tyrow{flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px}
-.tylbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650;margin-right:2px}
+.tylbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650;margin-right:2px}
 .stat.ty{min-width:0;padding:4px 11px;border-radius:999px;display:inline-flex;gap:7px;align-items:baseline}
 .stat.ty b{display:inline;font-size:14px}
 .stat.ty span{font-size:11.5px}
@@ -218,10 +225,12 @@ td.upd{background:var(--accent-bg)!important;box-shadow:inset 3px 0 0 var(--acce
 .ov .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
 .ovtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:16px 0 18px}
 .ovtile{border:1px solid var(--line);border-radius:14px;padding:10px 14px;background:var(--panel);text-align:left}
-button.ovtile:hover{border-color:var(--accent);background:var(--panel2)}
+button.ovtile{cursor:pointer;position:relative} button.ovtile::after{content:'→';position:absolute;right:12px;top:10px;color:var(--faint);font-size:14px}
+button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.ovtile:hover::after{color:var(--accent)}
+.ovtile em{display:block;font-style:normal;font-size:12px;color:var(--faint)}
 .ovtile b{display:block;font-size:24px;color:var(--accent);line-height:1.2;letter-spacing:-.02em}
 .ovtile span{font-size:12px;color:var(--muted)}
-.ovtile.bad{border-color:var(--pink)} .ovtile.bad b{color:var(--pink)}
+.ovtile.err{border-color:#F04438} .ovtile.err b{color:#B42318} .ovtile.warn{border-color:#F5A524} .ovtile.warn b{color:#93370D}
 .ovgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;align-items:start}
 .ovcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--panel);min-width:0}
 .ovcard h3{margin:0 0 10px;font-size:14px;color:var(--accent)}
@@ -239,6 +248,10 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)}
   .side{display:none}
   .brand small{display:none} .brand{min-width:0}
   .navtoggle{display:inline-flex}
+  #btnOpen,#btnVer,#btnMore,#btnChanges,#btnExport,.savestate{display:none!important}
+  #btnMob{display:inline-flex}
+  .brand{display:none!important}   /* no room for the logo: the search box needs it */
+  .search{min-width:120px;flex:1 1 140px} .search kbd{display:none} .wbname{max-width:78px}
   /* the sidebar becomes a slide-over panel opened from the ☰ button */
   body.navopen .side{display:flex;position:fixed;top:58px;left:0;bottom:0;width:min(320px,88vw);z-index:45;box-shadow:var(--shadow)}
   .sbres{display:none}
@@ -267,7 +280,7 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)}
 .erdv .tb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line2)}
 .erdv .tb .grow{flex:1}.erdv .tb .info{color:var(--muted);font-size:12.5px}
 .erdv .lst label{position:relative}
-.erdv .corebtn{margin-left:6px;border:0;background:none;color:#c5ccd3;cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+.erdv .corebtn{margin-left:6px;border:0;background:none;color:#7a8b98;cursor:pointer;font-size:15px;line-height:1;padding:4px;min-width:26px;min-height:26px}
 .erdv .corebtn:hover{color:#E8A317}.erdv .corebtn.on{color:#E8A317}
 .erdv .cv{flex:1;overflow:auto;background:#fff;padding:12px;position:relative;display:flex;cursor:grab;min-height:0}
 .erdv .cv svg{display:block;flex:none}
@@ -308,12 +321,13 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)}
     <button class="btn hidebtn" id="btnHelp" title="How this works">How it works</button>
     <button class="btn" id="btnWb" title="Which workbook is open. Switch to another one kept in this browser, or open a new one."><span class="wbname" id="wbName">Workbook</span> ▾</button>
     <button class="btn hidebtn" id="btnFiles" title="Browse the workbooks kept in this browser">Files <span class="badge" id="filesCount" style="background:var(--accent)">1</span></button>
-    <button class="btn" id="btnOpen" title="Load an updated version of the workbook. Your edits carry over.">Load updated version…</button>
+    <button class="btn" id="btnOpen" title="Load a newer version of this workbook. Your edits carry over, and the differences are shown.">Load version…</button>
     <button class="btn" id="btnVer" style="display:none">What changed <span class="badge" id="verCount" style="background:var(--accent)">0</span></button>
     <button class="btn hidebtn" id="btnDv" title="Check this workbook against the table definitions in a Dataverse environment">Dataverse</button>
     <button class="btn hidebtn" id="btnTmpl" title="Template used for reading and exporting">Template <span class="badge" id="tmplCount" style="background:var(--pink);display:none">0</span></button>
-    <button class="btn" id="btnMore" title="Dataverse check, template, and how it works">More ▾ <span class="badge" id="moreCount" style="background:var(--pink);display:none">0</span></button>
+    <button class="btn" id="btnMore" title="Dataverse check, template, and how it works">More ▾</button>
     <button class="btn" id="btnChanges">Changes <span class="badge" id="chgCount">0</span></button>
+    <button class="btn" id="btnMob" title="Actions" aria-label="Actions">⋯</button>
     <button class="btn primary" id="btnExport">Export ▾</button>
     <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
   </div>
@@ -325,12 +339,12 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)}
   </aside>
   <main class="main" id="main"></main>
 </div>
-<aside class="drawer" id="detail"></aside>
-<aside class="drawer" id="changes"></aside>
-<aside class="drawer" id="versions"></aside>
-<aside class="drawer" id="tmplpanel"></aside>
-<aside class="drawer" id="files"></aside>
-<aside class="drawer" id="dvpanel"></aside>
+<aside class="drawer" id="detail" role="dialog" aria-label="Row details"></aside>
+<aside class="drawer" id="changes" role="dialog" aria-label="Changes"></aside>
+<aside class="drawer" id="versions" role="dialog" aria-label="What changed"></aside>
+<aside class="drawer" id="tmplpanel" role="dialog" aria-label="Template"></aside>
+<aside class="drawer" id="files" role="dialog" aria-label="Files"></aside>
+<aside class="drawer" id="dvpanel" role="dialog" aria-label="Dataverse check"></aside>
 <input type="file" id="dvfile" accept=".json,application/json" multiple hidden>
 <input type="file" id="tfile" accept=".xlsx,.xlsm" hidden>
 <div class="drop" id="drop">Drop an .xlsx workbook, or Dataverse .json files, to load them</div>
@@ -4089,7 +4103,7 @@ const ICON_FILTER='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" s
 /* ---------- state ---------- */
 const S={fileName:'',sheets:[],byLogical:{},views:{},cur:null,edits:new Map(),pending:[],diff:null,rowOv:new Map(),ui:{density:'normal',hidden:{}},sideFilter:'',storeKey:'',collapsed:{}};
 const HIDE_DEFAULT=['Schema Name','Type','Object Type Code'];
-const WIDTHS={'Logical Name':210,'Schema Name':200,'Display Name':190,'Attribute Type':150,'Description':300,'Custom Attribute':100,'Type':84,'Required Level':175,'Additional data':290,'Add to RAF Form?':190,'Comment':280,'Field Level Security':110,
+const WIDTHS={'Logical Name':240,'Schema Name':200,'Display Name':190,'Attribute Type':150,'Description':300,'Custom Attribute':100,'Type':84,'Required Level':175,'Additional data':290,'Add to RAF Form?':190,'Comment':280,'Field Level Security':110,
  'Table':190,'Area':130,'Table Name':170,'Out of the box/custom table?':130,'Static Data?':90,'Purpose':360,'FormusPro Comments':300,'Added to ERD?':90,'Defined in data model?':110};
 const ENUM_COLS=new Set(['custom attribute','required level','attribute type','type']);
 S.tmplOpts={};
@@ -4264,7 +4278,7 @@ function updateCounts(){
   $('#chgCount').textContent=n;
   $('#chgCount').style.display=n?'':'none';
   $('#chgCount').style.background=S.pending.length?'var(--pink)':'';
-  {const C=S.conf||[];const n=C.filter(x=>x.isNew||x.extra.length||x.missing.length).length;$('#tmplCount').textContent=n;$('#tmplCount').style.display=n?'':'none';$('#moreCount').textContent=n;$('#moreCount').style.display=n?'':'none'}
+  {const C=S.conf||[];const n=C.filter(x=>x.isNew||x.extra.length||x.missing.length).length;$('#tmplCount').textContent=n;$('#tmplCount').style.display=n?'':'none'}
   $('#btnVer').style.display=S.diff?'':'none'; $('#verCount').textContent=S.diff?S.diff.total:0;
   renderNav();
 }
@@ -4500,14 +4514,15 @@ function renderVersions(){
     if(!b.added.length&&!b.gone.length&&!b.changed.length&&!b.colsAdded.length&&!b.colsRemoved.length&&!b.meta.length&&!b.subs.length&&!b.rels.length) return;
     h+=`<div class="vsec"><h4>${link(sh,null,esc(sh.label))} <span class="dim">${b.added.length?'+'+b.added.length+' ':''}${b.gone.length?'−'+b.gone.length+' ':''}${b.changed.length?'✎'+b.changed.length:''}</span></h4>`;
     const blank=v=>v?esc(v):'<i>(blank)</i>';
-    if(b.colsAdded.length) h+=`<div class="vline"><span class="pill p-green">COLUMN ADDED</span> ${b.colsAdded.map(c=>`<span class="tchip dead">${esc(c)}</span>`).join('')}</div>`;
-    if(b.colsRemoved.length) h+=`<div class="vline"><span class="pill p-red">COLUMN REMOVED</span> ${b.colsRemoved.map(c=>`<span class="tchip dead">${esc(c)}</span>`).join('')}</div>`;
+    if(b.colsAdded.length) h+=`<div class="vline"><span class="pill p-green">+ COLUMN ADDED</span> ${b.colsAdded.map(c=>`<span class="tchip dead">${esc(c)}</span>`).join('')}</div>`;
+    if(b.colsRemoved.length) h+=`<div class="vline"><span class="pill p-red">− COLUMN REMOVED</span> ${b.colsRemoved.map(c=>`<span class="tchip dead">${esc(c)}</span>`).join('')}</div>`;
     b.meta.forEach(m=>h+=`<div class="vline"><span class="pill p-violet">TABLE DETAIL</span> <b>${esc(m.key)}</b><div class="d"><div class="o">${blank(m.old)}</div><div class="nw">${m.nw?esc(m.nw):'<i>(cleared)</i>'}</div></div></div>`);
-    b.subs.forEach(x=>{x.added.forEach(r=>h+=`<div class="vline"><span class="pill p-green">${esc(x.title.toUpperCase())} ADDED</span> ${esc(r)}</div>`);x.removed.forEach(r=>h+=`<div class="vline"><span class="pill p-red">${esc(x.title.toUpperCase())} REMOVED</span> ${esc(r)}</div>`)});
+    b.subs.forEach(x=>{x.added.forEach(r=>h+=`<div class="vline"><span class="pill p-green">+ ${esc(x.title.toUpperCase())} ADDED</span> ${esc(r)}</div>`);x.removed.forEach(r=>h+=`<div class="vline"><span class="pill p-red">− ${esc(x.title.toUpperCase())} REMOVED</span> ${esc(r)}</div>`)});
     b.rels.forEach(x=>h+=`<div class="vline"><span class="pill p-lookup">RELATIONSHIP</span> <span class="mono">${esc(x.field)}</span>${x.added.length?` now looks up ${x.added.map(t=>`<span class="tchip dead">${esc(t)}</span>`).join('')}`:''}${x.removed.length?` ${x.added.length?'and ':''}no longer looks up ${x.removed.map(t=>`<span class="tchip dead">${esc(t)}</span>`).join('')}`:''}</div>`);
-    b.added.forEach(r=>h+=`<div class="vline"><span class="pill p-green">NEW</span> ${link(sh,r,'<span class="mono">'+esc(r.orig[0])+'</span>')} <span class="dim">${esc(getVal(sh,r,'Display Name'))}</span></div>`);
-    b.gone.forEach(g=>h+=`<div class="vline"><span class="pill p-red">REMOVED</span> <span class="mono">${esc(g.key)}</span> <span class="dim">${esc(g.label)}</span></div>`);
-    b.changed.forEach(c=>h+=`<div class="vline"><span class="pill p-blue">${esc(c.col)}</span> ${link(sh,c.row,'<span class="mono">'+esc(c.row.orig[0])+'</span>')}<div class="d"><div class="o">${c.old?esc(c.old):'<i>(blank)</i>'}</div><div class="nw">${c.nw?esc(c.nw):'<i>(cleared)</i>'}</div></div></div>`);
+    b.added.forEach(r=>h+=`<div class="vline"><span class="pill p-green">+ NEW</span> ${link(sh,r,'<span class="mono">'+esc(r.orig[0])+'</span>')} <span class="dim">${esc(getVal(sh,r,'Display Name'))}</span></div>`);
+    b.gone.forEach(g=>h+=`<div class="vline"><span class="pill p-red">− REMOVED</span> <span class="mono">${esc(g.key)}</span> <span class="dim">${esc(g.label)}</span></div>`);
+    const relField=new Set(b.rels.map(x=>x.field)), fn=c=>c.row.orig[c.sh.colIdx['Logical Name']??0]||c.row.key;
+    b.changed.filter(c=>!(c.col==='Additional data'&&relField.has(fn(c)))).forEach(c=>h+=`<div class="vline"><span class="pill p-blue">${esc(c.col)}</span> ${link(sh,c.row,'<span class="mono">'+esc(c.row.orig[0])+'</span>')}<div class="d"><div class="o">${c.old?esc(c.old):'<i>(blank)</i>'}</div><div class="nw">${c.nw?esc(c.nw):'<i>(cleared)</i>'}</div></div></div>`);
     h+='</div>';
   });
   d.innerHTML=h+'</div>'; $('#changes').classList.remove('open'); $('#detail').classList.remove('open'); $('#tmplpanel').classList.remove('open'); d.classList.add('open');
@@ -4630,7 +4645,7 @@ function renderNav(){
   });
   S.groups=order.slice();
   order.sort((a,b)=>{const rank=g=>g==='Other tables'?2:g==='Other sheets'?3:g==='All'?0:1;return rank(a)-rank(b)||a.localeCompare(b)});
-  if(S.initCollapse){order.forEach(g=>S.collapsed[g]=true);S.initCollapse=false}
+  if(S.initCollapse){if(order.length>1) order.forEach(g=>S.collapsed[g]=true); S.initCollapse=false}   // a single group starts open
   const keepScroll=nav.scrollTop;
   nav.innerHTML=top+order.map(g=>{
     const col=S.collapsed[g]&&!f;
@@ -4706,6 +4721,7 @@ function lookupCount(sh){
   const i=sh.colIdx['Attribute Type']; if(i===undefined) return 0;
   let n=0; sh.rows.forEach(r=>{if(/^lookup$/i.test(r.vals[i]))n++}); return n;
 }
+function statOn(s,st){if(s.filter){const f=st.filters[s.filter[0]];return !!(f&&f.sel&&f.sel.size===1&&f.sel.has(s.filter[1]))}return !!(s.k&&st.quick[s.k])}
 function statTile(s,st){
   let on=s.k&&st.quick[s.k];
   if(s.filter){const f=st.filters[s.filter[0]];on=!!(f&&f.sel&&f.sel.size===1&&f.sel.has(s.filter[1]))}
@@ -4719,7 +4735,9 @@ function typeStats(view){
 }
 function statsHTML(view,st){
   const ty=typeStats(view);
-  return stats(view).map(s=>statTile(s,st)).join('')+(ty.length?`<div class="tyrow"><span class="tylbl">By field type</span>${ty.map(s=>statTile(s,st)).join('')}</div>`:'');
+  // field types: the eight most common, the rest behind "+N more" (a filtered type always stays visible)
+  const show=S.ui.allTypes?ty:ty.filter((s,i)=>i<8||statOn(s,st)), more=ty.length-show.length;
+  return stats(view).map(s=>statTile(s,st)).join('')+(ty.length?`<div class="tyrow"><span class="tylbl">By field type</span>${show.map(s=>statTile(s,st)).join('')}${more?`<button class="btn ghost" data-act="alltypes" style="height:26px">+${more} more</button>`:S.ui.allTypes&&ty.length>8?`<button class="btn ghost" data-act="alltypes" style="height:26px">Fewer</button>`:''}</div>`:'');
 }
 function stats(view){
   const items=view.items; const cols=view.cols;
@@ -4803,7 +4821,7 @@ function renderGrid(append){
   for(let i=0;i<upto;i++){
     const it=items[i];
     const open=S.rowOv.has(it.row)?S.rowOv.get(it.row):S.ui.expanded!==false;
-    h+=`<tr data-i="${i}" class="${S.selItem===it.row?'sel':''} ${open?'':'rcol'}">`;
+    h+=`<tr data-i="${i}" tabindex="0" class="${S.selItem===it.row?'sel':''} ${open?'':'rcol'}">`;
     cols.forEach((c,ci)=>{
       const edited=c!=='Table'&&isEdited(it.sh,it.row,c);
       const v=cellVal(view,it,c);
@@ -4893,7 +4911,7 @@ function renderDetail(){
     else if(l==='attribute type'&&v) shown=pillType(v);
     else shown=v===''?'<span class="dim">— click to add —</span>':esc(v);
     const o=row.orig[sh.colIdx[c]];
-    h+=`<div class="fld" data-fcol="${esc(c)}"><div class="k">${esc(c)}</div><div class="v ${edited?'edited':''}" data-fedit>${shown}</div>${edited?`<div class="orig">was: <i>${esc(o||'(blank)')}</i><a href="#" data-revert="${esc(c)}">revert</a></div>`:''}${row.chg&&Object.prototype.hasOwnProperty.call(row.chg,c)?`<div class="orig">changed in ${esc(S.diff.cl)} — was: <i>${esc(row.chg[c]||'(blank)')}</i></div>`:''}</div>`;
+    h+=`<div class="fld" data-fcol="${esc(c)}"><div class="k">${esc(c)}</div><div class="v ${edited?'edited':''}" data-fedit tabindex="0" role="button" aria-label="Edit ${esc(c)}">${shown}</div>${edited?`<div class="orig">was: <i>${esc(o||'(blank)')}</i><a href="#" data-revert="${esc(c)}">revert</a></div>`:''}${row.chg&&Object.prototype.hasOwnProperty.call(row.chg,c)?`<div class="orig">changed in ${esc(S.diff.cl)} — was: <i>${esc(row.chg[c]||'(blank)')}</i></div>`:''}</div>`;
   });
   d.innerHTML=h+'</div>'; d.classList.add('open');
 }
@@ -5027,17 +5045,27 @@ function wbChoose(id){
   const r=keptWorkbooks().find(x=>x.id===id); if(!r||r.b64===S.curB64) return;
   libOpen(id,'open');
 }
+// small screens: everything that does not fit in the header, in one menu
+function mobMenu(anchor){
+  closePops();
+  const el=document.createElement('div'); el.className='menu'; const n=S.edits.size+S.pending.length;
+  el.innerHTML=`<button data-mob="open">${isStarter()?'Open workbook…':'Load version…'}</button>${S.diff?`<button data-mob="ver">What changed (${S.diff.total})</button>`:''}<button data-mob="chg">Changes (${n})</button><button data-mob="exp">Export…</button><hr><button data-mob="dv">Dataverse check</button><button data-mob="tmpl">Template</button><button data-mob="help">How it works</button><div class="mh" style="text-transform:none;letter-spacing:0">${esc($('#saveState').textContent)} · ${esc($('#saveState').title)}</div>`;
+  el.addEventListener('click',e=>{const b=e.target.closest('[data-mob]'); if(!b) return; const a=b.dataset.mob; closePops();
+    if(a==='exp'){setTimeout(()=>exportMenu($('#btnMob')),0);return}
+    $({open:'#btnOpen',ver:'#btnVer',chg:'#btnChanges',dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'}[a]).click()});
+  placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
+}
 function moreMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu'; const tn=+$('#tmplCount').textContent||0;
-  el.innerHTML=`<button data-more="dv">Dataverse check<small>${S.dv?'Checked against '+esc(S.dv.org||'imported metadata'):'Compare with a Dataverse environment'}</small></button><button data-more="tmpl"><span>Template${tn?` <span class="badge" style="background:var(--pink);color:#fff;border-radius:10px;padding:0 6px;font-size:11px">${tn}</span>`:''}</span><small>Layout used for reading and exporting</small></button><hr><button data-more="help">How it works</button>`;
+  el.innerHTML=`<button data-more="dv">Dataverse check<small>${S.dv?'Checked against '+esc(S.dv.org||'imported metadata'):'Compare with a Dataverse environment'}</small></button><button data-more="tmpl"><span>Template</span><small>${tn?tn+' table'+(tn===1?' differs':'s differ')+' from the template':'Layout used for reading and exporting'}</small></button><hr><button data-more="help">How it works</button>`;
   el.addEventListener('click',e=>{const b=e.target.closest('[data-more]'); if(!b) return; closePops(); ({dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'})[b.dataset.more]&&$(({dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'})[b.dataset.more]).click()});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
 function exportMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu';
-  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load updated version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}<hr><button data-x="reset">Discard all edits…</button><button data-x="bundled">Forget loaded versions…</button>`;
+  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
   el.addEventListener('click',e=>{const b=e.target.closest('[data-x]');const x=b&&b.dataset.x;if(!x)return;closePops();doExport(x)});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
@@ -5130,7 +5158,7 @@ async function exportOriginal(){
   toast('Updated '+r.n+' cell'+(r.n===1?'':'s')+' in a copy of the original workbook');
 }
 async function saveToOriginal(){
-  const h=S.handle; if(!h) return toast('Open the file with "Load updated version…" in Chrome or Edge to link it first');
+  const h=S.handle; if(!h) return toast('Open the file with "Load version…" in Chrome or Edge to link it first');
   if(!S.edits.size) return toast('No edits to save');
   if(!await dlg({title:'Overwrite the original file?',body:'This replaces <b>'+esc(S.fileName)+'</b> on your computer with your '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+'. Only the edited cells change.',ok:'Overwrite',danger:true})) return;
   try{
@@ -5261,7 +5289,7 @@ function renderReadme(){
   </ul>`)}
 
   ${sec(4,'Loading an updated version',`
-  <p>Click <b>Load updated version…</b> (or drag a file onto the page). The new file is read the same way, then compared with the one you had open:</p>
+  <p>Click <b>Load version…</b> (or drag a file onto the page). The new file is read the same way, then compared with the one you had open:</p>
   <ul>
     <li><b>Matching:</b> tabs are matched by tab name (then logical name), and fields by <span class="mono">Logical Name</span>. Row order doesn't matter.</li>
     <li><b>What changed</b> lists new and removed tables, new and removed fields, every changed value as before and after, columns added or removed, changed table details (ownership, description, audit and so on), Forms and Views added or removed, and lookups that now point at a different table. In the grid, new fields are tagged NEW, changed cells are shaded (hover to see the old value), and a filter shows only changed rows.</li>
@@ -5276,7 +5304,7 @@ function renderReadme(){
   <table>
     <tr><th>Export option</th><th>What you get</th></tr>
     <tr><td><b>New version in template format</b></td><td>Every tab rebuilt with the template's formatting, including your edits. Extra columns get the template header style. New tables are styled like the template's table tabs. A Change log tab is added if you made edits.</td></tr>
-    <tr><td><b>Save back to the original file</b></td><td>Writes your edits straight into the workbook you opened, keeping its own formatting. Chrome and Edge only, and the file must have been opened through <b>Load updated version…</b> or dropped onto the page so the browser holds a link to it (the header then shows <i>linked to file</i>). You confirm the overwrite, the browser asks for write permission, and you are warned if the file on disk changed since you loaded it. The file is checked before and after writing: if any edit cannot be written, nothing is saved, your edits are kept, and you are shown which ones.</td></tr>
+    <tr><td><b>Save back to the original file</b></td><td>Writes your edits straight into the workbook you opened, keeping its own formatting. Chrome and Edge only, and the file must have been opened through <b>Load version…</b> or dropped onto the page so the browser holds a link to it (the header then shows <i>linked to file</i>). You confirm the overwrite, the browser asks for write permission, and you are warned if the file on disk changed since you loaded it. The file is checked before and after writing: if any edit cannot be written, nothing is saved, your edits are kept, and you are shown which ones.</td></tr>
     <tr><td><b>Download an updated copy (.xlsx)</b></td><td>The same as above, but as a new download. Works in every browser.</td></tr>
     <tr><td>Full workbook, plain values</td><td>Same data without template styling. Used as a fallback.</td></tr>
     <tr><td>Current view as CSV</td><td>Exactly the rows and columns you currently see (after filters and sorting). A second option includes the hidden columns too. Values that Excel would run as a formula are written as text.</td></tr>
@@ -5285,7 +5313,7 @@ function renderReadme(){
   <p>Exported files can be loaded straight back in, which makes a round trip possible: <i>load, review and edit, export, reload</i>.</p>`)}
 
   ${sec(6,'ERD diagram',`
-  <p>The <b>ERD</b> tab generates a Mermaid entity-relationship diagram from the lookup columns. Pick the tables and the detail level, and system tables such as users and teams are shown as light stubs. Tables are laid out automatically so related tables sit together. Click the <b>★</b> next to one or more tables to make them <b>core tables</b>: they are placed in the middle, glow gold, and everything else is arranged around them by how closely it is linked. Each line has a small arrow pointing at the table being looked up. Lines between the same two tables are merged into one (untick <b>Merge lines</b> to see them separately), and relationship names show when you hover a table (or choose Always / Hidden). Drag any table to move it (the lines follow) and drag the background to pan. Your arrangement is remembered in this browser for that selection of tables and options, and <b>Auto layout</b> discards it and lays the tables out again. Scroll the mouse wheel over the canvas to zoom in or out at the pointer, and drag empty space to move around. The <b>draw.io</b> button downloads the diagram, with your layout and the attributes currently shown, as a draw.io file to keep editing; re-exporting later does not keep edits made in draw.io. The diagram can be zoomed, copied as Mermaid source, or saved as .mmd, SVG or PNG; SVG and PNG use your arrangement.</p>`)}
+  <p>The <b>ERD</b> tab generates a Mermaid entity-relationship diagram from the lookup columns. It opens with the custom tables when there are 30 or fewer, otherwise with nothing selected so you can pick a readable set; you are asked before drawing more than 80 tables. Pick the tables and the detail level, and system tables such as users and teams are shown as light stubs. Tables are laid out automatically so related tables sit together. Click the <b>★</b> next to one or more tables to make them <b>core tables</b>: they are placed in the middle, glow gold, and everything else is arranged around them by how closely it is linked. Each line has a small arrow pointing at the table being looked up. Lines between the same two tables are merged into one (untick <b>Merge lines</b> to see them separately), and relationship names show when you hover a table (or choose Always / Hidden). Drag any table to move it (the lines follow) and drag the background to pan. Your arrangement is remembered in this browser for that selection of tables and options, and <b>Auto layout</b> discards it and lays the tables out again. Scroll the mouse wheel over the canvas to zoom in or out at the pointer, and drag empty space to move around. The <b>draw.io</b> button downloads the diagram, with your layout and the attributes currently shown, as a draw.io file to keep editing; re-exporting later does not keep edits made in draw.io. The diagram can be zoomed, copied as Mermaid source, or saved as .mmd, SVG or PNG; SVG and PNG use your arrangement.</p>`)}
 
   ${sec(7,'Overview and checks',`
   <p>The page opens on the <b>Overview</b>: how many tables, fields and lookups the model has, how complete the documentation is (fields and tables with a description, dictionary entries with an area and purpose), the least-described tables, a summary by area, and the latest changes and edits. Click a tile to jump to the detail.</p>
@@ -5341,7 +5369,7 @@ function renderReadme(){
 }
 
 /* ---------- data-model checks ---------- */
-const SEV={error:{label:'Error',cls:'p-red',rank:0},warn:{label:'Warning',cls:'p-amber',rank:1},info:{label:'Info',cls:'p-slate',rank:2}};
+const SEV={error:{label:'Error',plural:'Errors',cls:'sev-err',rank:0},warn:{label:'Warning',plural:'Warnings',cls:'sev-warn',rank:1},info:{label:'Info',plural:'Info',cls:'sev-info',rank:2}};
 // rule id -> [severity, short name shown in the Checks list]
 const RULES={
   'table-no-ln':['error','Table without a logical name'],
@@ -5587,9 +5615,11 @@ function renderOverview(){
   let fields=0,desc=0,lookups=0; const pairs=new Set();
   ents.forEach(sh=>sh.rows.forEach(row=>{fields++; if(getVal(sh,row,'Description')) desc++;
     if(isLookupType(getVal(sh,row,'Attribute Type'))){lookups++; lookupTargetsOf(sh,row).forEach(t=>{if(S.byLogical[t]!=null&&t!==sh.logical) pairs.add([sh.logical,t].sort().join('|'))})}}));
-  const iss=issues(), c=issueCounts(), unresolved=iss.filter(i=>i.rule==='lookup-unknown'||i.rule==='lookup-no-target').length;
+  const iss=issues(), c=issueCounts();
+  // unresolved lookups that need attention (warnings and errors); lookups to standard tables are counted separately
+  const lk=iss.filter(i=>i.rule==='lookup-unknown'||i.rule==='lookup-no-target'), unresolved=lk.filter(i=>i.sev!=='info').length, lkInfo=lk.length-unresolved;
   const custom=ents.filter(s=>s.custom).length;
-  const tile=(v,l,act,bad)=>`<${act?'button':'div'} class="ovtile ${bad?'bad':''}" ${act?`data-ov="${act}"`:''}><b>${v}</b><span>${l}</span></${act?'button':'div'}>`;
+  const tile=(v,l,act,tone,note)=>`<${act?'button':'div'} class="ovtile ${tone||''}" ${act?`data-ov="${act}"`:''}><b>${v}</b><span>${l}</span>${note?`<em>${note}</em>`:''}</${act?'button':'div'}>`;
   if(isStarter()){
     main.innerHTML=`<div class="ov"><h1>Overview</h1><div class="sub">No workbook open</div>
       <div class="ovcard" style="max-width:720px;margin-top:16px;border-color:var(--pink)"><h3>Open your data model to begin</h3>
@@ -5602,7 +5632,7 @@ function renderOverview(){
   let h=`<div class="ov"><h1>Overview</h1><div class="sub">${esc(S.fileName)}${S.diff?' · compared with '+esc(S.diff.pl):''}${S.dv?' · checked against '+esc(S.dv.org||'Dataverse'):''}</div>
   ${S.restored?`<div class="note2 ovnote"><span>Reopened <b>${esc(S.fileName)}</b>, kept in this browser from last time.${others?` ${others} other workbook${others===1?' is':'s are'} kept here too.`:''} <a href="#" data-wb="__menu">Switch workbook</a> · <a href="#" data-wb="__open">Open another</a></span><button class="x" data-ovx title="Dismiss">×</button></div>`:''}
   <div class="ovtiles">${tile(ents.length,'tables · '+custom+' custom, '+(ents.length-custom)+' standard')}${tile(fields.toLocaleString(),'fields')}${tile(lookups,'lookups')}${tile(pairs.size,'related table pairs','go:__erd')}
-    ${tile(unresolved,'unresolved lookups',unresolved?'issues:rule:lookup-*':'',unresolved>0)}${tile(c.error,'errors',c.error?'issues:error':'',c.error>0)}${tile(c.warn,'warnings',c.warn?'issues:warn':'')}
+    ${tile(unresolved,'unresolved lookups',lk.length?'issues:rule:lookup-*':'',unresolved?'warn':'',lkInfo?lkInfo.toLocaleString()+' to standard tables (info)':'')}${tile(c.error,'errors',c.error?'issues:error':'',c.error?'err':'')}${tile(c.warn,'warnings',c.warn?'issues:warn':'',c.warn?'warn':'')}
     ${tile(S.edits.size,'your edits',S.edits.size?'changes':'')}${S.diff?tile(S.diff.total,'changes since '+esc(S.diff.pl),'versions'):''}</div><div class="ovgrid">`;
   // documentation completeness
   const bar=(label,a,b)=>{const p=pct(a,b);return `<div class="ovrow"><span>${label}</span><span class="dim">${a.toLocaleString()} of ${b.toLocaleString()} · ${p}%</span></div><div class="bar ${p<50?'lo':''}"><i style="width:${p}%"></i></div>`};
@@ -5617,9 +5647,9 @@ function renderOverview(){
   iss.forEach(i=>{if(i.sh.kind==='entity'&&i.sev!=='info') areas[i.sh.area||'Other tables'].i++});
   h+=`<div class="ovcard"><h3>By area</h3><table class="ovtbl"><tr><th>Area</th><th>Tables</th><th>Fields</th><th>Described</th><th>Issues</th></tr>${Object.keys(areas).sort((a,b)=>(a==='Other tables')-(b==='Other tables')||a.localeCompare(b)).map(a=>{const x=areas[a];return `<tr><td>${esc(a)}</td><td>${x.t}</td><td>${x.f}</td><td>${pct(x.d,x.f)}%</td><td>${x.i?`<a href="#" data-ov="issues:area:${esc(a)}">${x.i}</a>`:'0'}</td></tr>`}).join('')}</table></div>`;
   // checks
-  const byRule={}; iss.forEach(i=>{byRule[i.rule]=(byRule[i.rule]||0)+1});
-  const rl=Object.keys(byRule).sort((a,b)=>SEV[RULES[a][0]].rank-SEV[RULES[b][0]].rank||byRule[b]-byRule[a]);
-  h+=`<div class="ovcard"><h3>Checks</h3>${rl.length?`<table class="ovtbl">${rl.slice(0,10).map(r=>`<tr><td><span class="pill ${SEV[RULES[r][0]].cls}">${SEV[RULES[r][0]].label}</span></td><td><a href="#" data-ov="issues:rule:${r}">${esc(RULES[r][1])}</a></td><td>${byRule[r]}</td></tr>`).join('')}</table>${rl.length>10?`<div class="dim" style="margin-top:6px">and ${rl.length-10} more kinds</div>`:''}`:'<div class="dim">No problems found.</div>'}<div style="margin-top:10px"><button class="btn" data-ov="issues">Open all checks</button></div></div>`;
+  const byRule={}; iss.forEach(i=>{const k=i.rule+'|'+i.sev; byRule[k]=(byRule[k]||0)+1});   // grouped by check AND the findings' own severity
+  const rl=Object.keys(byRule).sort((a,b)=>SEV[a.split('|')[1]].rank-SEV[b.split('|')[1]].rank||byRule[b]-byRule[a]);
+  h+=`<div class="ovcard"><h3>Checks</h3>${rl.length?`<table class="ovtbl">${rl.slice(0,10).map(k=>{const [r,sv]=k.split('|');return `<tr><td><span class="pill ${SEV[sv].cls}">${SEV[sv].label}</span></td><td><a href="#" data-ov="issues:rule:${r}">${esc(RULES[r][1])}</a></td><td>${byRule[k].toLocaleString()}</td></tr>`}).join('')}</table>${rl.length>10?`<div class="dim" style="margin-top:6px">and ${rl.length-10} more kinds</div>`:''}`:'<div class="dim">No problems found.</div>'}<div style="margin-top:10px"><button class="btn" data-ov="issues">Open all checks</button></div></div>`;
   // latest changes
   let lc='';
   if(S.diff){const D=S.diff; const parts=[[D.addedTables.length,'tables added'],[D.removedTables.length,'tables removed'],[D.newRows.length,'fields added'],[D.goneRows.length,'fields removed'],[D.changes.length,'values changed'],[D.colsAdded.length+D.colsRemoved.length,'columns added or removed'],[D.metaChanges.length,'table details changed'],[D.subCount,'form and view changes']].filter(x=>x[0]);
@@ -5627,7 +5657,7 @@ function renderOverview(){
   const ed=[...S.edits.values()];
   if(ed.length) lc+=`<div class="ovrow"><b>Your edits (${ed.length})</b><a href="#" data-ov="changes">All changes</a></div><ul style="margin:4px 0 0;padding-left:18px">${ed.slice(-5).reverse().map(e=>`<li><a href="#" data-cgo="${ed.indexOf(e)}">${esc(e.sh.label)} · ${esc(editLabel(e))}</a> <span class="dim">${esc(e.col)}</span></li>`).join('')}</ul>`;
   if(S.pending.length) lc+=`<div style="margin-top:8px;color:var(--pink)">${S.pending.length} carried-over edit${S.pending.length===1?'':'s'} need${S.pending.length===1?'s':''} your attention. <a href="#" data-ov="changes">Review</a></div>`;
-  h+=`<div class="ovcard"><h3>Latest changes</h3>${lc||'<div class="dim">No edits yet, and no earlier version to compare with. Use <b>Load updated version…</b> to compare.</div>'}</div>`;
+  h+=`<div class="ovcard"><h3>Latest changes</h3>${lc||'<div class="dim">No edits yet, and no earlier version to compare with. Use <b>Load version…</b> to compare.</div>'}</div>`;
   // Dataverse
   const ds=S.dv?dvSummary():null;
   h+=`<div class="ovcard"><h3>Dataverse check</h3>${S.dv?`<div>${ds.matched} of ${ds.tables} tables found in ${esc(S.dv.org||'the imported metadata')}, ${ds.diffs} difference${ds.diffs===1?'':'s'}.</div><div class="dim" style="margin-top:4px">Imported ${esc(new Date(S.dv.at).toLocaleString())}</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-ov="issues:dv">See the differences</button><button class="btn" data-ov="dv">Dataverse panel</button></div>`
@@ -5643,7 +5673,7 @@ function renderIssues(){
     &&(!q||(i.sh.label+' '+i.where+' '+i.sh.logical+' '+i.field+' '+RULES[i.rule][1]+' '+i.msg).toLowerCase().includes(q)));
   S.issList=list;
   const c=issueCounts(), byRule={}; all.forEach(i=>{byRule[i.rule]=(byRule[i.rule]||0)+1});
-  const chip=(k)=>`<button class="btn ${st.sev[k]?'on':''}" data-isev="${k}"><span class="pill ${SEV[k].cls}">${SEV[k].label}s</span> ${c[k]}</button>`;
+  const chip=(k)=>`<button class="btn ${st.sev[k]?'on':''}" data-isev="${k}"><span class="pill ${SEV[k].cls}">${SEV[k].plural}</span> ${c[k]}</button>`;
   let h=`<div class="vhead"><h1>Checks</h1><div class="sub">${all.length} finding${all.length===1?'':'s'} · ${c.error} error${c.error===1?'':'s'}, ${c.warn} warning${c.warn===1?'':'s'}, ${c.info} info${S.dv?' · including the Dataverse comparison':''}</div>
     <div class="desc">Problems found in the data model itself: missing or duplicated logical names, lookups to tables that are not documented, dictionary entries without a tab${S.dv?', and differences from the imported Dataverse metadata':''}. They update as you edit.</div></div>
     <div class="toolbar">${['error','warn','info'].map(chip).join('')}
@@ -5654,7 +5684,7 @@ function renderIssues(){
   if(!list.length) h+=`<div class="empty">${all.length?'<b>Nothing matches.</b><br>Try clearing a filter or the search.':'<b>No problems found.</b>'}</div>`;
   else{
     h+=`<table class="grid" style="width:100%"><colgroup><col style="width:110px"><col style="width:200px"><col style="width:190px"><col style="width:250px"><col></colgroup><thead><tr><th><div class="th">Severity</div></th><th><div class="th">Table</div></th><th><div class="th">Field</div></th><th><div class="th">Check</div></th><th><div class="th">Detail</div></th></tr></thead><tbody>`;
-    list.slice(0,st.shown).forEach((i,k)=>{h+=`<tr data-ii="${k}" style="cursor:pointer"><td><span class="pill ${SEV[i.sev].cls}">${SEV[i.sev].label}</span></td><td><div class="cell">${esc(i.where||i.sh.label)}</div></td><td><div class="cell mono">${esc(i.field)}</div></td><td><div class="cell">${esc(RULES[i.rule][1])}</div></td><td><div class="cell">${esc(i.msg)}</div></td></tr>`});
+    list.slice(0,st.shown).forEach((i,k)=>{h+=`<tr data-ii="${k}" style="cursor:pointer"><td><span class="pill ${SEV[i.sev].cls}">${SEV[i.sev].label}</span></td><td><div class="cell lnk">${esc(i.where||i.sh.label)}</div></td><td><div class="cell mono">${esc(i.field)}</div></td><td><div class="cell">${esc(RULES[i.rule][1])}</div></td><td><div class="cell">${esc(i.msg)}</div></td></tr>`});
     h+='</tbody></table>';
     if(list.length>st.shown) h+=`<div class="more"><button class="btn" data-act="iss-more">Show more (${list.length-st.shown} remaining)</button></div>`;
   }
@@ -5690,11 +5720,13 @@ function mtype(t){
   if(/decimal|double|float|currency|money/.test(l)) return 'decimal';
   return 'string';
 }
+const ERD_EASY=30, ERD_BIG=80;   // tables: drawn by default up to EASY; asked before drawing more than BIG
 function erdInit(){
   if(S.erd) return S.erd;
   const ui=S.ui.erd||{};
   S.erd={sel:new Set(S.sheets.filter(s=>s.kind==='entity'&&s.custom).map(s=>s.idx)),attrs:ui.attrs||'keys',stubs:ui.stubs!==false,sys:ui.sys!==false,ext:!!ui.ext,rel:ui.rel!==false,dir:ui.dir||'LR',zoom:0,q:'',src:false,n:0,pos:{},merge:ui.merge!==false,dock:ui.dock||'right',sw:ui.sw||440,sh:ui.sh||260,smax:false,follow:ui.follow!==false,auto:{},prim:new Set(),lbl:ui.lbl||'hover',nn:ui.nn!==false,core:new Set((ui.core||[]).map(x=>String(x).toLowerCase()))};
-  if(!S.erd.sel.size) S.sheets.filter(s=>s.kind==='entity').forEach(s=>S.erd.sel.add(s.idx));
+  // start small: the custom tables or every table only when that is a readable number, otherwise nothing and a prompt
+  {const ents=S.sheets.filter(s=>s.kind==='entity'), cust=ents.filter(s=>s.custom); S.erd.sel=new Set((cust.length&&cust.length<=ERD_EASY?cust:ents.length<=ERD_EASY?ents:[]).map(s=>s.idx))}
   return S.erd;
 }
 function erdTargets(E,sh,row){
@@ -5777,7 +5809,7 @@ async function drawErd(){
   const {src,stats}=buildErd(); E.srcText=src;
   const ta=$('#erdsrc'); if(ta&&ta!==document.activeElement) ta.value=src;
   $('#erdinfo').textContent=stats.tables+' tables'+(stats.stubs?' + '+stats.stubs+' referenced':'')+' · '+stats.rels+' relationships'+(E.attrs!=='none'?' · '+stats.attrs+' attributes':'')+(stats.hidden?' · '+stats.hidden+' unrelated hidden':'');
-  if(!E.sel.size){cv.innerHTML='<div class="msg">Select one or more tables on the left to generate the diagram.</div>';E.svg='';return}
+  if(!E.sel.size){const n=S.sheets.filter(s=>s.kind==='entity').length; cv.innerHTML=`<div class="msg" style="max-width:520px"><b>Pick the tables to draw.</b><br>Tick tables on the left, filter them (for example by prefix), or click ★ next to a table to build the diagram around it.${n>ERD_EASY?` With ${n} tables in this workbook, drawing them all at once is slow and hard to read; a few dozen at a time works best.`:''}</div>`;E.svg='';return}
   if(typeof mermaid==='undefined'){cv.innerHTML='<div class="err">The Mermaid library did not load. The source is below and can be pasted into any Mermaid viewer.</div>';return}
   const my=++E.n;
   try{
@@ -6115,7 +6147,13 @@ function renderErdPage(){
     else if(b.dataset.eq){
       const ents=S.sheets.filter(s=>s.kind==='entity');
       if(b.dataset.eq==='shown'||b.dataset.eq==='unshown'){const f=E.q.toLowerCase(); ents.filter(s=>erdMatch(s,f)).forEach(s=>{ if(b.dataset.eq==='shown') E.sel.add(s.idx); else E.sel.delete(s.idx) }); }
-      else {E.auto={};E.prim=new Set();E.sel=new Set(b.dataset.eq==='all'?ents.map(s=>s.idx):b.dataset.eq==='custom'?ents.filter(s=>s.custom).map(s=>s.idx):[])}
+      else {
+        const pick=b.dataset.eq==='all'?ents:b.dataset.eq==='custom'?ents.filter(s=>s.custom):[];
+        const apply=()=>{E.auto={};E.prim=new Set();E.sel=new Set(pick.map(s=>s.idx));document.querySelectorAll('#erdlst input[data-es]').forEach(x=>x.checked=E.sel.has(+x.dataset.es));erdRefresh(true)};
+        if(pick.length>ERD_BIG) dlg({title:'Draw '+pick.length+' tables?',body:'A diagram this large can take 10 seconds or more to draw and is hard to read. Filtering to a few dozen related tables usually works better.',ok:'Draw them all'}).then(ok=>{if(ok)apply()});
+        else apply();
+        return;
+      }
       document.querySelectorAll('#erdlst input[data-es]').forEach(x=>x.checked=E.sel.has(+x.dataset.es)); erdRefresh(true)}
     else if(b.dataset.ez!==undefined){erdZoom(+b.dataset.ez)}
     else if(b.dataset.ea) erdAction(b.dataset.ea,b);
@@ -6219,7 +6257,7 @@ function go(id,opts={}){
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(!t.closest('.pop,.menu,[data-filter],[data-act="cols"],#btnExport,#btnMore,#btnWb')) closePops();
+  if(!t.closest('.pop,.menu,[data-filter],[data-act="cols"],#btnExport,#btnMore,#btnWb,#btnMob')) closePops();
   let n;
   if((n=t.closest('[data-wb]'))){e.preventDefault();wbChoose(n.dataset.wb);return}
   if(t.closest('[data-ovx]')){S.restored=false;renderOverview();return}
@@ -6301,6 +6339,7 @@ document.addEventListener('click',e=>{
     else if(a==='navcol'){(S.groups||[]).forEach(g=>S.collapsed[g]=true);renderNav()}
     else if(a==='more'){vstate(S.view.id).shown+=150;renderGrid(true)}
     else if(a==='iss-csv') download(S.fileName.replace(/\.[^.]+$/,'')+' - checks.csv',new Blob([csv(issueRows())],{type:'text/csv'}));
+    else if(a==='alltypes'){S.ui.allTypes=!S.ui.allTypes;store.set('dme.ui',S.ui);refreshStats()}
     else if(a==='iss-more'){issState().shown+=300;renderIssues()}
     else if(a==='exp-log') doExport('log');
     else if(a==='exp-diff') doExport('diff');
@@ -6344,6 +6383,7 @@ $('#sq').addEventListener('input',e=>{S.sideFilter=e.target.value;renderNav()});
 $('#btnChanges').onclick=()=>{$('#changes').classList.contains('open')?$('#changes').classList.remove('open'):renderChanges()};
 $('#btnExport').onclick=e=>{e.stopPropagation();exportMenu(e.currentTarget)};
 $('#btnMore').onclick=e=>{e.stopPropagation();moreMenu(e.currentTarget)};
+$('#btnMob').onclick=e=>{e.stopPropagation();mobMenu(e.currentTarget)};
 $('#btnWb').onclick=e=>{e.stopPropagation();wbMenu(e.currentTarget)};
 $('#btnTmpl').onclick=()=>{$('#tmplpanel').classList.contains('open')?$('#tmplpanel').classList.remove('open'):renderTemplate()};
 $('#tfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=ev=>{try{const u=new Uint8Array(ev.target.result);const b64=u8ToB64(u);if(!parseWorkbook(XLSX.read(u,{type:'array'})).length)throw new Error('no usable sheets');loadTemplate(b64,f.name);const kept=store.set('dme.tmpl',{name:f.name,b64});conformance();updateCounts();applyAndRender();renderTemplate();toast('Template set to '+f.name+(kept?'':'. This browser could not remember it, so it goes back to the bundled one on reload.'))}catch(err){dlg({title:'Could not use that template',body:esc(err.message),ok:'OK',cancel:null,danger:true})}};r.readAsArrayBuffer(f)};
@@ -6357,6 +6397,10 @@ $('#btnOpen').onclick=()=>pickFile();
 $('#btnVer').onclick=()=>{$('#versions').classList.contains('open')?$('#versions').classList.remove('open'):renderVersions()};
 $('#file').onchange=e=>{const f=e.target.files[0];if(f)loadFile(f);e.target.value=''};
 document.addEventListener('keydown',e=>{
+  // keyboard: Enter on a grid row opens its details; Enter or F2 on a detail value edits it
+  {const a=document.activeElement;
+   if(a&&a.matches&&a.matches('#gridwrap tbody tr[data-i]')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();const it=S.filtered[+a.dataset.i];if(it){openDetail(it);setTimeout(()=>{const v=$('#detail [data-fedit]');if(v)v.focus()},50)}return}
+   if(a&&a.matches&&a.matches('#detail [data-fedit]')&&(e.key==='Enter'||e.key==='F2')&&S.selIt){e.preventDefault();editInDetail(a.closest('.fld'),a.closest('.fld').dataset.fcol);return}}
   const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if(e.key==='/'&&!typing){e.preventDefault();$('#q').focus();$('#q').select()}
   else if(e.key==='Escape'){if(typing){document.activeElement.blur?.()} closePops(); $('#detail').classList.remove('open'); $('#changes').classList.remove('open'); document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open'))}
@@ -6400,7 +6444,7 @@ function init(wb,name,opts){
   conformance();
   const restored=applyStored();
   S.ui=Object.assign(S.ui,store.get('dme.ui')||{}); if(!S.ui.hidden)S.ui.hidden={};
-  $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load updated version…'; wbLabel();
+  $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load version…'; wbLabel();
   $('#fileLabel').textContent=(isStarter()?'No workbook open · starter template':name+' · '+S.sheets.length+' sheets')+(S.diff?' · vs '+S.diff.pl:'')+(S.handle?' · linked to file':'');
   document.title='Data Model Explorer';
   loadDv();
@@ -6474,7 +6518,7 @@ function renderFiles(){
   <div class="body">${all.map(card).join('')}
   <div class="fcard"><div class="fn">Template</div><div class="dim">${esc(T.name)} · ${T.sheets.length} sheets</div><div class="fbtns" style="margin-top:6px"><button class="btn" data-fa="tmpl">Open template panel</button></div></div>
   <div class="note2">These workbooks are remembered by <b>this browser</b> so you can switch between them. They are not part of the HTML file: anyone you share the file with starts with only the empty template. The Excel files on your computer are never changed.</div>
-  <div style="margin-top:12px"><button class="btn danger" data-fa="clearall">Remove all…</button> <span class="dim">Forget every workbook, edit and Dataverse import kept here, and start with the empty template.</span></div></div>`;
+  <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" data-fa="forget">Go back to the empty template…</button><button class="btn danger" data-fa="clearall">Remove all…</button> <span class="dim">Forget every workbook, edit and Dataverse import kept here, and start with the empty template.</span></div></div>`;
   ['#changes','#versions','#detail','#tmplpanel'].forEach(s=>$(s).classList.remove('open')); d.classList.add('open');
 }
 function libOpen(id,mode){
@@ -6502,6 +6546,7 @@ function wireFiles(){
     if(e.target.closest('[data-fclose]')){$('#files').classList.remove('open');return}
     const b=e.target.closest('[data-fa]'); if(!b) return; const a=b.dataset.fa, id=b.dataset.id;
     if(a==='add'){pickFile();return}
+    if(a==='forget'){doExport('bundled');return}
     if(a==='clearall'){
       if(!await dlg({title:'Remove everything kept in this browser?',body:'Every workbook in this list, all your edits, the version comparison and any imported Dataverse metadata are forgotten, and the page starts again with the empty template.<br><br>The Excel files on your computer are not touched. <b>Export anything you still need first.</b>',ok:'Remove all',danger:true})) return;
       try{const all=await idb.all(); for(const r of all) await idb.del(r.id)}catch(e2){}

@@ -1,3 +1,40 @@
+# 1.3.0 (interface review)
+
+Overview
+- Checks are shown with the severity of their actual findings (it had shown "Warning · 1,304" for lookups that are
+  info). The unresolved-lookups tile counts only those that need attention and notes the rest
+  ("9 · 1,304 to standard tables (info)").
+- Tiles that open something show → and react on hover; plain tiles don't.
+
+ERD
+- Opens with the custom tables only when there are 30 or fewer (otherwise every table if 30 or fewer, otherwise
+  nothing) and a prompt explaining how to pick a readable set. Asks before drawing more than 80 tables.
+
+Colour, text and links
+- Body text is a neutral dark grey; navy is kept for headings and links, and links are underlined.
+- Errors are red, warnings amber, info grey (pink stays the brand and edit colour).
+- The faint grey is darker (5.2:1 on white, 4.6:1 on grey panels, passing WCAG AA); the ★ is 3:1 or better.
+- Small text raised from 11 px to 12 px; filter, row-expand and ★ buttons have larger hit areas.
+- What changed marks additions with + and removals with −, and no longer repeats a lookup change as a raw
+  Additional data change when the relationship line already explains it.
+
+Header and menus
+- Search box at least 260 px; the file name under the title is gone (the workbook selector shows it);
+  "Load updated version…" is now "Load version…".
+- Export holds only exports. "Discard all edits" stays in Changes (Revert all); "Go back to the empty template"
+  moved to Manage files. The unexplained badge on More is gone; the Template item says how many tables differ.
+- Phone width: ☰, search, workbook selector and a ⋯ menu (load, what changed, changes, export, Dataverse,
+  template, help, save state). The header no longer scrolls sideways.
+
+Navigation and keyboard
+- A single sidebar group (e.g. a converted export with no areas) starts expanded.
+- Table pages show the eight most common field types with "+N more".
+- Grid rows can be reached with Tab; Enter opens the details, Enter or F2 on a value edits it, Esc cancels.
+- Side panels are labelled for screen readers; visible focus outline throughout.
+
+Tests
+- New tests/ui.js (21 checks); `npm test` runs all four test files.
+
 # 1.2.2
 
 - Workbook selector in the header (in place of the Files button): shows which workbook is open and lists every

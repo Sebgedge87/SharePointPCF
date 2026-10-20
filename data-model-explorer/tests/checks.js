@@ -82,7 +82,8 @@ function dataverse() {
   // landing page
   ok(/Overview/.test(await p.innerText('#main .ov h1')), 'opens on the Overview');
   const tile = async label => (await p.locator(`.ovtile:has(span:text-is("${label}")) b`).innerText()).trim();
-  ok(await tile('unresolved lookups') === '2', 'Overview counts 2 unresolved lookups');
+  ok(await tile('unresolved lookups') === '1' && /1 to standard tables \(info\)/.test(await p.innerText('.ovtile:has(span:text-is("unresolved lookups"))')), 'Overview counts 1 unresolved lookup needing attention, and 1 to a standard table as info');
+  ok(!/Warning[^\n]*Lookup to a table not in the workbook/.test(await p.innerText('.ov')), 'Overview shows each check with its findings\' own severity');
   ok(/Fields with a description[\s\S]*1 of 16/.test(await p.innerText('.ov')), 'Overview shows documentation completeness');
   ok(/Least described tables/.test(await p.innerText('.ov')), 'Overview lists the least described tables');
 
