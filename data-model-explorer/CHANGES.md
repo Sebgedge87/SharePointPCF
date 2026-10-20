@@ -1,3 +1,13 @@
+# 1.2.2
+
+- Workbook selector in the header (in place of the Files button): shows which workbook is open and lists every
+  workbook kept in this browser, plus the empty template, "Open another workbook…" and "Manage files…".
+  Switching opens that workbook with its own edits, without comparing two unrelated workbooks.
+- When the page reopens a workbook from last time, the Overview says so, with Switch workbook / Open another.
+- The "no workbook open" page lists the workbooks kept in this browser, each with an Open button.
+- The Files panel explains that these workbooks are kept by the browser and are not part of the HTML file (anyone
+  you share it with starts with only the empty template), and adds **Remove all…** to start clean.
+
 # 1.2.1
 
 - The built-in starter template is no longer checked or summarised. With no workbook open, the Overview says so and

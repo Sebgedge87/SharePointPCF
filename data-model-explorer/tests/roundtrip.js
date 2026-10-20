@@ -125,9 +125,20 @@ async function prefixed(src, file) {
   // an unrelated workbook keeps its own (empty) set of edits
   await load(other, 'separate');
   ok(await count() === 0, 'a different workbook opens with none of the other workbook\'s edits');
-  await p.click('#btnFiles'); await p.waitForTimeout(300);
-  await p.locator('#files .fcard:has(.fn:text-is("model_v2.xlsx")) [data-fa="open"]').click(); await p.waitForTimeout(1500);
-  ok(await count() === 2, 'reopening the first workbook from Files brings its edits back');
+  ok((await p.innerText('#wbName')) === 'other_client.xlsx', 'the workbook selector shows the open workbook');
+  await p.click('#btnWb'); await p.waitForTimeout(200);
+  const listed = await p.$$eval('.menu [data-wb] > span', e => e.map(x => x.textContent.replace(/^✓ /, '')));
+  ok(['other_client.xlsx', 'model_v2.xlsx', 'model_v1.xlsx', 'Empty template'].every(n => listed.includes(n)), 'the selector lists every workbook kept in this browser, and the empty template');
+  await p.click('.menu button:has-text("model_v2.xlsx")'); await p.waitForTimeout(1500);
+  ok(await count() === 2 && (await p.innerText('#wbName')) === 'model_v2.xlsx', 'switching to the first workbook from the selector brings its edits back');
+  ok(await p.$eval('#btnVer', e => e.style.display === 'none'), 'switching workbooks does not compare two different workbooks');
+
+  // reopened next time: the Overview says which workbook came back, and offers to switch
+  await p.reload(); await p.waitForTimeout(2000);
+  ok(/Reopened model_v2\.xlsx, kept in this browser from last time/.test(await p.innerText('#main')), 'after a reload the Overview says which workbook was reopened');
+  await p.click('#btnWb'); await p.click('.menu [data-wb="__files"]'); await p.waitForTimeout(300);
+  ok(/not part of the HTML file/.test(await p.innerText('#files')), 'the Files panel explains the workbooks are kept by this browser, not the file');
+  await p.click('#files [data-fclose]');
 
   // a save that cannot write every edit is refused, and the edit is kept
   await load(await prefixed(other, 'prefixed.xlsx'), 'separate');
@@ -147,6 +158,12 @@ async function prefixed(src, file) {
     await p.waitForTimeout(1200); await p.reload(); await p.waitForTimeout(2000);
     ok(await p.$eval('#btnVer', e => e.style.display === 'none'), 'a converted export shows no comparison after a reload');
   } else console.log('SKIP converted-export check (run tests/smoke.js first to create fake_export.xlsx)');
+
+  // Remove all: back to the empty template, with nothing kept
+  await p.click('#btnWb'); await p.click('.menu [data-wb="__files"]'); await p.waitForTimeout(300);
+  await p.click('[data-fa="clearall"]'); await p.click('.dlgbox [data-d="1"]'); await p.waitForTimeout(2500);
+  ok((await p.innerText('#wbName')) === 'No workbook open' && /Open your data model to begin/.test(await p.innerText('#main')) && !/Or reopen one/.test(await p.innerText('#main')), 'Remove all starts again with the empty template and nothing kept');
+  ok((await p.$$eval('.menu [data-wb]', e => e.length).catch(() => 0)) === 0 && await count() === 0, 'no edits are left after Remove all');
 
   // small screens: the sidebar opens from the menu button
   await p.setViewportSize({ width: 390, height: 800 }); await p.waitForTimeout(200);

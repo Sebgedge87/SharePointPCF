@@ -8,8 +8,10 @@ Opens on an overview (size, documentation completeness, latest changes), runs da
 Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge.
 Nothing to install, and it works offline. Everything below is only for changing the code.
 
-The ready-built file opens on the empty template; load your own workbook with **Load updated version…** or by
-dragging it onto the page. Nothing is uploaded anywhere. After changing the code, rebuild and replace this file
+The ready-built file opens on the empty template; open your own workbook with **Open workbook…** or by dragging it
+onto the page. Nothing is uploaded anywhere. The browser remembers the workbooks you open, and the selector in the
+header switches between them. Those workbooks are kept in your browser only, not in the HTML file, so anyone you
+share the file with starts with just the empty template. **Manage files… → Remove all…** clears them. After changing the code, rebuild and replace this file
 (`npm run build`, then copy `dist/Data_Model_Explorer.html` here). Never commit a build made with `--workbook`, because it contains that workbook.
 
 ## Build

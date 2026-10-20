@@ -25,6 +25,14 @@ a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
 .brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.01em;min-width:0;flex:0 1 auto}
 .top{overflow-x:auto;scrollbar-width:thin} .top>.btn,.top>.savestate{flex-shrink:0} .search{min-width:170px}
 .hidebtn{display:none!important}
+.wbname{display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.menu .mh{padding:6px 9px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650}
+.menu{max-height:70vh;overflow:auto}
+.ovnote{display:flex;gap:10px;align-items:flex-start;max-width:900px;margin:12px 0 0}
+.ovnote .x{border:0;background:transparent;color:inherit;font-size:16px;line-height:1;padding:0 2px;margin-left:auto}
+.wblist{margin-top:14px;border-top:1px solid var(--line2);padding-top:10px}
+.wblist .vline{display:flex;gap:10px;align-items:center}
+@media (max-width:1600px){.brand small{display:none}}
 .brand .logo{height:30px;width:auto;margin-right:4px}
 .brand .ttl{border-left:2px solid var(--pink);padding-left:12px;color:var(--accent);white-space:nowrap;min-width:0}
 .brand small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:-2px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
@@ -298,7 +306,8 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)}
     <div class="spacer"></div>
     <span class="savestate ok" id="saveState" title="Your edits are stored in this browser and survive a reload.">Saved</span>
     <button class="btn hidebtn" id="btnHelp" title="How this works">How it works</button>
-    <button class="btn" id="btnFiles" title="Browse the workbooks kept in this browser">Files <span class="badge" id="filesCount" style="background:var(--accent)">1</span></button>
+    <button class="btn" id="btnWb" title="Which workbook is open. Switch to another one kept in this browser, or open a new one."><span class="wbname" id="wbName">Workbook</span> ▾</button>
+    <button class="btn hidebtn" id="btnFiles" title="Browse the workbooks kept in this browser">Files <span class="badge" id="filesCount" style="background:var(--accent)">1</span></button>
     <button class="btn" id="btnOpen" title="Load an updated version of the workbook. Your edits carry over.">Load updated version…</button>
     <button class="btn" id="btnVer" style="display:none">What changed <span class="badge" id="verCount" style="background:var(--accent)">0</span></button>
     <button class="btn hidebtn" id="btnDv" title="Check this workbook against the table definitions in a Dataverse environment">Dataverse</button>
@@ -1280,6 +1289,30 @@ function colsMenu(anchor){
   });
   placePop(el,anchor);
 }
+// every workbook this browser keeps, newest first, then the empty template built into the page
+function keptWorkbooks(){
+  const list=S.lib.slice();
+  if(!store.get('dme.hideb')) list.push({id:'bundled',name:'Empty template',b64:EMBEDDED_B64,bundled:true});
+  return list;
+}
+function wbLabel(){const el=$('#wbName'); if(el){el.textContent=isStarter()?'No workbook open':S.fileName; el.parentElement.title=(isStarter()?'No workbook open. ':'Open: '+S.fileName+'. ')+'Switch to another workbook kept in this browser, or open a new one.'}}
+function wbMenu(anchor){
+  closePops();
+  const el=document.createElement('div'); el.className='menu'; el.style.minWidth='300px';
+  const items=keptWorkbooks().map(r=>{const on=r.b64===S.curB64;
+    return `<button data-wb="${esc(r.id)}" ${on?'aria-current="true"':''}><span>${on?'✓ ':''}${esc(r.name)}</span><small>${r.bundled?'Built into this page':(r.tables??'?')+' tables · added '+esc(new Date(r.added).toLocaleDateString())}${on?' · open now':''}</small></button>`}).join('');
+  el.innerHTML=`<div class="mh">Workbooks kept in this browser</div>${items}<hr><button data-wb="__open">Open another workbook…<small>An .xlsx data model or a Metadata Document Generator export</small></button><button data-wb="__files">Manage files…<small>Compare, download or remove</small></button>`;
+  placePop(el,anchor); el.style.left=Math.max(8,Math.min(innerWidth-el.offsetWidth-8,anchor.getBoundingClientRect().left))+'px';
+}
+// switch to, or act on, a workbook chosen from the selector, the Overview, or the starter page
+function wbChoose(id){
+  closePops();
+  if(id==='__open') return pickFile();
+  if(id==='__files') return renderFiles();
+  if(id==='__menu') return wbMenu($('#btnWb'));
+  const r=keptWorkbooks().find(x=>x.id===id); if(!r||r.b64===S.curB64) return;
+  libOpen(id,'open');
+}
 function moreMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu'; const tn=+$('#tmplCount').textContent||0;
@@ -1847,10 +1880,13 @@ function renderOverview(){
     main.innerHTML=`<div class="ov"><h1>Overview</h1><div class="sub">No workbook open</div>
       <div class="ovcard" style="max-width:720px;margin-top:16px;border-color:var(--pink)"><h3>Open your data model to begin</h3>
       <p style="margin:0 0 12px">The page is showing its built-in, empty starter template, which has one example table (Need). Open a data-model workbook, or a Metadata Document Generator export (it is converted automatically), to see its overview, checks and ERD.</p>
-      <button class="btn primary" data-ov="open">Open workbook…</button> <span class="dim">or drag an .xlsx onto the page. Workbooks opened before are listed under <b>Files</b>.</span></div></div>`;
+      <button class="btn primary" data-ov="open">Open workbook…</button> <span class="dim">or drag an .xlsx onto the page.</span>
+      ${S.lib.length?`<div class="wblist"><b>Or reopen one kept in this browser</b>${S.lib.map(r=>`<div class="vline"><span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(r.name)} <span class="dim">· ${r.tables??'?'} tables · added ${esc(new Date(r.added).toLocaleDateString())}</span></span><button class="btn" data-wb="${esc(r.id)}">Open</button></div>`).join('')}</div>`:''}</div></div>`;
     return;
   }
+  const others=S.lib.filter(r=>r.b64!==S.curB64).length;
   let h=`<div class="ov"><h1>Overview</h1><div class="sub">${esc(S.fileName)}${S.diff?' · compared with '+esc(S.diff.pl):''}${S.dv?' · checked against '+esc(S.dv.org||'Dataverse'):''}</div>
+  ${S.restored?`<div class="note2 ovnote"><span>Reopened <b>${esc(S.fileName)}</b>, kept in this browser from last time.${others?` ${others} other workbook${others===1?' is':'s are'} kept here too.`:''} <a href="#" data-wb="__menu">Switch workbook</a> · <a href="#" data-wb="__open">Open another</a></span><button class="x" data-ovx title="Dismiss">×</button></div>`:''}
   <div class="ovtiles">${tile(ents.length,'tables · '+custom+' custom, '+(ents.length-custom)+' standard')}${tile(fields.toLocaleString(),'fields')}${tile(lookups,'lookups')}${tile(pairs.size,'related table pairs','go:__erd')}
     ${tile(unresolved,'unresolved lookups',unresolved?'issues:rule:lookup-*':'',unresolved>0)}${tile(c.error,'errors',c.error?'issues:error':'',c.error>0)}${tile(c.warn,'warnings',c.warn?'issues:warn':'')}
     ${tile(S.edits.size,'your edits',S.edits.size?'changes':'')}${S.diff?tile(S.diff.total,'changes since '+esc(S.diff.pl),'versions'):''}</div><div class="ovgrid">`;
@@ -2469,8 +2505,10 @@ function go(id,opts={}){
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(!t.closest('.pop,.menu,[data-filter],[data-act="cols"],#btnExport,#btnMore')) closePops();
+  if(!t.closest('.pop,.menu,[data-filter],[data-act="cols"],#btnExport,#btnMore,#btnWb')) closePops();
   let n;
+  if((n=t.closest('[data-wb]'))){e.preventDefault();wbChoose(n.dataset.wb);return}
+  if(t.closest('[data-ovx]')){S.restored=false;renderOverview();return}
   if((n=t.closest('[data-view]'))){document.body.classList.remove('navopen');go(n.dataset.view);return}
   if(document.body.classList.contains('navopen')&&!t.closest('.side,#btnNav')) document.body.classList.remove('navopen');
   if((n=t.closest('[data-rt]'))){
@@ -2592,6 +2630,7 @@ $('#sq').addEventListener('input',e=>{S.sideFilter=e.target.value;renderNav()});
 $('#btnChanges').onclick=()=>{$('#changes').classList.contains('open')?$('#changes').classList.remove('open'):renderChanges()};
 $('#btnExport').onclick=e=>{e.stopPropagation();exportMenu(e.currentTarget)};
 $('#btnMore').onclick=e=>{e.stopPropagation();moreMenu(e.currentTarget)};
+$('#btnWb').onclick=e=>{e.stopPropagation();wbMenu(e.currentTarget)};
 $('#btnTmpl').onclick=()=>{$('#tmplpanel').classList.contains('open')?$('#tmplpanel').classList.remove('open'):renderTemplate()};
 $('#tfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=ev=>{try{const u=new Uint8Array(ev.target.result);const b64=u8ToB64(u);if(!parseWorkbook(XLSX.read(u,{type:'array'})).length)throw new Error('no usable sheets');loadTemplate(b64,f.name);const kept=store.set('dme.tmpl',{name:f.name,b64});conformance();updateCounts();applyAndRender();renderTemplate();toast('Template set to '+f.name+(kept?'':'. This browser could not remember it, so it goes back to the bundled one on reload.'))}catch(err){dlg({title:'Could not use that template',body:esc(err.message),ok:'OK',cancel:null,danger:true})}};r.readAsArrayBuffer(f)};
 $('#btnHelp').onclick=()=>go('__readme');
@@ -2647,7 +2686,7 @@ function init(wb,name,opts){
   conformance();
   const restored=applyStored();
   S.ui=Object.assign(S.ui,store.get('dme.ui')||{}); if(!S.ui.hidden)S.ui.hidden={};
-  $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load updated version…';
+  $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load updated version…'; wbLabel();
   $('#fileLabel').textContent=(isStarter()?'No workbook open · starter template':name+' · '+S.sheets.length+' sheets')+(S.diff?' · vs '+S.diff.pl:'')+(S.handle?' · linked to file':'');
   document.title='Data Model Explorer';
   loadDv();
@@ -2657,7 +2696,7 @@ function init(wb,name,opts){
   $('#versions').classList.remove('open'); $('#changes').classList.remove('open');
   if(opts.announce){
     if(S.diff&&!S.pending.length) renderVersions();
-    toast('Loaded '+name+(S.diff?' — '+S.diff.total+' difference'+(S.diff.total===1?'':'s')+' from '+S.diff.pl:'')+(restored?' · '+restored+' edit'+(restored===1?'':'s')+' carried over':'')+(S.pending.length?' · '+S.pending.length+' need attention':''));
+    if(isStarter()) toast('Showing the empty template. Open a workbook to begin.'); else toast('Loaded '+name+(S.diff?' — '+S.diff.total+' difference'+(S.diff.total===1?'':'s')+' from '+S.diff.pl:'')+(restored?' · '+restored+' edit'+(restored===1?'':'s')+' carried over':'')+(S.pending.length?' · '+S.pending.length+' need attention':''));
     if(S.pending.length) renderChanges();
   } else if(restored||S.pending.length) toast('Restored '+restored+' saved edit'+(restored===1?'':'s')+(S.pending.length?' · '+S.pending.length+' need attention':''));
 }
@@ -2700,6 +2739,7 @@ async function libLoad(){
   updFilesBadge();
   const lc=S.lib.find(r=>r.b64===S.curB64&&r.handle); if(lc&&!S.handle){S.handle=lc.handle;updFileLabel()}
   if($('#files').classList.contains('open')) renderFiles();
+  wbLabel(); if(S.cur==='__overview') renderOverview();   // the kept-workbook list arrives after the first draw
 }
 function updFileLabel(){const l=$('#fileLabel');if(l&&S.handle&&!/linked/.test(l.textContent))l.textContent+=' · linked to file'}
 function updFilesBadge(){const b=$('#filesCount');if(b){b.textContent=S.lib.length+(store.get('dme.hideb')?0:1);}}
@@ -2716,10 +2756,11 @@ function renderFiles(){
       <div class="fbtns">${viewing?'':`<button class="btn" data-fa="open" data-id="${r.id}">Open</button><button class="btn" data-fa="cmp" data-id="${r.id}" title="Keep the current file open and show what changed from this one">Compare with current</button>`}
       <button class="btn" data-fa="dl" data-id="${r.id}">Download</button><button class="btn ghost" data-fa="rm" data-id="${r.id}">Remove</button></div></div>`;
   };
-  d.innerHTML=`<header><div style="flex:1;min-width:0"><h3>Files</h3><div class="mono dim">${all.length} workbook${all.length===1?'':'s'} kept in this browser</div></div><button class="btn primary" data-fa="add">Add file…</button><button class="btn ghost" data-fclose>✕</button></header>
+  d.innerHTML=`<header><div style="flex:1;min-width:0"><h3>Files</h3><div class="dim">${all.length} workbook${all.length===1?'':'s'} kept in this browser only</div></div><button class="btn primary" data-fa="add">Add file…</button><button class="btn ghost" data-fclose>✕</button></header>
   <div class="body">${all.map(card).join('')}
   <div class="fcard"><div class="fn">Template</div><div class="dim">${esc(T.name)} · ${T.sheets.length} sheets</div><div class="fbtns" style="margin-top:6px"><button class="btn" data-fa="tmpl">Open template panel</button></div></div>
-  <p class="dim">Files you load are kept here so you can switch between versions. They stay in this browser only; the Excel files on your computer are never changed.</p></div>`;
+  <div class="note2">These workbooks are remembered by <b>this browser</b> so you can switch between them. They are not part of the HTML file: anyone you share the file with starts with only the empty template. The Excel files on your computer are never changed.</div>
+  <div style="margin-top:12px"><button class="btn danger" data-fa="clearall">Remove all…</button> <span class="dim">Forget every workbook, edit and Dataverse import kept here, and start with the empty template.</span></div></div>`;
   ['#changes','#versions','#detail','#tmplpanel'].forEach(s=>$(s).classList.remove('open')); d.classList.add('open');
 }
 function libOpen(id,mode){
@@ -2727,18 +2768,18 @@ function libOpen(id,mode){
   try{
     const wbRec=XLSX.read(b64ToU8(rec.b64),{type:'array'});
     if(mode==='open'){
-      // opening a file from the list brings back that file's own edits
-      const prevSheets=S.sheets,prevName=S.fileName,prevB64=S.curB64;
-      saveVersions({name:prevName,b64:prevB64,proj:S.proj},{name:rec.name,b64:rec.b64,proj:rec.proj||rec.id});
-      S.curB64=rec.b64; S.prevB64=prevB64; S.handle=rec.handle||null; S.proj=rec.proj||rec.id;
-      init(wbRec,rec.name,{prevSheets,prevName,announce:true});
+      // switching to a file from the list brings back that file's own edits. Two different workbooks are not
+      // compared (use "Compare with current" for that)
+      saveVersions(null,{name:rec.name,b64:rec.b64,proj:rec.proj||rec.id});
+      S.curB64=rec.b64; S.prevB64=null; S.handle=rec.handle||null; S.proj=rec.proj||rec.id; S.restored=false;
+      init(wbRec,rec.name,{announce:true});
     } else {
       const prevSheets=parseWorkbook(wbRec);
       saveVersions({name:rec.name,b64:rec.b64},{name:S.fileName,b64:S.curB64});
       S.prevB64=rec.b64;
       init(XLSX.read(b64ToU8(S.curB64),{type:'array'}),S.fileName,{prevSheets,prevName:rec.name,announce:true});
     }
-    renderFiles();
+    if($('#files').classList.contains('open')) renderFiles();
   }catch(err){toast('Could not open that file ('+err.message+')')}
 }
 function wireFiles(){
@@ -2747,6 +2788,12 @@ function wireFiles(){
     if(e.target.closest('[data-fclose]')){$('#files').classList.remove('open');return}
     const b=e.target.closest('[data-fa]'); if(!b) return; const a=b.dataset.fa, id=b.dataset.id;
     if(a==='add'){pickFile();return}
+    if(a==='clearall'){
+      if(!await dlg({title:'Remove everything kept in this browser?',body:'Every workbook in this list, all your edits, the version comparison and any imported Dataverse metadata are forgotten, and the page starts again with the empty template.<br><br>The Excel files on your computer are not touched. <b>Export anything you still need first.</b>',ok:'Remove all',danger:true})) return;
+      try{const all=await idb.all(); for(const r of all) await idb.del(r.id)}catch(e2){}
+      try{Object.keys(localStorage).filter(k=>/^dme\.(edits|erdpos|cur|prev|hideb)/.test(k)).forEach(k=>localStorage.removeItem(k))}catch(e2){}
+      location.reload(); return;
+    }
     if(a==='tmpl'){renderTemplate();return}
     if(a==='open'||a==='cmp'){libOpen(id,a==='open'?'open':'cmp');return}
     const rec=id==='bundled'?{name:EMBEDDED_NAME,b64:EMBEDDED_B64}:S.lib.find(r=>r.id===id); if(!rec) return;
@@ -2868,7 +2915,7 @@ function loadFile(f,handle){
       } else proj=newProj();
       // a converted export is a new starting point: there is nothing meaningful to compare it with
       saveVersions(cv?null:{name:prevName,b64:prevB64,proj:S.proj},{name:fname,b64:nb,proj});
-      S.curB64=nb; S.prevB64=cv?null:prevB64; S.handle=handle||null; S.proj=proj;
+      S.curB64=nb; S.prevB64=cv?null:prevB64; S.handle=handle||null; S.proj=proj; S.restored=false;
       libAdd(fname,nb,{sheets:shs.length,tables:shs.filter(s=>s.kind==='entity').length},handle,proj);
       init(wb,fname,{prevSheets:cv?null:prevSheets,prevName:prevName,announce:true});
     }catch(err){dlg({title:'Could not read that file',body:esc(err.message),ok:'OK',cancel:null,danger:true})}
@@ -2881,6 +2928,7 @@ function loadFile(f,handle){
   if(!cur){cur=store.get('dme.cur');prev=store.get('dme.prev')}
   const b64=cur?cur.b64:EMBEDDED_B64, name=cur?cur.name:EMBEDDED_NAME;
   S.curB64=b64; S.prevB64=(cur&&prev)?prev.b64:null;
+  S.restored=!!cur&&b64!==EMBEDDED_B64;   // reopened from this browser: the Overview says so
   S.proj=cur?(cur.proj||'legacy'):'bundled';
   // one-off move: edits saved by the earlier version (one shared list) go to the workbook that was open then
   {const old=store.get(EDIT_STORE_OLD); if(old&&old.length&&!storedEdits(S.proj).length&&store.set(editKey(S.proj),old)) store.del(EDIT_STORE_OLD)}
