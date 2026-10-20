@@ -3,6 +3,15 @@
 Offline, single-file viewer and editor for Dataverse data-model workbooks (Table Dictionary plus one tab per table).
 Opens on an overview (size, documentation completeness, latest changes), runs data-model checks, compares the model with a Dataverse environment's metadata, and lets you view, filter, edit, compare versions, convert Metadata Document Generator exports, draw an ERD, export to Excel, Mermaid, SVG, PNG or draw.io.
 
+## Just want to use it?
+
+Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge.
+Nothing to install, and it works offline. Everything below is only for changing the code.
+
+The ready-built file opens on the empty template; load your own workbook with **Load updated version…** or by
+dragging it onto the page. Nothing is uploaded anywhere. After changing the code, rebuild and replace this file
+(`npm run build`, then copy `dist/Data_Model_Explorer.html` here). Never commit a build made with `--workbook`, because it contains that workbook.
+
 ## Build
 
 ```
