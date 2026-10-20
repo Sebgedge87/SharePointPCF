@@ -251,3 +251,7 @@ The script runs `npm ci`, the tests and a production build. It then runs `pac so
 - **Large term sets:** the term picker walks at most 2000 terms / 6 levels per set, cached per session. Search covers what was loaded.
 - **Lookups** to lists in another web are not supported (the current web is assumed).
 - `AddUsingPath` / `GetFolderByServerRelativePath` / `GetFileByServerRelativePath` are used instead of `Files/add` and `folders/getbyurl`. They are the same operations, but safe for `#`, `%` and quotes in names.
+
+## Also in this repository
+
+`data-model-explorer/` is a separate, offline single-file tool for reviewing Dataverse data-model workbooks. It is not part of the PCF control and has its own build and tests; see its README.
