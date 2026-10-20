@@ -4237,6 +4237,36 @@ function parseWorkbook(wb){
   return sheets;
 }
 
+/* ---------- areas (from the Table Dictionary) ---------- */
+const NOAREA='Other tables';   // tables with no Area
+const areaOf=sh=>sh.area||NOAREA;
+// every area with its table count, named areas first, "Other tables" last
+function areaList(){const m=new Map();S.sheets.filter(s=>s.kind==='entity').forEach(s=>m.set(areaOf(s),(m.get(areaOf(s))||0)+1));return [...m.entries()].sort((a,b)=>(a[0]===NOAREA)-(b[0]===NOAREA)||a[0].localeCompare(b[0]))}
+const hasAreas=()=>areaList().length>1;
+const areaLabel=set=>!set||!set.size?'All areas':set.size===1?[...set][0]:set.size+' areas';
+const AREA_COLS=['#0A4873','#BB1C73','#1B7F5C','#B54708','#6941C6','#0E7090','#C11574','#4E5BA6','#7A5C00','#344054','#027A48','#9E165F'];
+const areaColour=a=>{const i=areaList().findIndex(x=>x[0]===a);return i<0?'#667085':AREA_COLS[i%AREA_COLS.length]};
+// re-read each table's area from the dictionary, so an edited Area applies straight away
+function relinkAreas(){
+  const dict=S.sheets.find(s=>s.isDict); if(!dict||dict.colIdx['Area']===undefined) return;
+  S.sheets.forEach(s=>{if(s.kind==='entity') s.area=''});
+  dict.rows.forEach(r=>{if(r.link==null) return; const sh=S.sheets[r.link], a=getVal(dict,r,'Area').trim(); if(sh&&a&&!sh.area) sh.area=a});
+}
+// pick areas: a checklist popover; onApply gets the chosen set (empty means every area)
+function areaPop(anchor,cur,onApply,hint){
+  closePops();
+  const all=areaList(), el=document.createElement('div'); el.className='pop';
+  const on=a=>!cur||!cur.size||cur.has(a);
+  el.innerHTML=`<div class="ph"><span>Areas</span><span class="dim" style="font-weight:400">${all.length}</span></div>${hint?`<div class="dim" style="padding:0 10px 6px;font-size:12px">${hint}</div>`:''}
+    <div class="plist">${all.map(([a,n])=>`<label><input type="checkbox" data-area="${esc(a)}" ${on(a)?'checked':''}><span style="word-break:break-word">${esc(a)}</span><span class="n">${n} table${n===1?'':'s'}</span></label>`).join('')}</div>
+    <div class="pf"><button class="btn" data-pa="all">All</button><button class="btn" data-pa="none">None</button><span style="flex:1"></span><button class="btn primary" data-pa="apply">Apply</button></div>`;
+  el.addEventListener('click',e=>{const b=e.target.closest('[data-pa]'); if(!b) return; const boxes=[...el.querySelectorAll('[data-area]')];
+    if(b.dataset.pa==='all') boxes.forEach(x=>x.checked=true);
+    else if(b.dataset.pa==='none') boxes.forEach(x=>x.checked=false);
+    else {const sel=new Set(boxes.filter(x=>x.checked).map(x=>x.dataset.area)); closePops(); onApply(sel.size===boxes.length?new Set():sel)}});
+  placePop(el,anchor);
+}
+
 /* ---------- edits ---------- */
 const ekey=(sh,row,col)=>sh.name+'\u0001'+row.key+'\u0001'+col;
 // Edits are stored per project: one workbook and the newer versions you chose to carry edits forward to.
@@ -4266,6 +4296,7 @@ function setVal(sh,row,col,val,silent){
   const i=sh.colIdx[col]; if(i===undefined) return;
   val=String(val).replace(/\r\n?/g,'\n');
   row.vals[i]=val; S.issues=null;
+  if(sh.isDict&&col==='Area') relinkAreas();   // the sidebar, ERD and filters regroup at once
   const k=ekey(sh,row,col);
   if(val===row.orig[i]) S.edits.delete(k);
   else S.edits.set(k,{sh,row,col,old:row.orig[i],nw:val});
@@ -4605,6 +4636,7 @@ function filterItems(view){
     if(quick.comment&&cmtCol&&getVal(it.sh,it.row,cmtCol)==='') return false;
     if(quick.req&&reqCol&&!/required/i.test(facet(reqCol,getVal(it.sh,it.row,reqCol)))) return false;
     if(quick.changed&&!(it.row.isNew||it.row.chg)) return false;
+    if(view.kind==='all'&&st.areas&&st.areas.size&&!st.areas.has(areaOf(it.sh))) return false;
     if(quick.edited){let e=false;for(const c of cols){if(c!=='Table'&&isEdited(it.sh,it.row,c)){e=true;break}}if(!e)return false}
     for(const c in st.filters){
       const f=st.filters[c];
@@ -4782,6 +4814,7 @@ function renderMain(){
   const tb=`<div class="toolbar">
     <button class="btn ${st.quick.edited?'on':''}" data-quick="edited">✎ Edited only</button>
     ${S.diff?`<button class="btn ${st.quick.changed?'on':''}" data-quick="changed">Δ Changed in ${esc(S.diff.cl)}</button>`:''}
+    ${view.kind==='all'&&hasAreas()?`<button class="btn ${st.areas&&st.areas.size?'on':''}" data-areabtn="all">Area: ${esc(areaLabel(st.areas))} ▾</button>`:''}
     <button class="btn" data-act="cols">Columns ▾</button>
     <button class="btn" data-act="expall" title="Show full text in every row, or clamp rows to two lines">${S.ui.expanded===false?'⊞ Expand all rows':'⊟ Collapse all rows'}</button>
         <span class="grow"></span>
@@ -4789,6 +4822,7 @@ function renderMain(){
   const afs=[];
   if(st.q) afs.push(`<span class="af">Search: ${esc(st.q)} <button data-clr="q">×</button></span>`);
   Object.keys(st.quick).forEach(k=>{if(st.quick[k])afs.push(`<span class="af">${({custom:'Custom only',raf:'On RAF form',comment:'Has comment',req:'Required',edited:'Edited',changed:'Changed in '+(S.diff?S.diff.cl:'new version')})[k]} <button data-clr="quick:${k}">×</button></span>`)});
+  if(st.areas&&st.areas.size) afs.push(`<span class="af">Area: ${esc([...st.areas].join(', '))} <button data-clr="areas">×</button></span>`);
   Object.keys(st.filters).forEach(c=>{const f=st.filters[c];const d=[];if(f.text)d.push('contains “'+f.text+'”');if(f.sel)d.push([...f.sel].slice(0,4).join(', ')+(f.sel.size>4?' +'+(f.sel.size-4):''));afs.push(`<span class="af">${esc(c)}: ${esc(d.join(' · '))} <button data-clr="col:${esc(c)}">×</button></span>`)});
   const afHTML=afs.length?`<div class="active-filters">${afs.join('')}<button class="btn ghost" style="height:24px" data-clr="all">Clear all</button></div>`:'';
   main.innerHTML=head+tb+afHTML+`<div class="gridwrap" id="gridwrap"></div>`;
@@ -5296,7 +5330,7 @@ function renderReadme(){
     <li>If you have edits open, you are asked whether the new file is a <b>newer version of the same data model</b> or a <b>different workbook</b>. Edits are only carried over to a newer version; a different workbook keeps its own edits, so two client models never mix.</li>
     <li><b>Your edits are re-applied</b> if the new version still has the original value you edited. If the new version changed that same value, or the field no longer exists, the edit is listed under <b>Needs your attention</b> with <i>Keep mine</i> / <i>Use new version</i>. Nothing is overwritten silently.</li>
     <li>The latest two versions are remembered in this browser, so reopening the page picks up where you left off, still comparing against the previous one.</li>
-    <li><b>Metadata Document Generator exports</b> (an <span class="mono">Entities list</span> tab plus one tab per table) are detected automatically when loaded. They are converted to the template layout: a Table Dictionary (Custom or OOTB from <span class="mono">Is Custom Entity</span>, Area and Purpose left blank for you), then each table with its details and fields. The result opens as <i>name (converted).xlsx</i>; use Export to save it. It is not linked to the original, so the generator file is never overwritten.</li>
+    <li><b>Metadata Document Generator exports</b> (an <span class="mono">Entities list</span> tab plus one tab per table) are detected automatically when loaded. They are converted to the template layout: a Table Dictionary (Custom or OOTB from <span class="mono">Is Custom Entity</span>, Area and Purpose left blank for you), then each table with its details and fields. The result opens under the export's own name; use Export to save it. It is not linked to the original, so the generator file is never overwritten.</li>
   </ul>`)}
 
   ${sec(5,'The template and exporting',`
@@ -5313,7 +5347,7 @@ function renderReadme(){
   <p>Exported files can be loaded straight back in, which makes a round trip possible: <i>load, review and edit, export, reload</i>.</p>`)}
 
   ${sec(6,'ERD diagram',`
-  <p>The <b>ERD</b> tab generates a Mermaid entity-relationship diagram from the lookup columns. It opens with the custom tables when there are 30 or fewer, otherwise with nothing selected so you can pick a readable set; you are asked before drawing more than 80 tables. Pick the tables and the detail level, and system tables such as users and teams are shown as light stubs. Tables are laid out automatically so related tables sit together. Click the <b>★</b> next to one or more tables to make them <b>core tables</b>: they are placed in the middle, glow gold, and everything else is arranged around them by how closely it is linked. Each line has a small arrow pointing at the table being looked up. Lines between the same two tables are merged into one (untick <b>Merge lines</b> to see them separately), and relationship names show when you hover a table (or choose Always / Hidden). Drag any table to move it (the lines follow) and drag the background to pan. Your arrangement is remembered in this browser for that selection of tables and options, and <b>Auto layout</b> discards it and lays the tables out again. Scroll the mouse wheel over the canvas to zoom in or out at the pointer, and drag empty space to move around. The <b>draw.io</b> button downloads the diagram, with your layout and the attributes currently shown, as a draw.io file to keep editing; re-exporting later does not keep edits made in draw.io. The diagram can be zoomed, copied as Mermaid source, or saved as .mmd, SVG or PNG; SVG and PNG use your arrangement.</p>`)}
+  <p>The <b>ERD</b> tab generates a Mermaid entity-relationship diagram from the lookup columns. It opens with the custom tables when there are 30 or fewer, otherwise with nothing selected so you can pick a readable set; you are asked before drawing more than 80 tables. Pick the tables and the detail level, and system tables such as users and teams are shown as light stubs. Tables are laid out automatically so related tables sit together. If the Table Dictionary has areas, <b>Area ▾</b> picks one or more areas: the list narrows to them and their tables are drawn; <b>Colour by area</b> gives each area its own border colour (also in the draw.io file). Click the <b>★</b> next to one or more tables to make them <b>core tables</b>: they are placed in the middle, glow gold, and everything else is arranged around them by how closely it is linked. Each line has a small arrow pointing at the table being looked up. Lines between the same two tables are merged into one (untick <b>Merge lines</b> to see them separately), and relationship names show when you hover a table (or choose Always / Hidden). Drag any table to move it (the lines follow) and drag the background to pan. Your arrangement is remembered in this browser for that selection of tables and options, and <b>Auto layout</b> discards it and lays the tables out again. Scroll the mouse wheel over the canvas to zoom in or out at the pointer, and drag empty space to move around. The <b>draw.io</b> button downloads the diagram, with your layout and the attributes currently shown, as a draw.io file to keep editing; re-exporting later does not keep edits made in draw.io. The diagram can be zoomed, copied as Mermaid source, or saved as .mmd, SVG or PNG; SVG and PNG use your arrangement.</p>`)}
 
   ${sec(7,'Overview and checks',`
   <p>The page opens on the <b>Overview</b>: how many tables, fields and lookups the model has, how complete the documentation is (fields and tables with a description, dictionary entries with an area and purpose), the least-described tables, a summary by area, and the latest changes and edits. Click a tile to jump to the detail.</p>
@@ -5324,7 +5358,7 @@ function renderReadme(){
     <li><b>Info:</b> lookups to standard or Microsoft tables that have no tab (user, team and similar system tables are left out entirely); logical names that are not lower-case letters, digits and underscores; custom fields without a publisher prefix; tables whose primary key field is not listed. In a full Dataverse export these are usually Microsoft's own and fine.</li>
     <li>The empty starter template built into the page is not checked.</li>
   </ul>
-  <p>Filter by severity, by kind of check or with the search box, click a finding to go to the row, or export the list as CSV.</p>`)}
+  <p>Filter by severity, by kind of check, by area or with the search box, click a finding to go to the row, or export the list as CSV.</p>`)}
 
   ${sec(8,'Checking against Dataverse',`
   <p><b>More ▾ → Dataverse check</b> (also on the Overview) compares the workbook with the real table definitions in an environment. The page stays offline: enter your environment URL and it builds Web API links for the tables in this workbook. Open each link in the browser while signed in to Dataverse, save the page as a .json file, and load the files (or drop them onto the page).</p>
@@ -5666,10 +5700,10 @@ function renderOverview(){
 }
 
 /* ---------- checks page ---------- */
-function issState(){return S.issSt||(S.issSt={sev:{error:true,warn:true,info:true},rule:'',area:'',dv:false,shown:300})}
+function issState(){return S.issSt||(S.issSt={sev:{error:true,warn:true,info:true},rule:'',areas:new Set(),dv:false,shown:300})}
 function renderIssues(){
   const main=$('#main'), all=issues(), st=issState(), q=(S.issQ||'').toLowerCase().trim();
-  const list=all.filter(i=>st.sev[i.sev]&&(!st.rule||(st.rule.endsWith('*')?i.rule.startsWith(st.rule.slice(0,-1)):i.rule===st.rule))&&(!st.area||i.sh.kind==='entity'&&(i.sh.area||'Other tables')===st.area)&&(!st.dv||i.rule.startsWith('dv-'))
+  const list=all.filter(i=>st.sev[i.sev]&&(!st.rule||(st.rule.endsWith('*')?i.rule.startsWith(st.rule.slice(0,-1)):i.rule===st.rule))&&(!st.areas.size||i.sh.kind==='entity'&&st.areas.has(areaOf(i.sh)))&&(!st.dv||i.rule.startsWith('dv-'))
     &&(!q||(i.sh.label+' '+i.where+' '+i.sh.logical+' '+i.field+' '+RULES[i.rule][1]+' '+i.msg).toLowerCase().includes(q)));
   S.issList=list;
   const c=issueCounts(), byRule={}; all.forEach(i=>{byRule[i.rule]=(byRule[i.rule]||0)+1});
@@ -5678,7 +5712,7 @@ function renderIssues(){
     <div class="desc">Problems found in the data model itself: missing or duplicated logical names, lookups to tables that are not documented, dictionary entries without a tab${S.dv?', and differences from the imported Dataverse metadata':''}. They update as you edit.</div></div>
     <div class="toolbar">${['error','warn','info'].map(chip).join('')}
       <select id="irule" style="height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:0 8px;max-width:320px"><option value="">All checks</option>${Object.keys(RULES).filter(r=>byRule[r]).map(r=>`<option value="${r}" ${st.rule===r?'selected':''}>${esc(RULES[r][1])} (${byRule[r]})</option>`).join('')}</select>
-      ${st.rule.endsWith('*')?`<span class="af">Lookup checks <button data-iclr="rule">×</button></span>`:''}${st.area?`<span class="af">Area: ${esc(st.area)} <button data-iclr="area">×</button></span>`:''}${st.dv?`<span class="af">Dataverse only <button data-iclr="dv">×</button></span>`:''}
+      ${st.rule.endsWith('*')?`<span class="af">Lookup checks <button data-iclr="rule">×</button></span>`:''}${hasAreas()?`<button class="btn ${st.areas.size?'on':''}" data-areabtn="iss">Area: ${esc(areaLabel(st.areas))} ▾</button>`:''}${st.areas.size?`<span class="af">${esc([...st.areas].join(', '))} <button data-iclr="area">×</button></span>`:''}${st.dv?`<span class="af">Dataverse only <button data-iclr="dv">×</button></span>`:''}
       <span class="grow"></span><span class="count">${list.length===all.length?list.length+' shown':list.length+' of '+all.length+' shown'}</span><button class="btn" data-act="iss-csv">Export (CSV)</button></div>
     <div class="gridwrap" id="isswrap">`;
   if(!list.length) h+=`<div class="empty">${all.length?'<b>Nothing matches.</b><br>Try clearing a filter or the search.':'<b>No problems found.</b>'}</div>`;
@@ -5724,7 +5758,7 @@ const ERD_EASY=30, ERD_BIG=80;   // tables: drawn by default up to EASY; asked b
 function erdInit(){
   if(S.erd) return S.erd;
   const ui=S.ui.erd||{};
-  S.erd={sel:new Set(S.sheets.filter(s=>s.kind==='entity'&&s.custom).map(s=>s.idx)),attrs:ui.attrs||'keys',stubs:ui.stubs!==false,sys:ui.sys!==false,ext:!!ui.ext,rel:ui.rel!==false,dir:ui.dir||'LR',zoom:0,q:'',src:false,n:0,pos:{},merge:ui.merge!==false,dock:ui.dock||'right',sw:ui.sw||440,sh:ui.sh||260,smax:false,follow:ui.follow!==false,auto:{},prim:new Set(),lbl:ui.lbl||'hover',nn:ui.nn!==false,core:new Set((ui.core||[]).map(x=>String(x).toLowerCase()))};
+  S.erd={sel:new Set(S.sheets.filter(s=>s.kind==='entity'&&s.custom).map(s=>s.idx)),attrs:ui.attrs||'keys',stubs:ui.stubs!==false,sys:ui.sys!==false,ext:!!ui.ext,rel:ui.rel!==false,dir:ui.dir||'LR',zoom:0,q:'',src:false,n:0,pos:{},merge:ui.merge!==false,dock:ui.dock||'right',sw:ui.sw||440,sh:ui.sh||260,smax:false,follow:ui.follow!==false,auto:{},prim:new Set(),lbl:ui.lbl||'hover',nn:ui.nn!==false,areas:new Set(),acol:!!ui.acol,core:new Set((ui.core||[]).map(x=>String(x).toLowerCase()))};
   // start small: the custom tables or every table only when that is a readable number, otherwise nothing and a prompt
   {const ents=S.sheets.filter(s=>s.kind==='entity'), cust=ents.filter(s=>s.custom); S.erd.sel=new Set((cust.length&&cust.length<=ERD_EASY?cust:ents.length<=ERD_EASY?ents:[]).map(s=>s.idx))}
   return S.erd;
@@ -5794,11 +5828,19 @@ function buildErd(){
   });
   rels.forEach(r=>L.push('  '+r.p+(r.nn?' }o..o{ ':r.req?' ||--o{ ':' |o--o{ ')+r.c+' : "'+r.lbl+'"')); stats.rels=rels.length;
   const cust=[...nodes.values()].filter(n=>n.sel&&n.sh&&n.sh.custom).map(n=>n.id);
-  L.push('  classDef cust stroke:#BB1C73,stroke-width:3px');
-  L.push('  classDef ootb stroke:#0A4873,stroke-width:1px');
   const oo=[...nodes.values()].filter(n=>!(n.sel&&n.sh&&n.sh.custom)).map(n=>n.id);
-  if(cust.length) L.push('  class '+cust.join(',')+' cust');
-  if(oo.length) L.push('  class '+oo.join(',')+' ootb');
+  if(E.acol&&hasAreas()){
+    // colour by area: border colour from the table's area, thick for custom tables; tables outside the workbook stay plain
+    const byCls={}; [...nodes.values()].forEach(n=>{let c='ootb'; if(n.sh){const i=areaList().findIndex(x=>x[0]===areaOf(n.sh)); c='ar'+i+(n.sel&&n.sh.custom?'c':'o')} (byCls[c]=byCls[c]||[]).push(n.id)});
+    L.push('  classDef ootb stroke:#667085,stroke-width:1px');
+    Object.keys(byCls).filter(c=>c!=='ootb').forEach(c=>{const col=AREA_COLS[+c.slice(2,-1)%AREA_COLS.length]; L.push('  classDef '+c+' stroke:'+col+',stroke-width:'+(c.endsWith('c')?'3px':'1.5px'))});
+    Object.entries(byCls).forEach(([c,ids])=>L.push('  class '+ids.join(',')+' '+c));
+  } else {
+    L.push('  classDef cust stroke:#BB1C73,stroke-width:3px');
+    L.push('  classDef ootb stroke:#0A4873,stroke-width:1px');
+    if(cust.length) L.push('  class '+cust.join(',')+' cust');
+    if(oo.length) L.push('  class '+oo.join(',')+' ootb');
+  }
   E.model={nodes:[...nodes.values()],rels};
   return {src:L.join('\n'),stats};
 }
@@ -5807,6 +5849,8 @@ function erdRefresh(now){clearTimeout(erdTimer);erdTimer=setTimeout(drawErd,now?
 async function drawErd(){
   const cv=$('#erdcv'); if(!cv) return; const E=erdInit();
   const {src,stats}=buildErd(); E.srcText=src;
+  {const lg=$('#erdlegend'); if(lg){ if(E.acol&&hasAreas()) lg.innerHTML='<span style="margin-right:6px">Areas:</span>'+areaList().map(([a])=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="display:inline-block;width:14px;height:10px;border:3px solid ${areaColour(a)};border-radius:2px"></span>${esc(a)}</span>`).join('')+'<span>Thick border: custom table</span>';
+    else lg.innerHTML='<span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced'}}
   const ta=$('#erdsrc'); if(ta&&ta!==document.activeElement) ta.value=src;
   $('#erdinfo').textContent=stats.tables+' tables'+(stats.stubs?' + '+stats.stubs+' referenced':'')+' · '+stats.rels+' relationships'+(E.attrs!=='none'?' · '+stats.attrs+' attributes':'')+(stats.hidden?' · '+stats.hidden+' unrelated hidden':'');
   if(!E.sel.size){const n=S.sheets.filter(s=>s.kind==='entity').length; cv.innerHTML=`<div class="msg" style="max-width:520px"><b>Pick the tables to draw.</b><br>Tick tables on the left, filter them (for example by prefix), or click ★ next to a table to build the diagram around it.${n>ERD_EASY?` With ${n} tables in this workbook, drawing them all at once is slow and hard to read; a few dozen at a time works best.`:''}</div>`;E.svg='';return}
@@ -6073,7 +6117,7 @@ function erdDrawio(base){
   let id=2; const out=[]; const cellId=new Map();
   T.forEach(t=>{
     const custom=t.n.sel&&t.n.sh&&t.n.sh.custom, core=E.core.has(t.n.id.toLowerCase()), tid='t'+(id++); cellId.set(t.n.id,tid); t.tid=tid;
-    out.push('<mxCell id="'+tid+'" value="'+x(t.n.label)+'" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize='+HD+';horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;whiteSpace=wrap;html=1;fontColor=#0A4873;fillColor='+(custom?'#F7D4E7':'#E3ECF4')+';strokeColor='+(custom?'#BB1C73':'#0A4873')+';strokeWidth='+(custom?3:1)+';swimlaneFillColor=#FFFFFF;'+(core?'shadow=1;':'')+'" vertex="1" parent="1"><mxGeometry x="'+t.x+'" y="'+t.y+'" width="'+t.w+'" height="'+t.h+'" as="geometry"/></mxCell>');
+    out.push('<mxCell id="'+tid+'" value="'+x(t.n.label)+'" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize='+HD+';horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;whiteSpace=wrap;html=1;fontColor=#0A4873;fillColor='+(custom?'#F7D4E7':'#E3ECF4')+';strokeColor='+(E.acol&&hasAreas()&&t.n.sh?areaColour(areaOf(t.n.sh)):custom?'#BB1C73':'#0A4873')+';strokeWidth='+(custom?3:1)+';swimlaneFillColor=#FFFFFF;'+(core?'shadow=1;':'')+'" vertex="1" parent="1"><mxGeometry x="'+t.x+'" y="'+t.y+'" width="'+t.w+'" height="'+t.h+'" as="geometry"/></mxCell>');
     t.lines.forEach((l,i)=>{const k=t.rows[i].k; out.push('<mxCell id="'+tid+'r'+i+'" value="'+x(l)+'" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=6;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;fontFamily=Courier New;fontSize=11;fontColor='+(k==='FK'?'#BB1C73':'#0A4873')+';'+(k==='PK'?'fontStyle=1;':'')+'" vertex="1" parent="'+tid+'"><mxGeometry y="'+(HD+i*RH)+'" width="'+t.w+'" height="'+RH+'" as="geometry"/></mxCell>')});
   });
   // relationships: parent (the table looked up) -> child (holds the lookup). One line per pair unless merging is off.
@@ -6096,7 +6140,7 @@ function renderErdPage(){
   const groups={}; S.sheets.filter(s=>s.kind==='entity').forEach(s=>{const g=s.area||'Other tables';(groups[g]=groups[g]||[]).push(s)});
   const ord=Object.keys(groups).sort((a,b)=>(a==='Other tables')-(b==='Other tables')||a.localeCompare(b));
   const f=E.q.toLowerCase();
-  const list=ord.map(g=>{
+  const list=ord.filter(g=>!E.areas.size||E.areas.has(g)).map(g=>{
     const items=groups[g].filter(s=>erdMatch(s,f));
     return items.length?`<h4>${esc(g)}</h4>`+items.map(s=>erdLbl(s,E)).join(''):'';
   }).join('');
@@ -6113,6 +6157,7 @@ function renderErdPage(){
     <label><input type="checkbox" id="erdsys" ${E.sys?'checked':''}> Hide user, team and business unit</label>
     ${S.dv?`<label><input type="checkbox" id="erdnn" ${E.nn?'checked':''}> Show N:N relationships from Dataverse</label>`:''}</div>
     <div class="dim" id="erdcore" style="margin:2px 0 6px"></div><div class="quick"><button data-eq="custom">Custom only</button><button data-eq="all">All</button><button data-eq="none">None</button></div>
+    <div class="quick" style="margin-top:8px">${hasAreas()?`<button data-areabtn="erd" class="${E.areas.size?'on':''}" style="${E.areas.size?'border-color:var(--accent);background:var(--accent-bg)':''}">Area: ${esc(areaLabel(E.areas))} ▾</button><label style="font-size:12.5px"><input type="checkbox" id="erdacol" ${E.acol?'checked':''}> Colour by area</label>`:`<span class="dim" style="font-size:12.5px">Fill in <b>Area</b> in the Table Dictionary to pick tables by area.</span>`}</div>
     <div class="quick" style="margin-top:4px"><button data-eq="shown" title="Tick every table currently shown by the filter below">Select shown</button><button data-eq="unshown" title="Untick every table currently shown by the filter below">Clear shown</button></div>
     <div style="margin-top:8px"><input type="search" id="erdq" placeholder="Filter by name or logical name, e.g. rhs_" value="${esc(E.q)}"></div></div>
     <div class="lst" id="erdlst">${list}</div></div>
@@ -6120,7 +6165,7 @@ function renderErdPage(){
       <button class="btn" data-ez="0.8">−</button><button class="btn" data-ez="0">Fit</button><button class="btn" data-ez="1.25">+</button>
       <button class="btn" data-ea="names" title="Show or hide the relationship names on the lines">Names</button><button class="btn" data-ea="relayout" title="Discard your arrangement and lay the tables out again">Auto layout</button><button class="btn" data-ea="copy">Copy Mermaid</button><button class="btn" data-ea="drawio" title="Download this diagram, with your layout, as a draw.io file you can keep editing in draw.io">draw.io</button><button class="btn" data-ea="mmd">.mmd</button><button class="btn" data-ea="svg">SVG</button><button class="btn" data-ea="png">PNG</button>
       <button class="btn ${E.src?'on':''}" data-ea="src">Source</button></div>
-      <div class="dim" style="padding:6px 16px;border-bottom:1px solid var(--line2)"><span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced</div>
+      <div class="dim" id="erdlegend" style="padding:6px 16px;border-bottom:1px solid var(--line2)"><span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced</div>
       <div class="body ${E.dock} ${E.src?'srcopen':''}" id="erdbody" style="--sw:${E.sw}px;--sh:${E.sh}px"><div class="cv" id="erdcv"><div class="msg">Drawing…</div></div>
         <div class="sres" id="erdsres" title="Drag to resize. Double-click to reset."></div>
         <div class="srcbox" id="erdsrcbox"><div class="sh"><b>Mermaid source</b><span class="dim hint">Read-only. Use Copy to take it elsewhere.</span><span class="grow"></span><button class="btn" data-ea="dock" title="Dock the source to the right or to the bottom">Dock: ${E.dock==='right'?'right':'bottom'}</button><button class="btn" data-ea="maxsrc" title="Make the source panel larger or smaller">Expand</button><button class="btn" data-ea="copy">Copy</button><button class="btn" data-ea="src" title="Close">✕</button></div>
@@ -6136,6 +6181,7 @@ function renderErdPage(){
     else if(t.id==='erdmerge'){E.merge=t.checked;erdSave();erdRefresh(true)}
     else if(t.id==='erdsys'){E.sys=t.checked;erdSave();erdRefresh()}
     else if(t.id==='erdnn'){E.nn=t.checked;erdSave();erdRefresh(true)}
+    else if(t.id==='erdacol'){E.acol=t.checked;erdSave();erdRefresh(true)}
   });
   root.addEventListener('input',e=>{if(e.target.id==='erdq'){E.q=e.target.value;const lst=$('#erdlst');const keep=lst.scrollTop;renderErdList();lst.scrollTop=keep}});
   root.addEventListener('click',e=>{
@@ -6174,6 +6220,17 @@ function renderErdPage(){
   cvEl.addEventListener('wheel',ev=>{ev.preventDefault(); const f=Math.pow(1.0018,-Math.max(-120,Math.min(120,ev.deltaY))*(ev.deltaMode===1?16:1)); erdZoom(f,false,false,{x:ev.clientX,y:ev.clientY});},{passive:false});
   drawErd();
 }
+// choosing areas narrows the table list to them and draws their tables (asking first when that is a lot)
+function erdAreas(set){
+  const E=erdInit(); E.areas=set;
+  const btn=document.querySelector('[data-areabtn="erd"]'); if(btn){btn.textContent='Area: '+areaLabel(set)+' ▾'; btn.style.cssText=set.size?'border-color:var(--accent);background:var(--accent-bg)':''}
+  const lst=$('#erdlst'); renderErdList(); if(lst) lst.scrollTop=0;
+  if(!set.size) return;
+  const pick=S.sheets.filter(s=>s.kind==='entity'&&set.has(areaOf(s)));
+  const apply=()=>{E.auto={};E.prim=new Set();E.sel=new Set(pick.map(s=>s.idx));renderErdList();erdRefresh(true)};
+  if(pick.length>ERD_BIG) dlg({title:'Draw '+pick.length+' tables?',body:'These areas hold '+pick.length+' tables. A diagram this large can take 10 seconds or more to draw and is hard to read.',ok:'Draw them all'}).then(ok=>{if(ok)apply()});
+  else apply();
+}
 function erdUpdCore(){const E=erdInit(),el=$('#erdcore'); if(!el) return;
   const names=S.sheets.filter(s=>s.kind==='entity'&&E.core.has(mid(s.logical).toLowerCase())).map(s=>s.label);
   el.innerHTML=names.length?'Core: <b>'+names.map(esc).join(', ')+'</b> <a href="#" data-coreclear style="margin-left:6px">clear</a>':'Click ★ on a table to make it a core table. The diagram is then arranged around it.'}
@@ -6203,10 +6260,10 @@ function renderErdList(){
   const E=erdInit(); const f=E.q.toLowerCase();
   const groups={}; S.sheets.filter(s=>s.kind==='entity').forEach(s=>{const g=s.area||'Other tables';(groups[g]=groups[g]||[]).push(s)});
   const ord=Object.keys(groups).sort((a,b)=>(a==='Other tables')-(b==='Other tables')||a.localeCompare(b));
-  $('#erdlst').innerHTML=ord.map(g=>{const items=groups[g].filter(s=>erdMatch(s,f));
+  $('#erdlst').innerHTML=ord.filter(g=>!E.areas.size||E.areas.has(g)).map(g=>{const items=groups[g].filter(s=>erdMatch(s,f));
     return items.length?`<h4>${esc(g)}</h4>`+items.map(s=>erdLbl(s,E)).join(''):''}).join('');
 }
-function erdSave(){const E=erdInit();S.ui.erd={nn:E.nn,attrs:E.attrs,stubs:E.stubs,sys:E.sys,ext:E.ext,rel:E.rel,dir:E.dir,merge:E.merge,dock:E.dock,sw:E.sw,sh:E.sh,lbl:E.lbl,follow:E.follow,core:[...E.core]};store.set('dme.ui',S.ui)}
+function erdSave(){const E=erdInit();S.ui.erd={acol:E.acol,nn:E.nn,attrs:E.attrs,stubs:E.stubs,sys:E.sys,ext:E.ext,rel:E.rel,dir:E.dir,merge:E.merge,dock:E.dock,sw:E.sw,sh:E.sh,lbl:E.lbl,follow:E.follow,core:[...E.core]};store.set('dme.ui',S.ui)}
 function erdAction(a,btn){
   const E=erdInit(); const base=S.fileName.replace(/\.[^.]+$/,'')+' - ERD';
   if(a==='names'){E.lbl=E.lbl==='hover'?'all':E.lbl==='all'?'none':'hover'; erdSave(); erdNamesBtn(); if(E.applyVis) E.applyVis(); return}
@@ -6257,8 +6314,15 @@ function go(id,opts={}){
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(!t.closest('.pop,.menu,[data-filter],[data-act="cols"],#btnExport,#btnMore,#btnWb,#btnMob')) closePops();
+  if(!t.closest('.pop,.menu,[data-filter],[data-act="cols"],#btnExport,#btnMore,#btnWb,#btnMob,[data-areabtn]')) closePops();
   let n;
+  if((n=t.closest('[data-areabtn]'))){
+    e.preventDefault(); const k=n.dataset.areabtn;
+    if(k==='erd'){const E=erdInit(); areaPop(n,E.areas,erdAreas,'Shows these areas in the list and draws their tables.')}
+    else if(k==='iss'){const st=issState(); areaPop(n,st.areas,set=>{st.areas=set;st.shown=300;renderIssues()})}
+    else if(k==='all'){const st=vstate('__all'); areaPop(n,st.areas,set=>{st.areas=set;st.shown=150;applyAndRender()})}
+    return;
+  }
   if((n=t.closest('[data-wb]'))){e.preventDefault();wbChoose(n.dataset.wb);return}
   if(t.closest('[data-ovx]')){S.restored=false;renderOverview();return}
   if((n=t.closest('[data-view]'))){document.body.classList.remove('navopen');go(n.dataset.view);return}
@@ -6298,7 +6362,8 @@ document.addEventListener('click',e=>{
   }
   if((n=t.closest('[data-clr]'))){
     const st=vstate(S.view.id); const k=n.dataset.clr;
-    if(k==='all'){st.q='';st.filters={};st.quick={};$('#q').value=''}
+    if(k==='areas'){st.areas=new Set()}
+    else if(k==='all'){st.q='';st.filters={};st.quick={};st.areas=new Set();$('#q').value=''}
     else if(k==='q'){st.q='';$('#q').value=''}
     else if(k.startsWith('quick:')) st.quick[k.slice(6)]=false;
     else if(k.startsWith('col:')) delete st.filters[k.slice(4)];
@@ -6312,15 +6377,15 @@ document.addEventListener('click',e=>{
     if(a==='changes'){renderChanges();return}
     if(a==='dv'){renderDv();return}
     if(a.startsWith('issues')){
-      const st=issState(), r=a.split(':'); Object.assign(st,{rule:'',area:'',dv:false,sev:{error:true,warn:true,info:true},shown:300}); S.issQ='';
-      if(r[1]==='rule') st.rule=r.slice(2).join(':'); else if(r[1]==='area') st.area=r.slice(2).join(':'); else if(r[1]==='dv') st.dv=true;
+      const st=issState(), r=a.split(':'); Object.assign(st,{rule:'',areas:new Set(),dv:false,sev:{error:true,warn:true,info:true},shown:300}); S.issQ='';
+      if(r[1]==='rule') st.rule=r.slice(2).join(':'); else if(r[1]==='area') st.areas=new Set([r.slice(2).join(':')]); else if(r[1]==='dv') st.dv=true;
       else if(r[1]==='error'||r[1]==='warn') st.sev={error:r[1]==='error',warn:r[1]==='warn',info:false};
       $('#dvpanel').classList.remove('open'); go('__issues');
     }
     return;
   }
   if((n=t.closest('[data-isev]'))){const st=issState();st.sev[n.dataset.isev]=!st.sev[n.dataset.isev];st.shown=300;renderIssues();return}
-  if((n=t.closest('[data-iclr]'))){const st=issState(),k=n.dataset.iclr;if(k==='area')st.area='';else if(k==='dv')st.dv=false;else if(k==='rule')st.rule='';renderIssues();return}
+  if((n=t.closest('[data-iclr]'))){const st=issState(),k=n.dataset.iclr;if(k==='area')st.areas=new Set();else if(k==='dv')st.dv=false;else if(k==='rule')st.rule='';renderIssues();return}
   if((n=t.closest('[data-ii]'))){const i=S.issList&&S.issList[+n.dataset.ii];if(i){if(i.row)go(i.sh.idx,{focusRow:i.row});else go(i.sh.idx)}return}
   if(t.closest('[data-dvclose]')){$('#dvpanel').classList.remove('open');return}
   if((n=t.closest('[data-dv]'))){
@@ -6442,7 +6507,7 @@ function init(wb,name,opts){
   S.diff=opts.prevSheets?computeDiff(opts.prevSheets,S.sheets,opts.prevName,name):null;
   S.allView=buildAll();
   conformance();
-  const restored=applyStored();
+  const restored=applyStored(); relinkAreas();
   S.ui=Object.assign(S.ui,store.get('dme.ui')||{}); if(!S.ui.hidden)S.ui.hidden={};
   $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load version…'; wbLabel();
   $('#fileLabel').textContent=(isStarter()?'No workbook open · starter template':name+' · '+S.sheets.length+' sheets')+(S.diff?' · vs '+S.diff.pl:'')+(S.handle?' · linked to file':'');
@@ -6658,9 +6723,11 @@ function loadFile(f,handle){
     try{
       let u=new Uint8Array(ev.target.result);
       let wb=XLSX.read(u,{type:'array'}), fname=f.name, cv=null;
-      if(isMetaExport(wb)){const mod=convModal(f.name); try{cv=await convertMetadata(wb,mod.update); await mod.finish(cv)}catch(e3){mod.close();throw e3} wb=cv.wb; u=new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})); fname=f.name.replace(/\.xlsx?$/i,'')+' (converted).xlsx'; handle=null}
+      if(isMetaExport(wb)){const mod=convModal(f.name); try{cv=await convertMetadata(wb,mod.update); await mod.finish(cv)}catch(e3){mod.close();throw e3} wb=cv.wb; u=new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})); fname=f.name.replace(/\.xls$/i,'.xlsx'); handle=null}   // the converted workbook keeps the export's name
       const shs=parseWorkbook(wb);
       if(!shs.length) throw new Error('no usable sheets found');
+      // nothing to compare with when the page was showing the empty starter template, or for a converted export
+      const fresh=!!cv||isStarter();
       const prevSheets=S.sheets, prevName=S.fileName, prevB64=S.curB64;
       const nb=u8ToB64(u);
       // which project's edits apply to this file? A file seen before keeps its own; a new file with edits open asks
@@ -6673,10 +6740,10 @@ function loadFile(f,handle){
         proj=carry?S.proj:newProj();
       } else proj=newProj();
       // a converted export is a new starting point: there is nothing meaningful to compare it with
-      saveVersions(cv?null:{name:prevName,b64:prevB64,proj:S.proj},{name:fname,b64:nb,proj});
-      S.curB64=nb; S.prevB64=cv?null:prevB64; S.handle=handle||null; S.proj=proj; S.restored=false;
+      saveVersions(fresh?null:{name:prevName,b64:prevB64,proj:S.proj},{name:fname,b64:nb,proj});
+      S.curB64=nb; S.prevB64=fresh?null:prevB64; S.handle=handle||null; S.proj=proj; S.restored=false;
       libAdd(fname,nb,{sheets:shs.length,tables:shs.filter(s=>s.kind==='entity').length},handle,proj);
-      init(wb,fname,{prevSheets:cv?null:prevSheets,prevName:prevName,announce:true});
+      init(wb,fname,{prevSheets:fresh?null:prevSheets,prevName:prevName,announce:true});
     }catch(err){dlg({title:'Could not read that file',body:esc(err.message),ok:'OK',cancel:null,danger:true})}
   };
   r.readAsArrayBuffer(f);

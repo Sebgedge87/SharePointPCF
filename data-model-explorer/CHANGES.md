@@ -1,3 +1,21 @@
+# 1.4.0
+
+Areas (from the Table Dictionary's Area column)
+- ERD: **Area ▾** picks one or more areas. The table list narrows to them and their tables are drawn (asking first
+  above 80 tables). Tables they look up in other areas still appear as referenced boxes. **Colour by area** gives
+  each area its own border colour, with a legend, also in the draw.io export.
+- Checks and All fields: **Area ▾** filters to one or more areas; the Overview's "By area" issue counts open
+  Checks filtered to that area.
+- Editing Area in the Table Dictionary regroups the sidebar, ERD and filters straight away (it used to need a
+  reload).
+- The area controls appear when the workbook has at least two areas; otherwise the ERD says to fill in Area in the
+  Table Dictionary.
+
+Other
+- A converted Metadata Document Generator export keeps the export's own file name (no "(converted)").
+- The first workbook opened is no longer compared with the empty starter template (it showed a meaningless
+  "What changed").
+
 # 1.3.0 (interface review)
 
 Overview

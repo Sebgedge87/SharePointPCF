@@ -79,6 +79,7 @@ function dataverse() {
   ok((await p.innerText('#nav .navitem[data-view="__issues"]')).includes('0 errors · 0 warnings'), 'the starter template is not checked');
   await p.setInputFiles('#file', workbook()); await p.waitForTimeout(1500); await p.keyboard.press('Escape');
 
+  ok(await p.$eval('#btnVer', e => e.style.display === 'none') && !/compared with/.test(await p.innerText('.ov .sub')), 'the first workbook opened is not compared with the empty starter template');
   // landing page
   ok(/Overview/.test(await p.innerText('#main .ov h1')), 'opens on the Overview');
   const tile = async label => (await p.locator(`.ovtile:has(span:text-is("${label}")) b`).innerText()).trim();

@@ -33,7 +33,7 @@ function fakeExport() {
   await p.waitForSelector('.convbtns button', { timeout: 30000 });
   ok(/3 \/ 3/.test(await p.innerText('.convbox')), 'metadata export converts (3 tables)');
   await p.click('.convbtns button'); await p.waitForTimeout(1500);
-  ok(/converted/.test(await p.innerText('#fileLabel')), 'converted workbook is open');
+  ok(/fake_export\.xlsx/.test(await p.innerText('#fileLabel')) && !/converted/.test(await p.innerText('#fileLabel')), 'converted workbook is open, under the export\'s own name');
 
   await p.click('#nav .navitem:has-text("ERD")'); await p.waitForTimeout(2500);
   await p.click('[data-eq=all]'); await p.waitForTimeout(2500);
@@ -43,7 +43,7 @@ function fakeExport() {
   ok(/<mxfile/.test(xml) && /ERzeroToMany/.test(xml), 'draw.io export is valid-looking mxGraph XML');
 
   await p.reload(); await p.waitForTimeout(2000);
-  ok(/converted/.test(await p.innerText('#fileLabel')), 'open workbook survives a reload');
+  ok(/fake_export\.xlsx/.test(await p.innerText('#fileLabel')), 'open workbook survives a reload');
 
   ok(!errs.length, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();

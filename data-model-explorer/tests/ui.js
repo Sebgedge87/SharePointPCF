@@ -21,6 +21,19 @@ function bigModel() {
   const f = path.join(out, 'big_model.xlsx'); XLSX.writeFile(wb, f); return f;
 }
 
+// a model with areas: Sales (3 tables), Service (2), and one table whose dictionary entry has no area
+function areaModel() {
+  const wb = XLSX.utils.book_new();
+  const T = [['Account', 'fp_a1', 'Sales'], ['Lead', 'fp_a2', 'Sales'], ['Quote', 'fp_a3', 'Sales'], ['Case', 'fp_s1', 'Service'], ['Queue', 'fp_s2', 'Service'], ['Ghost', 'fp_x1', '']];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[], [], ['', 'Area', 'Table Name', 'Purpose'], ...T.map(t => ['', t[2], t[0], 'p'])]), 'Table Dictionary');
+  const H = ['Logical Name', 'Schema Name', 'Display Name', 'Attribute Type', 'Description', 'Custom Attribute', 'Type', 'Required Level', 'Additional data'];
+  T.forEach(([disp, ln], i) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Entity', disp], ['Plural Display Name', disp], ['Description', 'd'], ['Schema Name', ln],
+    ['Logical Name', ln], ['Object Type Code', 20000 + i], ['Is Custom Entity', 'True'], ['Ownership Type', 'UserOwned'], ['Audit Tracking', 'False'], [], H,
+    ['fp_name', 'Name', 'Name', 'Text', 'x', 'True', 'Simple', 'None', ''],
+    ['fp_linkid', 'Link', 'Link', 'Lookup', 'x', 'True', 'Simple', 'None', 'Targets:\n' + (ln === 'fp_s1' ? 'fp_a1' : ln === 'fp_s2' ? 'fp_s1' : 'fp_a1')]]), disp + ' (' + ln + ')'));
+  const f = path.join(out, 'area_model.xlsx'); XLSX.writeFile(wb, f); return f;
+}
+
 (async () => {
   const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const p = await (await b.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })).newPage();
@@ -41,6 +54,7 @@ function bigModel() {
   // ERD: nothing drawn by default on a large model; asked before drawing more than 80
   await p.click('#nav .navitem[data-view="__erd"]'); await p.waitForTimeout(800);
   ok(/Pick the tables to draw/.test(await p.innerText('#erdcv')) && await p.locator('#erdcv svg').count() === 0, 'a 90-table model opens the ERD with a prompt, not a 90-table diagram');
+  ok(/Fill in Area in the Table Dictionary/.test(await p.innerText('.erdv .ctl')) && !(await p.locator('[data-areabtn="erd"]').count()), 'with no areas, the ERD explains how to get the area filter');
   await p.click('[data-eq=all]'); await p.waitForSelector('.dlgbox', { timeout: 3000 }).catch(() => {});
   ok(/Draw 90 tables\?/.test(await p.innerText('.dlgbox').catch(() => '')), 'choosing All on 90 tables asks first');
   await p.click('.dlgbox [data-d="0"]'); await p.waitForTimeout(300);
@@ -69,6 +83,48 @@ function bigModel() {
   await p.click('#nav .navitem[data-view="__issues"]'); await p.waitForTimeout(300);
   const warnBg = await p.$eval('.sev-warn', e => getComputedStyle(e).backgroundColor).catch(() => '');
   ok(warnBg === 'rgb(254, 240, 199)', 'warnings use amber, not the brand pink');
+
+  // areas: ERD, Checks and All fields filter by the Table Dictionary's areas; editing an Area applies at once
+  await p.setInputFiles('#file', areaModel()); await p.waitForTimeout(800);
+  if (await p.locator('.dlgbox').count()) await p.click('.dlgbox [data-d="0"]');
+  await p.waitForTimeout(1500); await p.keyboard.press('Escape');
+  const pickAreas = async (btn, names) => {
+    await p.click(btn); await p.waitForTimeout(150); await p.click('.pop [data-pa="none"]');
+    for (const n of names) await p.check(`.pop [data-area="${n}"]`);
+    await p.click('.pop [data-pa="apply"]'); await p.waitForTimeout(400);
+  };
+  await p.click('#nav .navitem[data-view="__erd"]'); await p.waitForTimeout(800);
+  const listed = await p.$$eval('.erdv .lst h4', h => h.map(x => x.textContent));
+  ok(['Sales', 'Service', 'Other tables'].every(a => listed.includes(a)), 'the ERD lists tables under their areas');
+  await pickAreas('[data-areabtn="erd"]', ['Service']); await p.waitForTimeout(2500);
+  ok(JSON.stringify(await p.$$eval('.erdv .lst h4', h => h.map(x => x.textContent))) === '["Service"]', 'choosing Service narrows the ERD list to Service');
+  ok(/^2 tables/.test(await p.innerText('#erdinfo')) && await p.locator('#erdcv svg g.node').count() >= 2, 'and draws the two Service tables (plus what they look up)');
+  ok(/Area: Service/.test(await p.innerText('[data-areabtn="erd"]')), 'the Area button shows the choice');
+  await p.check('#erdacol'); await p.waitForTimeout(2500);
+  ok(/classDef ar\d+c stroke:/.test(await p.inputValue('#erdsrc')) && /Service/.test(await p.innerText('#erdlegend')), 'Colour by area colours each table by its area, with a legend');
+  const dio = await (async () => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]); return fs.readFileSync(await d.path(), 'utf8'); })();
+  ok(/strokeColor=#BB1C73/.test(dio) || /strokeColor=#1B7F5C/.test(dio) || /strokeColor=#0A4873/.test(dio), 'the draw.io file carries the area colours');
+
+  await p.click('#nav .navitem[data-view="__issues"]'); await p.waitForTimeout(300);
+  await pickAreas('[data-areabtn="iss"]', ['Sales']);
+  const issTables = await p.$$eval('#isswrap tbody tr td:nth-child(2)', c => c.map(x => x.innerText.trim()));
+  ok(issTables.length > 0 && issTables.every(t => ['Account', 'Lead', 'Quote'].includes(t)), 'Checks can be filtered to the Sales area');
+
+  await p.click('#nav .navitem[data-view="__all"]'); await p.waitForTimeout(400);
+  await pickAreas('[data-areabtn="all"]', ['Service']);
+  ok(/^4 of 12 rows/.test(await p.innerText('#count')), 'All fields can be filtered to the Service area (4 of 12 fields)');
+  await p.click('[data-clr="areas"]'); await p.waitForTimeout(300);
+  ok(/^12 rows/.test(await p.innerText('#count')), 'the area filter clears from its chip');
+
+  // give Ghost an area in the dictionary: it moves to Service straight away
+  await p.click('#nav .navitem:has-text("Table Dictionary")'); await p.waitForTimeout(400);
+  const cell = p.locator('#gridwrap tbody tr:has(td[data-col="Table Name"]:has-text("Ghost")) td[data-col="Area"]');
+  await cell.dblclick(); await p.waitForTimeout(150);
+  if (await p.locator('#gridwrap td.editing select').count()) await p.selectOption('#gridwrap td.editing select', 'Service');
+  else { await p.fill('#gridwrap td.editing input, #gridwrap td.editing textarea', 'Service'); await p.keyboard.press('Enter'); }
+  await p.waitForTimeout(400);
+  ok((await p.innerText('#nav [data-grp="Service"]')).includes('3'), 'editing Area in the dictionary regroups the sidebar at once (Service now has 3)');
+  ok(!(await p.locator('#nav [data-grp="Other tables"]').count()), 'and the "no area" group is gone');
 
   // phone width: header fits, everything else is in the ⋯ menu
   await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(300);
