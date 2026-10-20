@@ -74,6 +74,9 @@ function dataverse() {
   const [dv1, dv2, dvBad] = dataverse();
 
   await p.goto(page_); await p.waitForTimeout(1500);
+  // before anything is opened: the built-in starter template is not treated as a data model
+  ok(/Open your data model to begin/.test(await p.innerText('#main')) && (await p.innerText('#btnOpen')).trim() === 'Open workbook…', 'with no workbook open, the Overview says so and offers Open workbook');
+  ok((await p.innerText('#nav .navitem[data-view="__issues"]')).includes('0 errors · 0 warnings'), 'the starter template is not checked');
   await p.setInputFiles('#file', workbook()); await p.waitForTimeout(1500); await p.keyboard.press('Escape');
 
   // landing page
@@ -86,7 +89,7 @@ function dataverse() {
   // the checks
   let rows = await checks();
   for (const [check, field] of [['Duplicate field', 'title'], ['Field without a logical name', 'Mystery'], ['Logical name format', 'Bad Name'], ['No attribute type', 'prioritycode'],
-    ['Custom field without a publisher prefix', 'mycustom'], ['Lookup without targets', 'fp_needid'], ['Lookup to a table not in the workbook', 'customerid'],
+    ['Custom field without a publisher prefix', 'mycustom'], ['Lookup without targets', 'fp_needid'], ['Lookup to a table not in the workbook', 'contact'],
     ['Dictionary entry with no table tab', 'Ghost'], ['Table missing from the dictionary', ''], ['No primary key field listed', '']])
     ok(has(rows, check, field), `check found: ${check}${field ? ' (' + field + ')' : ''}`);
   ok(!rows.some(r => /systemuser|team/.test(r[4]) && r[3] === 'Lookup to a table not in the workbook'), 'lookups to user and team are not flagged');
@@ -147,6 +150,29 @@ function dataverse() {
   await p.click('#btnMore'); await p.click('.menu [data-more="dv"]'); await p.waitForTimeout(200); await p.click('[data-dv="remove"]'); await p.click('.dlgbox [data-d="1"]'); await p.waitForTimeout(300);
   rows = await checks();
   ok(!rows.some(r => /Dataverse/.test(r[3])), 'removing the metadata removes the Dataverse findings');
+
+  // same-named tables in the dictionary link to their own tabs; lookups to a missing table give one finding,
+  // a warning only when the table has your own prefix
+  {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[], [], ['', 'Area', 'Table Name'], ['', '', 'Email'], ['', '', 'Email'], ['', '', 'Thing']]), 'Table Dictionary');
+    const H = ['Logical Name', 'Schema Name', 'Display Name', 'Attribute Type', 'Description', 'Custom Attribute', 'Type', 'Required Level', 'Additional data'];
+    const ent = (name, disp, logical, custom, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Entity', disp], ['Plural Display Name', disp], ['Description', ''], ['Schema Name', logical],
+      ['Logical Name', logical], ['Object Type Code', 1], ['Is Custom Entity', custom], ['Ownership Type', 'UserOwned'], ['Audit Tracking', 'False'], [], H, ...rows]), name);
+    const lk = (ln, t) => [ln, ln, ln, 'Lookup', 'x', 'False', 'Simple', 'None', 'Targets:\n' + t];
+    ent('Email (Email)', 'Email', 'email', 'False', [['activityid', 'ActivityId', 'Id', 'Uniqueidentifier', 'x', 'False', 'Simple', 'None', ''], lk('createdbyexternalparty', 'externalparty')]);
+    ent('Email (msdynmkt_email)', 'Email', 'msdynmkt_email', 'True', [['msdynmkt_emailid', 'Id', 'Id', 'Uniqueidentifier', 'x', 'False', 'Simple', 'None', ''], lk('createdbyexternalparty', 'externalparty'), lk('modifiedbyexternalparty', 'externalparty')]);
+    ent('Thing (xyz_thing)', 'Thing', 'xyz_thing', 'True', [['xyz_thingid', 'Id', 'Id', 'Uniqueidentifier', 'x', 'False', 'Simple', 'None', ''], lk('xyz_widgetid', 'xyz_widget')]);
+    const f = path.join(out, 'dupnames.xlsx'); XLSX.writeFile(wb, f);
+    await p.setInputFiles('#file', f);
+    if (await p.locator('.dlgbox').count() || await p.waitForSelector('.dlgbox', { timeout: 2000 }).catch(() => null)) await p.click('.dlgbox [data-d="0"]');
+    await p.waitForTimeout(1200); await p.keyboard.press('Escape');
+    rows = await checks();
+    ok(!has(rows, 'Table missing from the dictionary'), 'two dictionary entries named "Email" link to the two Email tabs');
+    const ext = rows.filter(r => r[3] === 'Lookup to a table not in the workbook' && r[2] === 'externalparty');
+    ok(ext.length === 1 && ext[0][0] === 'Info' && ext[0][1] === '2 tables' && /3 fields/.test(ext[0][4]), 'lookups to a missing standard table give one Info finding (3 fields, 2 tables)');
+    ok(rows.some(r => r[3] === 'Lookup to a table not in the workbook' && r[2] === 'xyz_widget' && r[0] === 'Warning'), 'a missing table with your own prefix is a Warning');
+  }
 
   // small screens
   await p.setViewportSize({ width: 390, height: 800 }); await p.click('#btnNav'); await p.click('#nav .navitem[data-view="__overview"]');

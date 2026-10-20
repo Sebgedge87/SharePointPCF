@@ -1,3 +1,17 @@
+# 1.2.1
+
+- The built-in starter template is no longer checked or summarised. With no workbook open, the Overview says so and
+  offers **Open workbook…** (the header button reads the same), so its example table (Need) can't be mistaken for
+  part of your model.
+- Lookups to a table with no tab: one finding per missing table (with the number of fields and tables pointing at
+  it), instead of one per field. A warning only when the table has one of your own prefixes (from the custom tables
+  in the workbook, Microsoft's ms…/adx left out); otherwise info. On a full 230-table export: 5,412 findings → 1,304
+  info.
+- Dictionary entries that share a name (two "Email" tables, two "Session" tables) now link to their own tabs instead
+  of both to the first, which wrongly reported the others as missing from the dictionary.
+- "Logical name format" and "Custom field without a publisher prefix" are info: in real exports they only flag
+  Microsoft's own fields.
+
 # 1.2.0
 
 Overview (the page now opens here)

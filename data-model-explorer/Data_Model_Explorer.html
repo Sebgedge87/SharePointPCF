@@ -4201,11 +4201,14 @@ function parseWorkbook(wb){
     const tn=dict.colIdx['Table Name'], ar=dict.colIdx['Area'];
     const ents=sheets.filter(s=>s.kind==='entity');
     const cand=e=>[e.label,e.mo['plural display name'],e.schema,e.logical,e.name.replace(/\s*\(.*\)\s*$/,'')].map(norm).filter(Boolean);
+    const linked=new Set();
     dict.rows.forEach(row=>{
       const dn=norm(row.vals[tn]); if(!dn) return;
-      let hit=ents.find(e=>cand(e).includes(dn))
-           ||ents.find(e=>cand(e).some(c=>c.endsWith(dn)||dn.endsWith(c)));
-      if(hit){row.link=hit.idx; if(ar>=0&&!hit.area) hit.area=row.vals[ar];}
+      // prefer a tab no earlier entry has claimed, so entries sharing a name (two "Email" tables) link to different tabs
+      const free=e=>!linked.has(e.idx);
+      let hit=ents.find(e=>free(e)&&cand(e).includes(dn))||ents.find(e=>cand(e).includes(dn))
+           ||ents.find(e=>free(e)&&cand(e).some(c=>c.endsWith(dn)||dn.endsWith(c)))||ents.find(e=>cand(e).some(c=>c.endsWith(dn)||dn.endsWith(c)));
+      if(hit){row.link=hit.idx; linked.add(hit.idx); if(ar>=0&&!hit.area) hit.area=row.vals[ar];}
     });
   }
   return sheets;
@@ -5085,6 +5088,8 @@ function reportMissed(r,what){
   return dlg({title:what+' was stopped',body:r.missed.length+' of your '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+' could not be written into '+esc(S.fileName)+', so nothing was saved and all your edits are kept.<ul style="margin:8px 0 0;padding-left:18px">'+items+(r.missed.length>12?'<li>… and '+(r.missed.length-12)+' more</li>':'')+'</ul><br>Use <b>New version in template format</b> to export everything instead.',ok:'OK',cancel:null});
 }
 const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+// true while the page shows its built-in empty starter template rather than a workbook someone opened
+const isStarter=()=>S.curB64===EMBEDDED_B64&&EMBEDDED_B64===TEMPLATE_B64;
 async function exportOriginal(){
   const r=await buildOriginal(); if(!r) return;
   if(r.missed.length) return reportMissed(r,'The download');
@@ -5254,8 +5259,9 @@ function renderReadme(){
   <p><b>Checks</b> lists problems found in the model itself, and updates as you edit:</p>
   <ul>
     <li><b>Errors:</b> a table or field without a logical name, a field listed twice in one table, the same table on two tabs.</li>
-    <li><b>Warnings:</b> logical names that are not lower-case letters, digits and underscores; fields without an attribute type; custom fields without a publisher prefix; lookups with no targets, or to a table that has no tab (user, team and similar system tables are not flagged); dictionary entries with no tab, and tabs missing from the dictionary.</li>
-    <li><b>Info:</b> tables whose primary key field is not listed.</li>
+    <li><b>Warnings:</b> fields without an attribute type; lookups with no targets; lookups to a table with your own prefix that has no tab (one finding per missing table); dictionary entries with no tab, and tabs missing from the dictionary.</li>
+    <li><b>Info:</b> lookups to standard or Microsoft tables that have no tab (user, team and similar system tables are left out entirely); logical names that are not lower-case letters, digits and underscores; custom fields without a publisher prefix; tables whose primary key field is not listed. In a full Dataverse export these are usually Microsoft's own and fine.</li>
+    <li>The empty starter template built into the page is not checked.</li>
   </ul>
   <p>Filter by severity, by kind of check or with the search box, click a finding to go to the row, or export the list as CSV.</p>`)}
 
@@ -5309,9 +5315,9 @@ const RULES={
   'table-dup':['error','Same table on more than one tab'],
   'field-no-ln':['error','Field without a logical name'],
   'field-dup':['error','Duplicate field'],
-  'ln-format':['warn','Logical name format'],
+  'ln-format':['info','Logical name format'],
   'type-missing':['warn','No attribute type'],
-  'custom-prefix':['warn','Custom field without a publisher prefix'],
+  'custom-prefix':['info','Custom field without a publisher prefix'],
   'lookup-no-target':['warn','Lookup without targets'],
   'lookup-unknown':['warn','Lookup to a table not in the workbook'],
   'dict-unlinked':['warn','Dictionary entry with no table tab'],
@@ -5355,7 +5361,9 @@ function reqClass(v){
 }
 function issues(){
   if(S.issues) return S.issues;
-  const out=[]; const add=(rule,sh,row,field,msg)=>out.push({rule,sev:RULES[rule][0],sh,row:row||null,field:field||'',msg});
+  if(isStarter()) return S.issues=[];   // the built-in starter template is not a data model to check
+  const out=[]; const add=(rule,sh,row,field,msg,sev,where)=>out.push({rule,sev:sev||RULES[rule][0],sh,row:row||null,field:field||'',msg,where:where||''});
+  const missing={};   // lookup target -> the fields that point at it
   const ents=S.sheets.filter(s=>s.kind==='entity');
   const byLog={};
   ents.forEach(sh=>{if(!sh.logical) add('table-no-ln',sh,null,'','This tab has no Logical Name in its table details.'); else (byLog[sh.logical]=byLog[sh.logical]||[]).push(sh)});
@@ -5374,12 +5382,18 @@ function issues(){
       if(isLookupType(at)){
         const tg=lookupTargetsOf(sh,row);
         if(!tg.length) add('lookup-no-target',sh,row,ln,'The lookup has no "Targets:" in Additional data, so its relationship is unknown.');
-        tg.forEach(t=>{if(S.byLogical[t]===undefined&&!SYS_TABLES.has(t)) add('lookup-unknown',sh,row,ln,'Looks up "'+t+'", which has no tab in this workbook'+(S.dv&&S.dv.ents[t]?' (it does exist in Dataverse)':'')+'.')});
+        tg.forEach(t=>{if(S.byLogical[t]===undefined&&!SYS_TABLES.has(t)){const m=missing[t]||(missing[t]={sh,row,fields:[],tables:new Set()}); m.fields.push(sh.label+'.'+ln); m.tables.add(sh.idx)}});
       }
     });
     Object.entries(seen).forEach(([k,rows])=>{if(rows.length>1) rows.forEach(row=>add('field-dup',sh,row,k,'"'+k+'" is listed '+rows.length+' times in this table.'))});
     const de=S.dv&&S.dv.ents[sh.logical], pk=de&&de.pid?de.pid:sh.logical+'id';
     if(sh.rows.length&&sh.logical&&!seen[pk]) add('pk-missing',sh,null,'','The primary key field ('+pk+') is not listed.');
+  });
+  // your own publisher prefixes: those of the custom tables in the workbook, leaving out Microsoft's (ms…, adx)
+  const own=new Set(ents.filter(s=>s.custom&&s.logical.includes('_')).map(s=>s.logical.split('_')[0]).filter(p=>!/^(ms|adx)/.test(p)));
+  Object.keys(missing).sort().forEach(t=>{
+    const m=missing[t], n=m.fields.length, nt=m.tables.size, mine=t.includes('_')&&own.has(t.split('_')[0]);
+    add('lookup-unknown',m.sh,m.row,t,'"'+t+'" has no tab in this workbook'+(S.dv&&S.dv.ents[t]?' (it does exist in Dataverse)':'')+'. Looked up by '+n+' field'+(n===1?'':'s')+': '+m.fields.slice(0,4).join(', ')+(n>4?', …':'')+'.'+(mine?'':' It looks like a standard or Microsoft table, which is often fine to leave out.'),mine?'warn':'info',nt>1?nt+' tables':'');
   });
   const dict=S.sheets.find(s=>s.isDict);
   if(dict&&dict.colIdx['Table Name']!==undefined){
@@ -5543,6 +5557,13 @@ function renderOverview(){
   const iss=issues(), c=issueCounts(), unresolved=iss.filter(i=>i.rule==='lookup-unknown'||i.rule==='lookup-no-target').length;
   const custom=ents.filter(s=>s.custom).length;
   const tile=(v,l,act,bad)=>`<${act?'button':'div'} class="ovtile ${bad?'bad':''}" ${act?`data-ov="${act}"`:''}><b>${v}</b><span>${l}</span></${act?'button':'div'}>`;
+  if(isStarter()){
+    main.innerHTML=`<div class="ov"><h1>Overview</h1><div class="sub">No workbook open</div>
+      <div class="ovcard" style="max-width:720px;margin-top:16px;border-color:var(--pink)"><h3>Open your data model to begin</h3>
+      <p style="margin:0 0 12px">The page is showing its built-in, empty starter template, which has one example table (Need). Open a data-model workbook, or a Metadata Document Generator export (it is converted automatically), to see its overview, checks and ERD.</p>
+      <button class="btn primary" data-ov="open">Open workbook…</button> <span class="dim">or drag an .xlsx onto the page. Workbooks opened before are listed under <b>Files</b>.</span></div></div>`;
+    return;
+  }
   let h=`<div class="ov"><h1>Overview</h1><div class="sub">${esc(S.fileName)}${S.diff?' · compared with '+esc(S.diff.pl):''}${S.dv?' · checked against '+esc(S.dv.org||'Dataverse'):''}</div>
   <div class="ovtiles">${tile(ents.length,'tables · '+custom+' custom, '+(ents.length-custom)+' standard')}${tile(fields.toLocaleString(),'fields')}${tile(lookups,'lookups')}${tile(pairs.size,'related table pairs','go:__erd')}
     ${tile(unresolved,'unresolved lookups',unresolved?'issues:rule:lookup-*':'',unresolved>0)}${tile(c.error,'errors',c.error?'issues:error':'',c.error>0)}${tile(c.warn,'warnings',c.warn?'issues:warn':'')}
@@ -5583,7 +5604,7 @@ function issState(){return S.issSt||(S.issSt={sev:{error:true,warn:true,info:tru
 function renderIssues(){
   const main=$('#main'), all=issues(), st=issState(), q=(S.issQ||'').toLowerCase().trim();
   const list=all.filter(i=>st.sev[i.sev]&&(!st.rule||(st.rule.endsWith('*')?i.rule.startsWith(st.rule.slice(0,-1)):i.rule===st.rule))&&(!st.area||i.sh.kind==='entity'&&(i.sh.area||'Other tables')===st.area)&&(!st.dv||i.rule.startsWith('dv-'))
-    &&(!q||(i.sh.label+' '+i.sh.logical+' '+i.field+' '+RULES[i.rule][1]+' '+i.msg).toLowerCase().includes(q)));
+    &&(!q||(i.sh.label+' '+i.where+' '+i.sh.logical+' '+i.field+' '+RULES[i.rule][1]+' '+i.msg).toLowerCase().includes(q)));
   S.issList=list;
   const c=issueCounts(), byRule={}; all.forEach(i=>{byRule[i.rule]=(byRule[i.rule]||0)+1});
   const chip=(k)=>`<button class="btn ${st.sev[k]?'on':''}" data-isev="${k}"><span class="pill ${SEV[k].cls}">${SEV[k].label}s</span> ${c[k]}</button>`;
@@ -5597,13 +5618,13 @@ function renderIssues(){
   if(!list.length) h+=`<div class="empty">${all.length?'<b>Nothing matches.</b><br>Try clearing a filter or the search.':'<b>No problems found.</b>'}</div>`;
   else{
     h+=`<table class="grid" style="width:100%"><colgroup><col style="width:110px"><col style="width:200px"><col style="width:190px"><col style="width:250px"><col></colgroup><thead><tr><th><div class="th">Severity</div></th><th><div class="th">Table</div></th><th><div class="th">Field</div></th><th><div class="th">Check</div></th><th><div class="th">Detail</div></th></tr></thead><tbody>`;
-    list.slice(0,st.shown).forEach((i,k)=>{h+=`<tr data-ii="${k}" style="cursor:pointer"><td><span class="pill ${SEV[i.sev].cls}">${SEV[i.sev].label}</span></td><td><div class="cell">${esc(i.sh.label)}</div></td><td><div class="cell mono">${esc(i.field)}</div></td><td><div class="cell">${esc(RULES[i.rule][1])}</div></td><td><div class="cell">${esc(i.msg)}</div></td></tr>`});
+    list.slice(0,st.shown).forEach((i,k)=>{h+=`<tr data-ii="${k}" style="cursor:pointer"><td><span class="pill ${SEV[i.sev].cls}">${SEV[i.sev].label}</span></td><td><div class="cell">${esc(i.where||i.sh.label)}</div></td><td><div class="cell mono">${esc(i.field)}</div></td><td><div class="cell">${esc(RULES[i.rule][1])}</div></td><td><div class="cell">${esc(i.msg)}</div></td></tr>`});
     h+='</tbody></table>';
     if(list.length>st.shown) h+=`<div class="more"><button class="btn" data-act="iss-more">Show more (${list.length-st.shown} remaining)</button></div>`;
   }
   main.innerHTML=h+'</div>';
 }
-function issueRows(){return [['Severity','Table','Logical name','Field','Check','Detail']].concat((S.issList||issues()).map(i=>[SEV[i.sev].label,i.sh.label,i.sh.logical||'',i.field,RULES[i.rule][1],i.msg]))}
+function issueRows(){return [['Severity','Table','Logical name','Field','Check','Detail']].concat((S.issList||issues()).map(i=>[SEV[i.sev].label,i.where||i.sh.label,i.where?'':(i.sh.logical||''),i.field,RULES[i.rule][1],i.msg]))}
 
 /* ---------- Mermaid ERD ---------- */
 const SYS_TABLES=new Set(['systemuser','team','businessunit','transactioncurrency','organization','owner','calendar','queue','equipment','role']);
@@ -6210,6 +6231,7 @@ document.addEventListener('click',e=>{
   if((n=t.closest('[data-ov]'))){
     e.preventDefault(); const a=n.dataset.ov;
     if(a.startsWith('go:')){go(a.slice(3));return}
+    if(a==='open'){pickFile();return}
     if(a==='versions'){renderVersions();return}
     if(a==='changes'){renderChanges();return}
     if(a==='dv'){renderDv();return}
@@ -6339,7 +6361,8 @@ function init(wb,name,opts){
   conformance();
   const restored=applyStored();
   S.ui=Object.assign(S.ui,store.get('dme.ui')||{}); if(!S.ui.hidden)S.ui.hidden={};
-  $('#fileLabel').textContent=name+' · '+S.sheets.length+' sheets'+(S.diff?' · vs '+S.diff.pl:'')+(S.handle?' · linked to file':'');
+  $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load updated version…';
+  $('#fileLabel').textContent=(isStarter()?'No workbook open · starter template':name+' · '+S.sheets.length+' sheets')+(S.diff?' · vs '+S.diff.pl:'')+(S.handle?' · linked to file':'');
   document.title='Data Model Explorer';
   loadDv();
   updateCounts(); S.initCollapse=true;
