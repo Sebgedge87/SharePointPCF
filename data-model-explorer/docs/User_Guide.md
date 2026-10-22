@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 1.9.1 · 22 October 2026"
+subtitle: "Version 1.9.2 · 22 October 2026"
 ---
 
 ## Introduction
@@ -16,7 +16,7 @@ It is for anyone who owns or reviews a data model kept in the FormusPro template
 | Compare | Load a newer version of the workbook, see every difference, and keep your edits |
 | Build | Generate an unmanaged Dataverse solution, then import it with `import.ps1` |
 
-This guide describes version 1.9.1. The latest file is in the SharePointPCF repository under `data-model-explorer`.
+This guide describes version 1.9.2. The latest file is in the SharePointPCF repository under `data-model-explorer`.
 
 ## Opening (uploading) a workbook
 
@@ -114,6 +114,8 @@ The **ERD** draws the tables you pick, joined by their lookups and N:N relations
 2. Click ★ next to a table to make it a **core table**: the diagram is laid out around it, and with **Selecting a table also selects the tables it relates to** on, its neighbours come too.
 3. Choose what each box shows (**Names only**, **Keys + lookups** or **All fields**), the **Direction** (left to right or top to bottom), and when relationship names show.
 4. Drag tables to tidy the layout; **Auto layout** starts again. Layouts are remembered per selection.
+
+The diagram opens at the size of your screen, so a large model is readable straight away even where part of it runs past the panel: drag the background or scroll to move around, use the mouse wheel to zoom, or click **Fit** to see it all in the panel.
 
 ![The ERD](images/05-erd.png)
 

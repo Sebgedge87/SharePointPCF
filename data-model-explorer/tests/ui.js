@@ -62,6 +62,13 @@ function areaModel() {
   ok(await p.locator('#erdcv svg').count() === 0, 'declining draws nothing');
   await p.fill('#erdq', 'fp_t0'); await p.waitForTimeout(200); await p.click('[data-eq=shown]'); await p.waitForTimeout(3500);
   ok(await p.locator('#erdcv svg g.node').count() >= 10, 'selecting a filtered set draws it without asking');
+  // the first view is sized to the screen resolution, not squeezed into the panel; Fit then fits the panel
+  const sz = () => p.evaluate(() => { const s = document.querySelector('#erdcv svg'), c = document.getElementById('erdcv'); return { svg: s.getBoundingClientRect().width, panel: c.clientWidth, screen: screen.width }; });
+  const z0 = await sz();
+  ok(z0.svg > z0.panel && z0.svg <= z0.screen, `the ERD opens at the screen's size, past the panel (${Math.round(z0.svg)}px drawn, ${z0.panel}px panel, ${z0.screen}px screen)`);
+  await p.click('[data-ez="0"]'); await p.waitForTimeout(400);
+  const z1 = await sz();
+  ok(z1.svg <= z1.panel, 'Fit fits the whole diagram in the panel');
 
   // table page: field types trimmed to eight with "+N more"
   await p.click('#nav .navitem:has-text("Table 0")'); await p.waitForTimeout(500);

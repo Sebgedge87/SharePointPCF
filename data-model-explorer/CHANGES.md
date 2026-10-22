@@ -1,3 +1,9 @@
+# 1.9.2
+
+- The ERD opens at the size of your screen (its resolution), not squeezed into the panel, so a large model is
+  readable straight away; the part past the panel is reached by dragging or scrolling. Small diagrams are enlarged
+  at most 1.5×. **Fit** still fits the whole diagram in the panel.
+
 # 1.9.1
 
 Solution import fixes (the first real import failed: "Entity Display Collection Name ... not specified")
