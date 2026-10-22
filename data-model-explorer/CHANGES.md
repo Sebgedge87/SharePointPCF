@@ -1,3 +1,32 @@
+# 1.6.0
+
+Build a Dataverse solution
+- **Export → Dataverse solution (.zip)…**: a dialog for the solution name, version and publisher (prefix and choice
+  value prefix suggested from the workbook) shows what will and won't be built, then downloads one zip with:
+  - the unmanaged **solution**: new tables (primary name column, primary key, ownership, notes/activities, audit) and
+    their fields; your fields on existing tables, included as shells holding only those fields; a 1:N relationship for
+    each lookup (two for a customer lookup); an N:N relationship for each N:N row. Field settings carry over: text
+    length and format, memo length, number ranges and precision, currency precision, date format and behaviour,
+    Yes/No labels and default, choice options with their values and default, required level, field security.
+  - **import.ps1**: checks for pac and installs it (dotnet tool, or winget on Windows), signs in through the browser,
+    optionally runs the solution checker (-Check), and imports with `pac solution import --publish-changes --async`.
+  - **build-report.csv**: everything included, left out (with the reason) or to build by hand.
+  - the **hand-build list** of calculated and rollup fields, and a README.
+- Not built (listed instead): calculated/rollup fields, activity tables, multi-table lookups, image and file fields,
+  choice fields without options, and lookups to a table that isn't in the solution.
+- On the full RHS export: 134 new tables, 16 existing tables, 2,399 fields, 417 relationships, in under a second.
+  Microsoft's SolutionPackager unpacks and re-packs the result.
+
+Workbook and template
+- Template table details gain **Primary Name Column, Primary Key, Is Activity, Has Notes, Has Activities**; the field
+  list gains **Relationship Type** (N:1 / N:N), **Relationship Name** and **Cascade Delete**, with dropdowns.
+- Converting a Metadata Document Generator export fills the new table details from its Entities list.
+- Table pages show the primary name and key; the primary name row and N:N rows are tagged in the grid.
+- A lookup counts as a recorded relationship when Relationship Type is N:1 (the ERD then draws its ends); N:N rows
+  are drawn in the ERD.
+- New checks: missing / unlisted / non-text primary name column; invalid Relationship Type; unrecognised Cascade
+  Delete; N:N rows without exactly one other table; duplicate relationship names.
+
 # 1.5.0
 
 - **To build by hand:** calculated, rollup and formula fields of your own (their definitions aren't in the workbook,

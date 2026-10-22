@@ -239,6 +239,13 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 .ovtbl{width:100%;border-collapse:collapse;font-size:12.5px}.ovtbl td,.ovtbl th{padding:4px 6px;border-bottom:1px solid var(--line2);text-align:left;vertical-align:top}.ovtbl th{color:var(--muted);font-weight:600}
 @media (max-width:860px){.ovgrid{grid-template-columns:1fr}.ov{padding:14px 16px 40px}}
 .savestate::before{content:'● '}
+.solbox{width:min(760px,94vw);max-height:90vh;overflow:auto}
+.solgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
+.solf{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
+.solf input{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 9px;font-size:13.5px;color:var(--text)}
+.solf small{color:var(--faint);font-size:12px;min-height:14px}
+.solsum{margin-top:14px;padding:10px 12px;background:var(--panel2);border-radius:10px;font-size:13px}.solsum ul{margin:4px 0 6px;padding-left:18px}
+.solsum:empty{display:none} .solerr{color:#B42318;font-size:13px;margin-top:8px}
 .savestate{font-size:11.5px;padding:2px 9px;border-radius:999px;white-space:nowrap;cursor:default}
 .savestate.ok{color:var(--muted);background:var(--slate-bg)}
 .savestate.bad{color:#fff;background:var(--pink);font-weight:650}
@@ -1084,7 +1091,7 @@ function renderMain(){
   if(sh&&sh.kind==='entity'){
     head+=`${sh.custom?'<span class="chip custom">Custom table</span>':'<span class="chip ootb">Out of the box</span>'}</h1><div class="sub">${esc(sh.schema)} · ${esc(sh.logical)}</div>`;
     const d=sh.mo['description']; if(d) head+=`<div class="desc">${esc(d)}</div>`;
-    const ch=[['Plural',sh.mo['plural display name']],['Ownership',sh.mo['ownership type']],['Audit',sh.mo['audit tracking']],['Type code',sh.mo['object type code']],['Area',sh.area]].filter(x=>x[1]);
+    const ch=[['Primary name',sh.mo['primary name column']],['Primary key',sh.mo['primary key']],['Plural',sh.mo['plural display name']],['Ownership',sh.mo['ownership type']],['Audit',sh.mo['audit tracking']],['Type code',sh.mo['object type code']],['Area',sh.area]].filter(x=>x[1]);
     (sh.subs||[]).filter(s=>s.cols.length).forEach(s=>ch.push([s.title,String(s.rows.length)]));
     head+=`<div class="chips">${ch.map(c=>`<span class="chip">${esc(c[0])}: <b>${esc(c[1])}</b></span>`).join('')}</div>`;
   } else if(view.kind==='all'){
@@ -1148,7 +1155,7 @@ function renderGrid(append){
       const upd=c!=='Table'&&it.row.chg&&Object.prototype.hasOwnProperty.call(it.row.chg,c);
       const tog=ci===0?`<button class="rt" data-rt title="${open?'Collapse':'Expand'} this row">${open?'▾':'▸'}</button>`:'';
       const newTag=tog+(ci===0&&it.row.isNew?'<span class="pill p-green" style="margin-right:6px">NEW</span>':'');
-      h+=`<td class="${ci===0?'stickycol':''} ${isEditable(view,c)?'editable':''} ${edited?'edited':''} ${upd&&!edited?'upd':''}" data-col="${esc(c)}" ${upd?`title="Changed in ${esc(S.diff.cl)} — was: ${esc(it.row.chg[c]||'(blank)')}"`:''}><div class="cell">${newTag}${cellHTML(view,it,c,terms)}</div></td>`;
+      h+=`<td class="${ci===0?'stickycol':''} ${isEditable(view,c)?'editable':''} ${edited?'edited':''} ${upd&&!edited?'upd':''}" data-col="${esc(c)}" ${upd?`title="Changed in ${esc(S.diff.cl)} — was: ${esc(it.row.chg[c]||'(blank)')}"`:''}><div class="cell">${newTag}${cellHTML(view,it,c,terms)}${ci===0&&isPnameRow(it.sh,it.row)?' <span class="pill p-blue" title="The primary name column of this table">Primary name</span>':''}${ci===0&&isNNRow(it.sh,it.row)?' <span class="pill p-violet" title="A many-to-many relationship, not a field">N:N</span>':''}</div></td>`;
     });
     h+='</tr>';
   }
@@ -1385,7 +1392,7 @@ function moreMenu(anchor){
 function exportMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu';
-  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
+  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button><hr><button data-x="solution">Dataverse solution (.zip)…<small>Tables, fields and relationships, with a script to import them</small></button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
   el.addEventListener('click',e=>{const b=e.target.closest('[data-x]');const x=b&&b.dataset.x;if(!x)return;closePops();doExport(x)});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
@@ -1399,7 +1406,12 @@ const csv=rows=>'\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
 const editLabel=e=>getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||('row '+(e.row.r+1));
 // the hand-build list: Summary, one block per table, and a flat filterable sheet
 async function exportManual(){
-  const list=manualFields(); if(!list.length) return toast('There are no calculated or rollup fields of your own to list');
+  const buf=await manualWorkbook(); if(!buf) return toast('There are no calculated or rollup fields of your own to list');
+  download(S.fileName.replace(/\.[^.]+$/,'')+' - calculated and rollup fields.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const list=manualFields(); toast(list.length+' field'+(list.length===1?'':'s')+' in '+new Set(list.map(m=>m.sh)).size+' table'+(new Set(list.map(m=>m.sh)).size===1?'':'s')+' listed');
+}
+async function manualWorkbook(){
+  const list=manualFields(); if(!list.length) return null;
   const v=(m,c)=>getVal(m.sh,m.row,c);
   const COLS=[['Display Name',28],['Logical Name',32],['Schema Name',30],['Kind',12],['Data type',16],['Description',48],['Details',36],['Required level',16],['Formula / definition (fill in)',48],['Created?',10]];
   const fieldVals=m=>[v(m,'Display Name'),m.ln,v(m,'Schema Name'),m.kind,v(m,'Attribute Type'),v(m,'Description'),v(m,'Additional data'),v(m,'Required Level'),'',''];
@@ -1427,9 +1439,7 @@ async function exportManual(){
   [26,26,16,...COLS.map(c=>c[1])].forEach((w,i)=>al.getColumn(i+1).width=w); head(al.addRow(ah));
   tables.forEach(t=>byTable.get(t).forEach(m=>{const r=al.addRow([t.label,t.logical,areaOf(t),...fieldVals(m)]); r.alignment={wrapText:true,vertical:'top'}}));
   al.autoFilter={from:{row:1,column:1},to:{row:1,column:ah.length}}; al.views=[{state:'frozen',ySplit:1}];
-  const buf=await wb.xlsx.writeBuffer();
-  download(S.fileName.replace(/\.[^.]+$/,'')+' - calculated and rollup fields.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  toast(list.length+' field'+(list.length===1?'':'s')+' in '+tables.length+' table'+(tables.length===1?'':'s')+' listed');
+  return await wb.xlsx.writeBuffer();
 }
 function changeRows(){
   const rows=[['Table','Row key','Column','Original','New']];
@@ -1584,6 +1594,8 @@ function doExport(kind){
     if(S.edits.size) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeRows()),'Change log');
     XLSX.writeFile(wb,base+' (edited).xlsx');
     toast('Exported — values only, original cell styling is not carried over');
+  } else if(kind==='solution'){
+    solDialog();
   } else if(kind==='manual'){
     exportManual().catch(err=>{console.error(err);toast('Could not create the list ('+err.message+')')});
   } else if(kind==='diff'){
@@ -1679,11 +1691,12 @@ function renderReadme(){
     <li><b>Warnings:</b> fields without an attribute type; lookups with no targets; lookups to a table with your own prefix that has no tab (one finding per missing table); dictionary entries with no tab, and tabs missing from the dictionary.</li>
     <li><b>To build by hand:</b> calculated, rollup and formula fields of your own. Their definitions aren't in the workbook, so they can't go in a generated solution; <b>Export → Calculated and rollup fields</b> lists them per table, with a column for the formula and a Created? column to track progress.</li>
     <li><b>Info:</b> lookups to standard or Microsoft tables that have no tab (user, team and similar system tables are left out entirely); logical names that are not lower-case letters, digits and underscores; custom fields without a publisher prefix; tables whose primary key field is not listed. In a full Dataverse export these are usually Microsoft's own and fine.</li>
+    <li>For the solution build: a new table with no primary name column, or one that isn't in its field list or isn't single-line text (errors); a Relationship Type that isn't N:1 or N:N, or N:1 on a field that isn't a lookup; a Cascade Delete value that isn't recognised; an N:N row without exactly one other table; and a relationship name used twice.</li>
     <li>The empty starter template built into the page is not checked.</li>
   </ul>
   <p>Filter by severity, by kind of check, by area or with the search box, click a finding to go to the row, or export the list as CSV.</p>`)}
 
-  ${sec(8,'Checking against Dataverse',`
+  ${sec(8,'Dataverse: checking and building',`
   <p><b>More ▾ → Dataverse check</b> (also on the Overview) compares the workbook with the real table definitions in an environment. The page stays offline: enter your environment URL and it builds Web API links for the tables in this workbook. Open each link in the browser while signed in to Dataverse, save the page as a .json file, and load the files (or drop them onto the page).</p>
   <ul>
     <li>Fields that don't exist in Dataverse, or custom Dataverse fields that aren't documented.</li>
@@ -1691,7 +1704,17 @@ function renderReadme(){
     <li>Lookups whose Targets don't match Dataverse's relationships, in either direction.</li>
     <li>Each table page gains a <b>From Dataverse</b> section: primary key and name, every N:1, 1:N and N:N relationship with its cascade settings, and the alternate keys. The ERD can show the N:N relationships as dashed lines.</li>
   </ul>
-  <p>The imported metadata is kept in this browser with this workbook and its newer versions. Load more files at any time, or remove it from the Dataverse panel.</p>`)}
+  <p>The imported metadata is kept in this browser with this workbook and its newer versions. Load more files at any time, or remove it from the Dataverse panel.</p>
+  <h3 style="margin:18px 0 6px;font-size:14px">Building a solution</h3>
+  <p><b>Export → Dataverse solution (.zip)…</b> turns the model into an unmanaged solution you import with the Power Platform CLI. Set the solution name, version and publisher (the prefix and choice value prefix are suggested from the workbook); the dialog shows what will be built and what won't. The download holds:</p>
+  <ul>
+    <li>the <b>solution</b>: every new table with your prefix (with its primary name column, primary key, ownership, notes and activities settings) and its fields; your new fields on existing tables, which are included as shells so nothing else about them changes; a relationship for every lookup and customer lookup; and every N:N row.</li>
+    <li><b>import.ps1</b>: checks for pac and installs it if needed, signs you in through the browser, and imports the solution. Run <span class="mono">.\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com</span>, into a development environment first.</li>
+    <li><b>build-report.csv</b>: every table, field and relationship, and whether it is included, left out (and why), or to build by hand.</li>
+    <li>the <b>hand-build list</b> of calculated and rollup fields.</li>
+  </ul>
+  <p>What the workbook needs: a <b>Primary Name Column</b> (and <b>Primary Key</b>) row in each new table's details; and on the field list, <b>Relationship Type</b> (N:1 on a lookup, N:N on a row describing a many-to-many relationship, with the other table in <span class="mono">Targets:</span>), an optional <b>Relationship Name</b> (generated if blank) and <b>Cascade Delete</b> (Remove Link, Restrict or Cascade; Remove Link if blank). Converted Metadata Document Generator exports fill in the table details automatically.</p>
+  <p>Not built, and listed in the report instead: calculated and rollup fields, activity tables, lookups to several tables, image and file fields, and choice fields with no options. Fields Dataverse creates itself (name and helper fields, currency base fields, primary keys) are skipped.</p>`)}
 
   ${sec(9,'Files',`
   <p>The <b>Files</b> panel lists every workbook loaded in this browser, with the one in use marked. Open, compare against, download or remove any of them. Files opened through the picker show a <i>Linked to file</i> tag. Removing one only forgets it here and never touches the file on your computer.</p>`)}
@@ -1752,7 +1775,14 @@ const RULES={
   'dv-ownership':['info','Ownership differs from Dataverse'],
   'dv-std-undocumented':['info','Standard Dataverse fields not listed'],
   'manual-build':['info','Calculated or rollup field to create by hand'],
-  'rel-review':['info','Relationship type not recorded']
+  'rel-review':['info','Relationship type not recorded'],
+  'pname-missing':['error','No primary name column'],
+  'pname-notfound':['error','Primary name column not in the field list'],
+  'pname-type':['error','Primary name column is not single-line text'],
+  'rel-type-bad':['warn','Relationship type not valid here'],
+  'cascade-bad':['warn','Cascade Delete not recognised'],
+  'nn-target':['warn','N:N relationship with an unknown table'],
+  'rel-name-dup':['error','Relationship name used twice']
 };
 const isLookupType=t=>/lookup|customer|owner/i.test(t||'');
 // workbook wording ("Whole Number", "Two Options") and Dataverse AttributeType ("Integer", "Boolean") put in the same buckets
@@ -1782,7 +1812,7 @@ function reqClass(v){
 // your own publisher prefixes: those of the custom tables in the workbook, leaving out Microsoft's (ms…, adx)
 // a lookup's relationship is only "known" when something records it: today, imported Dataverse metadata
 // (an N:1 from this field to that table). Unknown ones are drawn as plain lines and flagged for review.
-function relKnown(sh,ln,target){const de=S.dv&&sh&&S.dv.ents[sh.logical];return !!(de&&de.m1.some(r=>r.attr===String(ln).toLowerCase()&&(r.target===target||(r.target==='owner'&&(target==='systemuser'||target==='team')))))}
+function relKnown(sh,row,target){if(relTypeOf(sh,row)==='N:1') return true; const ln=getVal(sh,row,'Logical Name').trim(); const de=S.dv&&sh&&S.dv.ents[sh.logical];return !!(de&&de.m1.some(r=>r.attr===String(ln).toLowerCase()&&(r.target===target||(r.target==='owner'&&(target==='systemuser'||target==='team')))))}
 function ownPrefixes(ents){return new Set((ents||S.sheets.filter(s=>s.kind==='entity')).filter(s=>s.custom&&s.logical.includes('_')).map(s=>s.logical.split('_')[0]).filter(p=>!/^(ms|adx)/.test(p)))}
 // calculated, rollup and formula fields can't go in a generated solution (their definitions aren't in the workbook),
 // so they are listed to be created by hand after import. Only your own fields: Microsoft's come with their solutions.
@@ -1802,17 +1832,30 @@ function issues(){
   if(isStarter()) return S.issues=[];   // the built-in starter template is not a data model to check
   const out=[]; const add=(rule,sh,row,field,msg,sev,where)=>out.push({rule,sev:sev||RULES[rule][0],sh,row:row||null,field:field||'',msg,where:where||''});
   const missing={};   // lookup target -> the fields that point at it
+  const own=ownPrefixes();
   const ents=S.sheets.filter(s=>s.kind==='entity');
   const byLog={};
   ents.forEach(sh=>{if(!sh.logical) add('table-no-ln',sh,null,'','This tab has no Logical Name in its table details.'); else (byLog[sh.logical]=byLog[sh.logical]||[]).push(sh)});
   Object.values(byLog).forEach(a=>{if(a.length>1) a.forEach(sh=>add('table-dup',sh,null,'','"'+sh.logical+'" is also documented on '+a.filter(x=>x!==sh).map(x=>x.name).join(', ')+'.'))});
-  const LN=/^[a-z][a-z0-9_]*$/;
+  const LN=/^[a-z][a-z0-9_]*$/, relNames={};
   ents.forEach(sh=>{
     if(sh.colIdx['Logical Name']===undefined) return;
     const seen={};
     sh.rows.forEach(row=>{
       const ln=getVal(sh,row,'Logical Name').trim(), at=getVal(sh,row,'Attribute Type');
       if(!ln){add('field-no-ln',sh,row,getVal(sh,row,'Display Name')||('row '+(row.r+1)),'This field has no Logical Name.');return}
+      // relationship columns
+      const rt=relTypeOf(sh,row), rawRt=getVal(sh,row,'Relationship Type').trim();
+      if(rt==='N:N'){ // a many-to-many row: not a field
+        const tg=lookupTargetsOf(sh,row), nm=ln.toLowerCase(); (relNames[nm]=relNames[nm]||[]).push(sh);
+        if(tg.length!==1) add('nn-target',sh,row,ln,'An N:N row needs exactly one table in "Targets:" in Additional data; it has '+tg.length+'.','error');
+        else if(S.byLogical[tg[0]]===undefined&&!SYS_TABLES.has(tg[0])) add('nn-target',sh,row,ln,'Its other table, "'+tg[0]+'", has no tab in this workbook.','info');
+        return;
+      }
+      if(rt==='?') add('rel-type-bad',sh,row,ln,'"'+rawRt+'" is not a relationship type. Use N:1 on a lookup, or N:N on a row that describes a many-to-many relationship.');
+      else if(rt==='N:1'&&!isLookupType(at)) add('rel-type-bad',sh,row,ln,'N:1 is set on a field that is not a lookup.');
+      if(getVal(sh,row,'Cascade Delete').trim()&&!cascadeOf(sh,row)) add('cascade-bad',sh,row,ln,'"'+getVal(sh,row,'Cascade Delete').trim()+'" is not a cascade setting. Use Remove Link, Restrict or Cascade.');
+      {const rn=getVal(sh,row,'Relationship Name').trim().toLowerCase(); if(rn) (relNames[rn]=relNames[rn]||[]).push(sh)}
       const k=ln.toLowerCase(); (seen[k]=seen[k]||[]).push(row);
       if(!LN.test(ln)) add('ln-format',sh,row,ln,'Dataverse logical names are lower-case letters, digits and underscores, starting with a letter.');
       if(sh.colIdx['Attribute Type']!==undefined&&!at) add('type-missing',sh,row,ln,'No attribute type is recorded.');
@@ -1824,11 +1867,17 @@ function issues(){
       }
     });
     Object.entries(seen).forEach(([k,rows])=>{if(rows.length>1) rows.forEach(row=>add('field-dup',sh,row,k,'"'+k+'" is listed '+rows.length+' times in this table.'))});
-    const de=S.dv&&S.dv.ents[sh.logical], pk=de&&de.pid?de.pid:sh.logical+'id';
+    const de=S.dv&&S.dv.ents[sh.logical], pk=sh.mo['primary key']?pkOf(sh):de&&de.pid?de.pid:sh.logical+'id';
+    // a table that will be created needs a single-line text primary name column
+    if(sh.logical&&own.has(sh.logical.split('_')[0])&&sh.logical.includes('_')){
+      const pn=pnameOf(sh), prow=pn&&sh.rows.find(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===pn);
+      if(!pn) add('pname-missing',sh,null,'','No Primary Name Column in the table details. Dataverse cannot create the table without one.');
+      else if(!prow) add('pname-notfound',sh,null,pn,'The primary name column "'+pn+'" is not in the field list.');
+      else if(!/^(text|string|single ?line)/i.test(getVal(sh,prow,'Attribute Type').trim())) add('pname-type',sh,prow,pn,'The primary name column must be single-line text; it is "'+getVal(sh,prow,'Attribute Type')+'".');
+    }
     if(sh.rows.length&&sh.logical&&!seen[pk]) add('pk-missing',sh,null,'','The primary key field ('+pk+') is not listed.');
   });
   // your own publisher prefixes: those of the custom tables in the workbook, leaving out Microsoft's (ms…, adx)
-  const own=ownPrefixes(ents);
   Object.keys(missing).sort().forEach(t=>{
     const m=missing[t], n=m.fields.length, nt=m.tables.size, mine=t.includes('_')&&own.has(t.split('_')[0]);
     add('lookup-unknown',m.sh,m.row,t,'"'+t+'" has no tab in this workbook'+(S.dv&&S.dv.ents[t]?' (it does exist in Dataverse)':'')+'. Looked up by '+n+' field'+(n===1?'':'s')+': '+m.fields.slice(0,4).join(', ')+(n>4?', …':'')+'.'+(mine?'':' It looks like a standard or Microsoft table, which is often fine to leave out.'),mine?'warn':'info',nt>1?nt+' tables':'');
@@ -1840,9 +1889,10 @@ function issues(){
     ents.forEach(sh=>{if(!linked.has(sh.idx)) add('tab-not-in-dict',sh,null,'','This table is not listed in the Table Dictionary.')});
   }
   ents.forEach(sh=>{ // lookups whose relationship isn't recorded anywhere: one finding per table
-    const list=[]; sh.rows.forEach(row=>{if(!isLookupType(getVal(sh,row,'Attribute Type'))) return; const ln=getVal(sh,row,'Logical Name').trim(); lookupTargetsOf(sh,row).forEach(t=>{if(!relKnown(sh,ln,t)) list.push(ln+' → '+t)})});
-    if(list.length) add('rel-review',sh,null,'',list.length+' relationship'+(list.length===1?' has':'s have')+' no recorded type, so the ERD shows '+(list.length===1?'it as a plain line':'them as plain lines')+': '+list.slice(0,6).join(', ')+(list.length>6?', …':'')+'. Confirm '+(list.length===1?'it':'them')+' by importing Dataverse metadata (or, later, in the Relationships tab).');
+    const list=[]; sh.rows.forEach(row=>{if(!isLookupType(getVal(sh,row,'Attribute Type'))) return; const ln=getVal(sh,row,'Logical Name').trim(); lookupTargetsOf(sh,row).forEach(t=>{if(!relKnown(sh,row,t)) list.push(ln+' → '+t)})});
+    if(list.length) add('rel-review',sh,null,'',list.length+' relationship'+(list.length===1?' has':'s have')+' no recorded type, so the ERD shows '+(list.length===1?'it as a plain line':'them as plain lines')+': '+list.slice(0,6).join(', ')+(list.length>6?', …':'')+'. Confirm '+(list.length===1?'it':'them')+' by setting Relationship Type to N:1 on the lookup, or by importing Dataverse metadata.');
   });
+  Object.entries(relNames).forEach(([n,shs])=>{if(shs.length>1) shs.forEach(sh=>add('rel-name-dup',sh,null,n,'The relationship name "'+n+'" is used '+shs.length+' times. Each relationship needs its own name.'))});
   manualFields().forEach(m=>add('manual-build',m.sh,m.row,m.ln,m.kind+' field. It can\'t be included in a generated solution, so create it by hand after import. Listed in Export → Calculated and rollup fields.'));
   if(S.dv) dvChecks(add,ents);
   out.forEach((x,i)=>x.i=i); out.sort((a,b)=>SEV[a.sev].rank-SEV[b.sev].rank||a.i-b.i);
@@ -1858,7 +1908,7 @@ function dvChecks(add,ents){
     if(own&&de.own&&own.toLowerCase().replace(/\s/g,'')!==String(de.own).toLowerCase()) add('dv-ownership',sh,null,'','Workbook says '+own+', Dataverse says '+de.own+'.');
     const doc={};
     sh.rows.forEach(row=>{
-      const ln=getVal(sh,row,'Logical Name').trim().toLowerCase(); if(!ln) return; doc[ln]=row;
+      const ln=getVal(sh,row,'Logical Name').trim().toLowerCase(); if(!ln||isNNRow(sh,row)) return; doc[ln]=row;   // N:N rows are relationships, not fields
       const da=de.attrs[ln];
       if(!da){add('dv-field-missing',sh,row,ln,'This field does not exist on '+sh.logical+' in Dataverse.');return}
       const wt=getVal(sh,row,'Attribute Type'), a=typeClass(wt), b=typeClass(da.type);
@@ -2039,6 +2089,8 @@ function renderOverview(){
   const ed=[...S.edits.values()];
   if(ed.length) lc+=`<div class="ovrow"><b>Your edits (${ed.length})</b><a href="#" data-ov="changes">All changes</a></div><ul style="margin:4px 0 0;padding-left:18px">${ed.slice(-5).reverse().map(e=>`<li><a href="#" data-cgo="${ed.indexOf(e)}">${esc(e.sh.label)} · ${esc(editLabel(e))}</a> <span class="dim">${esc(e.col)}</span></li>`).join('')}</ul>`;
   if(S.pending.length) lc+=`<div style="margin-top:8px;color:var(--pink)">${S.pending.length} carried-over edit${S.pending.length===1?'':'s'} need${S.pending.length===1?'s':''} your attention. <a href="#" data-ov="changes">Review</a></div>`;
+  {const own=ownPrefixes(); if(own.size&&!isStarter()){const pe=issues().filter(i=>/^pname-|^rel-name-dup|^nn-target/.test(i.rule)&&i.sev==='error').length;
+    h+=`<div class="ovcard"><h3>Build a Dataverse solution</h3><div>Turns your new tables, fields and relationships into an unmanaged solution, with a PowerShell script that imports it using pac.</div>${pe?`<div style="margin-top:6px;color:#B42318">${pe} problem${pe===1?'':'s'} will keep some tables or relationships out. <a href="#" data-ov="issues:error">See them</a></div>`:''}<div style="margin-top:10px"><button class="btn primary" data-ov="solution">Build solution…</button></div></div>`}}
   {const mf=manualFields(); if(mf.length){const k=x=>mf.filter(m=>m.kind===x).length, tb=new Set(mf.map(m=>m.sh)).size;
     h+=`<div class="ovcard"><h3>To build by hand</h3><div>${mf.length} calculated or rollup field${mf.length===1?'':'s'} in ${tb} table${tb===1?'':'s'} (${[['Calculated',k('Calculated')],['Rollup',k('Rollup')],['Formula',k('Formula')]].filter(x=>x[1]).map(x=>x[1]+' '+x[0].toLowerCase()).join(', ')}).</div><div class="dim" style="margin-top:4px">Their formulas aren't in the workbook, so they can't go in a generated solution. Create them in Power Apps after import.</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-ov="manual">Download the list (.xlsx)</button><button class="btn" data-ov="issues:rule:manual-build">See them in Checks</button></div></div>`}}
   h+=`<div class="ovcard"><h3>Latest changes</h3>${lc||'<div class="dim">No edits yet, and no earlier version to compare with. Use <b>Load version…</b> to compare.</div>'}</div>`;
@@ -2075,6 +2127,313 @@ function renderIssues(){
   main.innerHTML=h+'</div>';
 }
 function issueRows(){return [['Severity','Table','Logical name','Field','Check','Detail']].concat((S.issList||issues()).map(i=>[SEV[i.sev].label,i.where||i.sh.label,i.where?'':(i.sh.logical||''),i.field,RULES[i.rule][1],i.msg]))}
+
+/* ---------- relationships and primary columns, as recorded in the workbook ---------- */
+// Relationship Type column: N:1 on a lookup (1:N accepted: the same relationship seen from the other table),
+// N:N on a row that describes a many-to-many relationship (its other table in "Targets:")
+function relTypeOf(sh,row){
+  const v=getVal(sh,row,'Relationship Type').trim().toUpperCase().replace(/\s+/g,''); if(!v) return '';
+  if(/^(N:1|1:N|MANY-?TO-?ONE|ONE-?TO-?MANY)$/.test(v)) return 'N:1';
+  if(/^(N:N|M:N|MANY-?TO-?MANY)$/.test(v)) return 'N:N';
+  return '?';
+}
+const isNNRow=(sh,row)=>relTypeOf(sh,row)==='N:N';
+// Cascade Delete column -> the value Dataverse uses; null when the text isn't recognised
+function cascadeOf(sh,row){const v=getVal(sh,row,'Cascade Delete').trim().toLowerCase().replace(/\s+/g,''); return v===''||v==='removelink'?'RemoveLink':v==='restrict'?'Restrict':v==='cascade'?'Cascade':null}
+const pnameOf=sh=>String(sh.mo['primary name column']||'').trim().toLowerCase();
+const pkOf=sh=>String(sh.mo['primary key']||'').trim().toLowerCase()||(sh.logical?sh.logical+'id':'');
+const isPnameRow=(sh,row)=>{const p=pnameOf(sh);return !!p&&getVal(sh,row,'Logical Name').trim().toLowerCase()===p};
+
+/* ---------- Dataverse solution generator ---------- */
+// Builds an unmanaged solution (solution.xml + customizations.xml) from the workbook: new tables with their fields,
+// your new fields on existing tables (as shells holding only those fields), lookups, customer lookups and N:N.
+// Calculated/rollup fields, activity tables, multi-table lookups, images and files are listed instead.
+const solKey=()=>'dme.sol:'+(S.proj||'bundled');
+function solDefaults(){
+  const ents=S.sheets.filter(s=>s.kind==='entity'), own=ownPrefixes(ents), cnt=new Map();
+  ents.forEach(sh=>sh.rows.forEach(r=>{const m=/^([a-z][a-z0-9]{1,7})_/.exec(getVal(sh,r,'Logical Name').trim().toLowerCase()); if(m&&!/^(ms|adx)/.test(m[1])&&(!own.size||own.has(m[1]))) cnt.set(m[1],(cnt.get(m[1])||0)+1)}));
+  const top=[...cnt.entries()].sort((a,b)=>b[1]-a[1])[0], prefix=top?top[0]:'new';
+  const opt=new Map();
+  ents.forEach(sh=>sh.rows.forEach(r=>{if(!getVal(sh,r,'Logical Name').trim().toLowerCase().startsWith(prefix+'_')||!/choice|picklist/i.test(getVal(sh,r,'Attribute Type'))) return;
+    (getVal(sh,r,'Additional data').match(/^\s*\d{9,}\s*:/gm)||[]).forEach(x=>{const p=Math.floor(parseInt(x,10)/10000); opt.set(p,(opt.get(p)||0)+1)})}));
+  const op=[...opt.entries()].sort((a,b)=>b[1]-a[1])[0], P=prefix.toUpperCase();
+  return {solName:P+'_DataModel',solDisplay:P+' data model',version:'1.0.0.0',pubName:prefix,pubDisplay:P,prefix,optPrefix:op?op[0]:10000};
+}
+const solSettings=()=>Object.assign(solDefaults(),store.get(solKey())||{});
+function solValidate(c){
+  const e=[];
+  if(!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(c.solName)) e.push('Solution name: letters, digits and underscores, starting with a letter.');
+  if(!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(c.pubName)) e.push('Publisher name: letters, digits and underscores, starting with a letter.');
+  if(!/^[a-z][a-z0-9]{1,7}$/.test(c.prefix)||c.prefix==='mscrm') e.push('Prefix: 2 to 8 lower-case letters or digits, starting with a letter (not "mscrm").');
+  if(!(Number.isInteger(+c.optPrefix)&&+c.optPrefix>=10000&&+c.optPrefix<=99999)) e.push('Choice value prefix: a whole number from 10000 to 99999.');
+  if(!/^\d+\.\d+\.\d+\.\d+$/.test(c.version)) e.push('Version: four numbers, for example 1.0.0.0.');
+  if(!c.solDisplay.trim()||!c.pubDisplay.trim()) e.push('Display names cannot be blank.');
+  return e;
+}
+// the Additional data cell, read into its settings: "Max length: 100" -> {'max length':'100'}, option lines -> options[]
+function addlOf(sh,row){
+  const o={options:[]}; let sec=null;
+  String(getVal(sh,row,'Additional data')).split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{
+    const m=/^([^:]{1,40}):\s*(.*)$/.exec(l);
+    if(m&&!/^-?\d+$/.test(m[1].trim())){sec=m[1].trim().toLowerCase(); if(m[2]!=='') o[sec]=m[2].trim()}
+    else if(sec==='options'){const k=/^(-?\d+)\s*:\s*(.*)$/.exec(l); if(k) o.options.push({v:+k[1],label:k[2].replace(/\s*\(no color\)\s*$/i,'').trim()})}
+  });
+  return o;
+}
+// what to do with one field: {act:'attr'|'lookup'|'customer'|'auto'|'manual'|'skip', ...}
+function fieldSpec(sh,row){
+  const at=getVal(sh,row,'Attribute Type').trim(), l=at.toLowerCase().replace(/[^a-z]/g,''), ln=getVal(sh,row,'Logical Name').trim().toLowerCase(), A=addlOf(sh,row);
+  const num=k=>A[k]!=null&&A[k]!==''&&!isNaN(+A[k])?+A[k]:null;
+  if(MANUAL_RE.test(getVal(sh,row,'Type'))) return {act:'manual',why:getVal(sh,row,'Type').trim()+' field: create it by hand (see the hand-build list)'};
+  if(/^(virtual|entityname|state|status|statusreason|owner|partylist|managedproperty|uniqueidentifier|primarykey)$/.test(l)) return {act:'auto',why:'created by Dataverse'};
+  if(/^(currency|money)$/.test(l)&&/_base$/.test(ln)) return {act:'auto',why:'currency base field, created by Dataverse'};
+  if(/^(text|string|singlelineoftext)$/.test(l)) return {act:'attr',t:'nvarchar',format:({text:'text',email:'email',url:'url',phone:'phone',textarea:'textarea',tickersymbol:'tickersymbol'})[(A.format||'text').toLowerCase()]||'text',max:Math.max(1,Math.min(4000,num('max length')||100))};
+  if(/^(multilinetext|multiplelinesoftext|memo|ntext)$/.test(l)) return {act:'attr',t:'ntext',max:Math.max(1,Math.min(1048576,num('max length')||2000))};
+  if(/^(wholenumber|integer|int)$/.test(l)) return {act:'attr',t:'int',min:num('minimum value')??-2147483648,max:num('maximum value')??2147483647};
+  if(l==='bigint') return {act:'attr',t:'bigint'};
+  if(l==='decimal') return {act:'attr',t:'decimal',min:num('minimum value')??-100000000000,max:num('maximum value')??100000000000,acc:num('precision')??2};
+  if(/^(double|float|floatingpointnumber)$/.test(l)) return {act:'attr',t:'float',min:num('minimum value')??0,max:num('maximum value')??1000000000,acc:num('precision')??2};
+  if(/^(currency|money)$/.test(l)) return {act:'attr',t:'money',min:num('minimum value')??-922337203685477,max:num('maximum value')??922337203685477,acc:num('precision')??2};
+  if(/^(datetime|dateandtime|dateonly|date)$/.test(l)){const d=l==='dateonly'||l==='date'||/dateonly/i.test(A.format||''); return {act:'attr',t:'datetime',format:d?'date':'datetime',behavior:d?2:1}}
+  if(/^(twooptions|boolean|yesno)$/.test(l)) return {act:'attr',t:'bit',yes:A['true']||'Yes',no:A['false']||'No',def:/^(true|yes|1)$/i.test(A['default value']||'')?1:0};
+  if(/^(choice|picklist|optionset|choices|multiselectpicklist|multiselectoptionset)$/.test(l)){
+    if(!A.options.length) return {act:'skip',why:'choice field with no options listed'};
+    const d=String(A['default']||'').trim();
+    return {act:'attr',t:/choices|multi/.test(l)?'multiselectpicklist':'picklist',options:A.options,def:/^-?\d+$/.test(d)?+d:-1};
+  }
+  if(l==='lookup'){const tg=lookupTargetsOf(sh,row); if(!tg.length) return {act:'skip',why:'lookup with no table in "Targets:"'}; if(tg.length>1) return {act:'skip',why:'lookup to several tables ('+tg.join(', ')+'): create it by hand'}; return {act:'lookup',target:tg[0]}}
+  if(l==='customer'){const tg=lookupTargetsOf(sh,row); return {act:'customer',targets:tg.length?tg:['account','contact']}}
+  if(/^(image|file)$/.test(l)) return {act:'skip',why:at+' field: create it by hand'};
+  return {act:'skip',why:at?'field type "'+at+'" is not supported by the generator':'no attribute type'};
+}
+// decide what goes in the solution. Nothing here touches the workbook.
+function buildPlan(cfg){
+  const P=cfg.prefix.toLowerCase(), mine=ln=>ln.startsWith(P+'_');
+  const ents=S.sheets.filter(s=>s.kind==='entity'&&s.logical);
+  const plan={cfg,newTables:[],shells:[],rels:[],nn:[],report:[],counts:{auto:0}};
+  const rep=(tbl,item,what,action,why)=>plan.report.push({tbl,item,what,action,why:why||''});
+  const used=new Set(), relName=base=>{base=base.replace(/[^A-Za-z0-9_]/g,'_'); let n=base.slice(0,100),i=1; while(used.has(n.toLowerCase())) n=base.slice(0,95)+'_'+(++i); used.add(n.toLowerCase()); return n};
+  // names already chosen in the workbook are reserved first, so generated names never clash with them
+  ents.forEach(sh=>sh.rows.forEach(r=>{const n=(isNNRow(sh,r)?getVal(sh,r,'Logical Name'):getVal(sh,r,'Relationship Name')).trim(); if(n) used.add(n.toLowerCase())}));
+  const take=n=>{used.delete(n.toLowerCase()); return relName(n)};
+  const planned=new Set(), schemaOf={};
+  ents.forEach(sh=>{schemaOf[sh.logical]=sh.schema||sh.logical});
+  ents.forEach(sh=>{
+    const isNew=mine(sh.logical);
+    if(isNew){
+      const why=[], pn=pnameOf(sh), prow=pn&&sh.rows.find(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===pn);
+      if(!pn) why.push('no Primary Name Column in its table details');
+      else if(!prow) why.push('its primary name column '+pn+' is not in the field list');
+      else if(fieldSpec(sh,prow).t!=='nvarchar') why.push('its primary name column '+pn+' is not single-line text');
+      if(/^(true|yes|1)$/i.test(String(sh.mo['is activity']||''))) why.push('activity tables are created by hand');
+      if(why.length){rep(sh.label,sh.logical,'Table','Not included',why.join('; ')); return}
+      planned.add(sh.logical);
+    }
+    const T={sh,isNew,schema:sh.schema||sh.logical,fields:[]};
+    sh.rows.forEach(row=>{
+      const ln=getVal(sh,row,'Logical Name').trim().toLowerCase(); if(!ln||!mine(ln)) return;   // not yours: Dataverse's or Microsoft's own
+      if(isNNRow(sh,row)){plan.nn.push({sh,row,name:getVal(sh,row,'Logical Name').trim()}); return}
+      if(isNew&&ln===pkOf(sh)) return;                                                           // the primary key is generated with the table
+      const sp=fieldSpec(sh,row);
+      if(sp.act==='auto'){plan.counts.auto++; return}
+      if(sp.act==='manual'){rep(sh.label,ln,'Field','Build by hand',sp.why); return}
+      if(sp.act==='skip'){rep(sh.label,ln,'Field','Not included',sp.why); return}
+      T.fields.push({row,ln,spec:sp,primary:isNew&&ln===pnameOf(sh)});
+    });
+    if(isNew) plan.newTables.push(T); else if(T.fields.length) plan.shells.push(T);
+  });
+  const all=[...plan.newTables,...plan.shells], strip=ln=>ln.replace(new RegExp('^'+P+'_'),'');
+  // lookups and customer lookups become relationships; a target that is yours must be in this solution
+  all.forEach(T=>{T.fields=T.fields.filter(f=>{
+    const sh=T.sh,row=f.row,given=getVal(sh,row,'Relationship Name').trim(),cas=cascadeOf(sh,row)||'RemoveLink';
+    if(f.spec.act==='lookup'){
+      const tg=f.spec.target;
+      if(mine(tg)&&!planned.has(tg)){rep(sh.label,f.ln,'Field','Not included','its table '+tg+' is not in this solution'); return false}
+      plan.rels.push({name:given?take(given):relName(P+'_'+strip(tg)+'_'+strip(sh.logical)+'_'+strip(f.ln)),referencing:T.schema,referenced:schemaOf[tg]||tg,attr:getVal(sh,row,'Schema Name').trim()||f.ln,ln:f.ln,cascade:cas,shell:!T.isNew});
+    }
+    if(f.spec.act==='customer'){
+      const bad=f.spec.targets.filter(tg=>mine(tg)&&!planned.has(tg));
+      if(bad.length){rep(sh.label,f.ln,'Field','Not included','its table '+bad.join(', ')+' is not in this solution'); return false}
+      f.spec.targets.forEach(tg=>plan.rels.push({name:relName((given||P+'_'+strip(sh.logical)+'_'+strip(f.ln))+'_'+strip(tg)),referencing:T.schema,referenced:schemaOf[tg]||tg,attr:getVal(sh,row,'Schema Name').trim()||f.ln,ln:f.ln,cascade:cas,shell:!T.isNew}));
+    }
+    return true;
+  })});
+  plan.nn=plan.nn.map(n=>{
+    const tg=lookupTargetsOf(n.sh,n.row), lbl=n.sh.label;
+    if(tg.length!==1){rep(lbl,n.name||'(no name)','N:N relationship','Not included','needs exactly one table in "Targets:"'); return null}
+    if(mine(n.sh.logical)&&!planned.has(n.sh.logical)||mine(tg[0])&&!planned.has(tg[0])){rep(lbl,n.name,'N:N relationship','Not included','one of its tables is not in this solution'); return null}
+    const name=n.name?take(n.name):relName(P+'_'+strip(n.sh.logical)+'_'+strip(tg[0]));
+    return {name,first:schemaOf[n.sh.logical]||n.sh.logical,second:schemaOf[tg[0]]||tg[0],label:getVal(n.sh,n.row,'Display Name').trim()};
+  }).filter(Boolean);
+  plan.shells=plan.shells.filter(T=>T.fields.length);
+  plan.newTables.forEach(T=>{rep(T.sh.label,T.sh.logical,'Table','Included','new table with '+T.fields.length+' field'+(T.fields.length===1?'':'s')); T.fields.forEach(f=>rep(T.sh.label,f.ln,'Field','Included',(f.primary?'primary name, ':'')+(f.spec.t||f.spec.act)))});
+  plan.shells.forEach(T=>{rep(T.sh.label,T.sh.logical,'Table','Included','existing table: only your '+T.fields.length+' new field'+(T.fields.length===1?'':'s')); T.fields.forEach(f=>rep(T.sh.label,f.ln,'Field','Included',f.spec.t||f.spec.act))});
+  plan.rels.forEach(r=>rep(r.referencing,r.name,'Relationship (1:N)','Included',r.referenced+' → '+r.referencing+' via '+r.ln+', delete: '+r.cascade));
+  plan.nn.forEach(r=>rep(r.first,r.name,'Relationship (N:N)','Included',r.first+' ↔ '+r.second));
+  plan.fieldCount=all.reduce((a,T)=>a+T.fields.length,0);
+  return plan;
+}
+const xe=s=>String(s??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const lbl1033=(wrap,item,text)=>`<${wrap}><${item} description="${xe(text)}" languagecode="1033" /></${wrap}>`;
+function reqLevel(v,primary){const f=facet('Required Level',v); return primary||/Required/.test(f)?'required':f==='Recommended'?'recommended':'none'}
+function attrXml(T,f,cfg){
+  const sh=T.sh,row=f.row,sp=f.spec,v=cfg.version;
+  const schema=getVal(sh,row,'Schema Name').trim()||f.ln, disp=getVal(sh,row,'Display Name').trim()||schema, desc=getVal(sh,row,'Description').trim();
+  const type=sp.act==='lookup'?'lookup':sp.act==='customer'?'customer':sp.t, primary=!!f.primary;
+  const secured=sh.colIdx['Secured']!==undefined&&/^(true|yes|1)$/i.test(getVal(sh,row,'Secured'))?1:0;
+  const opts=(name,kind,items)=>`<optionset Name="${xe(name)}"><OptionSetType>${kind}</OptionSetType>${kind==='bit'?'':'<IsGlobal>0</IsGlobal>'}<IntroducedVersion>${v}</IntroducedVersion><IsCustomizable>1</IsCustomizable>${lbl1033('displaynames','displayname',disp)}${lbl1033('Descriptions','Description',desc)}<options>${items.map(o=>`<option value="${o.v}"${kind==='bit'?'':' IsHidden="0"'}><labels><label description="${xe(o.label||String(o.v))}" languagecode="1033" /></labels></option>`).join('')}</options></optionset>`;
+  let x=`<attribute PhysicalName="${xe(schema)}"><Type>${type}</Type><Name>${xe(f.ln)}</Name><LogicalName>${xe(f.ln)}</LogicalName><RequiredLevel>${reqLevel(getVal(sh,row,'Required Level'),primary)}</RequiredLevel>`+
+    `<DisplayMask>${primary?'PrimaryName|ValidForAdvancedFind|ValidForForm|ValidForGrid|RequiredForForm':'ValidForAdvancedFind|ValidForForm|ValidForGrid'}</DisplayMask><ImeMode>auto</ImeMode>`+
+    `<ValidForUpdateApi>1</ValidForUpdateApi><ValidForReadApi>1</ValidForReadApi><ValidForCreateApi>1</ValidForCreateApi><IsCustomField>1</IsCustomField><IsAuditEnabled>1</IsAuditEnabled><IsSecured>${secured}</IsSecured>`+
+    `<IntroducedVersion>${v}</IntroducedVersion><IsCustomizable>1</IsCustomizable><IsRenameable>1</IsRenameable><CanModifySearchSettings>1</CanModifySearchSettings><CanModifyRequirementLevelSettings>1</CanModifyRequirementLevelSettings><CanModifyAdditionalSettings>1</CanModifyAdditionalSettings>`+
+    `<SourceType>0</SourceType><IsGlobalFilterEnabled>0</IsGlobalFilterEnabled><IsSortableEnabled>0</IsSortableEnabled><CanModifyGlobalFilterSettings>1</CanModifyGlobalFilterSettings><CanModifyIsSortableSettings>1</CanModifyIsSortableSettings><IsDataSourceSecret>0</IsDataSourceSecret><AutoNumberFormat></AutoNumberFormat><IsSearchable>${primary?1:0}</IsSearchable><IsFilterable>0</IsFilterable><IsRetrievable>1</IsRetrievable><IsLocalizable>0</IsLocalizable>`;
+  if(type==='nvarchar') x+=`<Format>${sp.format}</Format><MaxLength>${sp.max}</MaxLength><Length>${sp.max*2}</Length>`;
+  else if(type==='ntext') x+=`<Format>textarea</Format><MaxLength>${sp.max}</MaxLength><Length>${sp.max*2}</Length>`;
+  else if(type==='int') x+=`<Format></Format><MinValue>${sp.min}</MinValue><MaxValue>${sp.max}</MaxValue>`;
+  else if(type==='bigint') x+=`<MinValue>-9223372036854775808</MinValue><MaxValue>9223372036854775807</MaxValue>`;
+  else if(type==='decimal'||type==='float') x+=`<MinValue>${sp.min}</MinValue><MaxValue>${sp.max}</MaxValue><Accuracy>${sp.acc}</Accuracy>`;
+  else if(type==='money') x+=`<MinValue>${sp.min}</MinValue><MaxValue>${sp.max}</MaxValue><Accuracy>${sp.acc}</Accuracy><AccuracySource>${sp.acc===2?2:0}</AccuracySource><IsBaseCurrency>0</IsBaseCurrency>`;
+  else if(type==='datetime') x+=`<Format>${sp.format}</Format><CanChangeDateTimeBehavior>1</CanChangeDateTimeBehavior><Behavior>${sp.behavior}</Behavior>`;
+  else if(type==='bit') x+=`<AppDefaultValue>${sp.def}</AppDefaultValue>`+opts(sh.logical+'_'+f.ln,'bit',[{v:1,label:sp.yes},{v:0,label:sp.no}]);
+  else if(type==='picklist'||type==='multiselectpicklist'){const n=sh.logical+'_'+f.ln; x+=`<AppDefaultValue>${sp.def}</AppDefaultValue><OptionSetName>${xe(n)}</OptionSetName>`+opts(n,'picklist',sp.options)}
+  else if(type==='lookup'||type==='customer') x+=`<LookupStyle>single</LookupStyle><LookupTypes />`;
+  return x+lbl1033('displaynames','displayname',disp)+lbl1033('Descriptions','Description',desc)+'</attribute>';
+}
+const RIBBON='<RibbonDiffXml><CustomActions /><Templates><RibbonTemplates Id="Mscrm.Templates"></RibbonTemplates></Templates><CommandDefinitions /><RuleDefinitions><TabDisplayRules /><DisplayRules /><EnableRules /></RuleDefinitions><LocLabels /></RibbonDiffXml>';
+function entityXml(T,cfg){
+  const sh=T.sh,v=cfg.version,disp=sh.label,schema=T.schema;
+  const head=`<Entity><Name LocalizedName="${xe(disp)}" OriginalName="${xe(disp)}">${xe(schema)}</Name><EntityInfo>`;
+  const attrs=T.fields.map(f=>attrXml(T,f,cfg)).join('');
+  if(!T.isNew) return head+`<entity Name="${xe(schema)}" unmodified="1"><attributes>${attrs}</attributes></entity></EntityInfo>${RIBBON}</Entity>`;
+  const yes=k=>/^(true|yes|1)$/i.test(String(sh.mo[k]||''));
+  const own=/org/i.test(String(sh.mo['ownership type']||''))?'OrgOwned':'UserOwned';
+  const pk=pkOf(sh), pkRow=sh.rows.find(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===pk), pkSchema=(pkRow&&getVal(sh,pkRow,'Schema Name').trim())||pk;
+  const pkXml=`<attribute PhysicalName="${xe(pkSchema)}"><Type>primarykey</Type><Name>${xe(pk)}</Name><LogicalName>${xe(pk)}</LogicalName><RequiredLevel>systemrequired</RequiredLevel><DisplayMask>ValidForAdvancedFind|RequiredForGrid</DisplayMask><ImeMode>auto</ImeMode><ValidForUpdateApi>0</ValidForUpdateApi><ValidForReadApi>1</ValidForReadApi><ValidForCreateApi>1</ValidForCreateApi><IsCustomField>0</IsCustomField><IsAuditEnabled>0</IsAuditEnabled><IsSecured>0</IsSecured><IntroducedVersion>${v}</IntroducedVersion><IsCustomizable>1</IsCustomizable><IsRenameable>1</IsRenameable><CanModifySearchSettings>1</CanModifySearchSettings><CanModifyRequirementLevelSettings>0</CanModifyRequirementLevelSettings><CanModifyAdditionalSettings>1</CanModifyAdditionalSettings><SourceType>0</SourceType><IsGlobalFilterEnabled>0</IsGlobalFilterEnabled><IsSortableEnabled>0</IsSortableEnabled><CanModifyGlobalFilterSettings>1</CanModifyGlobalFilterSettings><CanModifyIsSortableSettings>1</CanModifyIsSortableSettings><IsDataSourceSecret>0</IsDataSourceSecret><AutoNumberFormat></AutoNumberFormat><IsSearchable>0</IsSearchable><IsFilterable>1</IsFilterable><IsRetrievable>1</IsRetrievable><IsLocalizable>0</IsLocalizable>${lbl1033('displaynames','displayname',disp)}${lbl1033('Descriptions','Description','Unique identifier for entity instances')}</attribute>`;
+  const flags=`<EntitySetName>${xe(sh.logical+'s')}</EntitySetName><IsDuplicateCheckSupported>1</IsDuplicateCheckSupported><IsBusinessProcessEnabled>0</IsBusinessProcessEnabled><IsRequiredOffline>0</IsRequiredOffline><IsInteractionCentricEnabled>0</IsInteractionCentricEnabled><IsCollaboration>0</IsCollaboration><AutoRouteToOwnerQueue>0</AutoRouteToOwnerQueue><IsConnectionsEnabled>0</IsConnectionsEnabled><EntityColor></EntityColor><IsDocumentManagementEnabled>0</IsDocumentManagementEnabled><AutoCreateAccessTeams>0</AutoCreateAccessTeams><IsOneNoteIntegrationEnabled>0</IsOneNoteIntegrationEnabled><IsKnowledgeManagementEnabled>0</IsKnowledgeManagementEnabled><IsSLAEnabled>0</IsSLAEnabled><IsDocumentRecommendationsEnabled>0</IsDocumentRecommendationsEnabled><IsBPFEntity>0</IsBPFEntity>`+
+    `<OwnershipTypeMask>${own}</OwnershipTypeMask><IsAuditEnabled>${yes('audit tracking')?1:0}</IsAuditEnabled><IsRetrieveAuditEnabled>0</IsRetrieveAuditEnabled><IsRetrieveMultipleAuditEnabled>0</IsRetrieveMultipleAuditEnabled><IsActivity>0</IsActivity><ActivityTypeMask></ActivityTypeMask><IsActivityParty>0</IsActivityParty><IsReplicated>0</IsReplicated><IsReplicationUserFiltered>0</IsReplicationUserFiltered><IsMailMergeEnabled>1</IsMailMergeEnabled><IsVisibleInMobile>0</IsVisibleInMobile><IsVisibleInMobileClient>1</IsVisibleInMobileClient><IsReadOnlyInMobileClient>0</IsReadOnlyInMobileClient><IsOfflineInMobileClient>0</IsOfflineInMobileClient><DaysSinceRecordLastModified>0</DaysSinceRecordLastModified><MobileOfflineEnabled>0</MobileOfflineEnabled><MobileOfflineFilters></MobileOfflineFilters><IsMapiGridEnabled>1</IsMapiGridEnabled><IsReadingPaneEnabled>1</IsReadingPaneEnabled><IsQuickCreateEnabled>0</IsQuickCreateEnabled><SyncToExternalSearchIndex>0</SyncToExternalSearchIndex><IntroducedVersion>${v}</IntroducedVersion><IsCustomizable>1</IsCustomizable><IsRenameable>1</IsRenameable><IsMappable>1</IsMappable><CanModifyAuditSettings>1</CanModifyAuditSettings><CanModifyMobileVisibility>1</CanModifyMobileVisibility><CanModifyMobileClientVisibility>1</CanModifyMobileClientVisibility><CanModifyMobileClientReadOnly>1</CanModifyMobileClientReadOnly><CanModifyQueueSettings>1</CanModifyQueueSettings><CanModifyConnectionSettings>1</CanModifyConnectionSettings><CanModifyDuplicateDetectionSettings>1</CanModifyDuplicateDetectionSettings><CanModifyMailMergeSettings>1</CanModifyMailMergeSettings><CanModifyMobileOfflineEnabled>1</CanModifyMobileOfflineEnabled><CanEnableSyncToExternalSearchIndex>1</CanEnableSyncToExternalSearchIndex><EnforceStateTransitions>0</EnforceStateTransitions><CanChangeHierarchicalRelationship>1</CanChangeHierarchicalRelationship><EntityHelpUrlEnabled>0</EntityHelpUrlEnabled><ChangeTrackingEnabled>0</ChangeTrackingEnabled><CanChangeTrackingBeEnabled>1</CanChangeTrackingBeEnabled><IsEnabledForExternalChannels>0</IsEnabledForExternalChannels><IsMSTeamsIntegrationEnabled>0</IsMSTeamsIntegrationEnabled><IsSolutionAware>0</IsSolutionAware><HasRelatedNotes>${yes('has notes')?'True':'False'}</HasRelatedNotes><HasRelatedActivities>${yes('has activities')?'True':'False'}</HasRelatedActivities>`;
+  return head+`<entity Name="${xe(schema)}">${lbl1033('LocalizedNames','LocalizedName',disp)}${lbl1033('LocalizedCollectionNames','LocalizedName',sh.mo['plural display name']||disp+'s')}${lbl1033('Descriptions','Description',sh.mo['description']||'')}<attributes>${pkXml}${attrs}</attributes>${flags}</entity></EntityInfo>${RIBBON}</Entity>`;
+}
+function relXml(r,cfg){
+  const desc=`<RelationshipDescription><Descriptions><Description description="" languagecode="1033" /></Descriptions></RelationshipDescription>`;
+  if(r.first) return `<EntityRelationship Name="${xe(r.name)}"><EntityRelationshipType>ManyToMany</EntityRelationshipType><IsCustomizable>1</IsCustomizable><IntroducedVersion>${cfg.version}</IntroducedVersion><IsHierarchical>0</IsHierarchical><FirstEntityName>${xe(r.first)}</FirstEntityName><SecondEntityName>${xe(r.second)}</SecondEntityName><IntersectEntityName>${xe(r.name.toLowerCase())}</IntersectEntityName><IsValidForAdvancedFind>1</IsValidForAdvancedFind>${desc}<EntityRelationshipRoles>`+
+    [0,1].map(()=>`<EntityRelationshipRole><NavPaneDisplayOption>UseCollectionName</NavPaneDisplayOption><NavPaneArea>Details</NavPaneArea><NavPaneOrder>10000</NavPaneOrder><NavigationPropertyName>${xe(r.name)}</NavigationPropertyName><RelationshipRoleType>0</RelationshipRoleType></EntityRelationshipRole>`).join('')+`</EntityRelationshipRoles></EntityRelationship>`;
+  return `<EntityRelationship Name="${xe(r.name)}"><EntityRelationshipType>OneToMany</EntityRelationshipType><IsCustomizable>1</IsCustomizable><IntroducedVersion>${cfg.version}</IntroducedVersion><IsHierarchical>0</IsHierarchical><ReferencingEntityName>${xe(r.referencing)}</ReferencingEntityName><ReferencedEntityName>${xe(r.referenced)}</ReferencedEntityName>`+
+    `<CascadeAssign>NoCascade</CascadeAssign><CascadeDelete>${r.cascade}</CascadeDelete><CascadeReparent>NoCascade</CascadeReparent><CascadeShare>NoCascade</CascadeShare><CascadeUnshare>NoCascade</CascadeUnshare><CascadeRollupView>NoCascade</CascadeRollupView><IsValidForAdvancedFind>1</IsValidForAdvancedFind><ReferencingAttributeName>${xe(r.attr)}</ReferencingAttributeName>${desc}`+
+    `<EntityRelationshipRoles><EntityRelationshipRole><NavPaneDisplayOption>UseCollectionName</NavPaneDisplayOption><NavPaneArea>Details</NavPaneArea><NavPaneOrder>10000</NavPaneOrder><NavigationPropertyName>${xe(r.ln)}</NavigationPropertyName><RelationshipRoleType>1</RelationshipRoleType></EntityRelationshipRole><EntityRelationshipRole><NavigationPropertyName>${xe(r.name)}</NavigationPropertyName><RelationshipRoleType>0</RelationshipRoleType></EntityRelationshipRole></EntityRelationshipRoles></EntityRelationship>`;
+}
+function solutionFiles(plan){
+  const c=plan.cfg, X='<?xml version="1.0" encoding="utf-8"?>\n';
+  const addr=n=>`<Address><AddressNumber>${n}</AddressNumber><AddressTypeCode>1</AddressTypeCode>`+['City','County','Country','Fax','FreightTermsCode','ImportSequenceNumber','Latitude','Line1','Line2','Line3','Longitude','Name','PostalCode','PostOfficeBox','PrimaryContactName'].map(k=>`<${k} xsi:nil="true"></${k}>`).join('')+`<ShippingMethodCode>1</ShippingMethodCode>`+['StateOrProvince','Telephone1','Telephone2','Telephone3','TimeZoneRuleVersionNumber','UPSZone','UTCOffset','UTCConversionTimeZoneCode'].map(k=>`<${k} xsi:nil="true"></${k}>`).join('')+`</Address>`;
+  const roots=[...plan.newTables.map(T=>`<RootComponent type="1" schemaName="${xe(T.sh.logical)}" behavior="0" />`),...plan.shells.map(T=>`<RootComponent type="1" schemaName="${xe(T.sh.logical)}" behavior="2" />`),
+    ...plan.rels.filter(r=>r.shell).map(r=>`<RootComponent type="10" schemaName="${xe(r.name)}" behavior="0" />`),...plan.nn.map(r=>`<RootComponent type="10" schemaName="${xe(r.name)}" behavior="0" />`)];
+  const solution=X+`<ImportExportXml version="9.2.0.0" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SolutionManifest><UniqueName>${xe(c.solName)}</UniqueName>${lbl1033('LocalizedNames','LocalizedName',c.solDisplay)}<Descriptions /><Version>${xe(c.version)}</Version><Managed>0</Managed>`+
+    `<Publisher><UniqueName>${xe(c.pubName)}</UniqueName>${lbl1033('LocalizedNames','LocalizedName',c.pubDisplay)}<Descriptions /><EMailAddress xsi:nil="true"></EMailAddress><SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl><CustomizationPrefix>${xe(c.prefix)}</CustomizationPrefix><CustomizationOptionValuePrefix>${+c.optPrefix}</CustomizationOptionValuePrefix><Addresses>${addr(1)}${addr(2)}</Addresses></Publisher>`+
+    `<RootComponents>${roots.join('')}</RootComponents><MissingDependencies /></SolutionManifest></ImportExportXml>`;
+  const customizations=X+`<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.0.0" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.0.0"><Entities>${[...plan.newTables,...plan.shells].map(T=>entityXml(T,c)).join('')}</Entities><Roles /><Workflows /><FieldSecurityProfiles /><Templates /><EntityMaps />`+
+    `<EntityRelationships>${[...plan.rels,...plan.nn].map(r=>relXml(r,c)).join('')}</EntityRelationships><OrganizationSettings /><optionsets /><CustomControls /><EntityDataProviders /><Languages><Language>1033</Language></Languages></ImportExportXml>`;
+  const types=X+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/octet-stream" /></Types>';
+  return {'[Content_Types].xml':types,'solution.xml':solution,'customizations.xml':customizations};
+}
+function importScript(zipName,c){
+  return `<#
+  Imports ${c.solName} ${c.version} into a Dataverse environment with the Power Platform CLI (pac).
+
+  Usage:   .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com
+           .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com -Check   # run Microsoft's solution checker first
+
+  Needs PowerShell 7 (or Windows PowerShell 5.1) and pac. If pac is missing, it is installed:
+  with the .NET SDK when present (dotnet tool install), otherwise with winget on Windows.
+  Your account needs the System Customizer or System Administrator role. Import into a development environment first.
+#>
+param(
+  [Parameter(Mandatory = $true)][string]$EnvironmentUrl,
+  [switch]$Check
+)
+$ErrorActionPreference = 'Stop'
+$solution = Join-Path $PSScriptRoot '${zipName}'
+if (-not (Test-Path $solution)) { throw "Solution file not found: $solution" }
+
+function Test-Pac { [bool](Get-Command pac -ErrorAction SilentlyContinue) }
+if (-not (Test-Pac)) {
+  Write-Host 'The Power Platform CLI (pac) is not installed. Installing it...'
+  if (Get-Command dotnet -ErrorAction SilentlyContinue) {
+    dotnet tool install --global Microsoft.PowerApps.CLI.Tool
+    $env:PATH += [IO.Path]::PathSeparator + (Join-Path $HOME '.dotnet/tools')
+  } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
+    winget install --id Microsoft.PowerAppsCLI --exact --accept-source-agreements --accept-package-agreements
+    $env:PATH = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+  } else {
+    throw 'Install the Power Platform CLI first (https://aka.ms/PowerPlatformCLI), then run this script again.'
+  }
+  if (-not (Test-Pac)) { throw 'pac was installed but is not available in this window yet. Open a new PowerShell window and run the script again.' }
+}
+
+Write-Host "Signing in to $EnvironmentUrl (a browser window opens)..."
+pac auth create --environment $EnvironmentUrl
+if ($LASTEXITCODE -ne 0) { throw 'Sign-in failed.' }
+pac env who
+
+if ($Check) {
+  pac solution check --path $solution --outputDirectory (Join-Path $PSScriptRoot 'check-results')
+}
+
+Write-Host 'Importing (this can take a while for a large model)...'
+pac solution import --path $solution --publish-changes --async --max-async-wait-time 120
+if ($LASTEXITCODE -ne 0) { throw 'The import failed. The messages above say why; nothing was changed.' }
+
+Write-Host ''
+Write-Host 'Imported. Next:'
+Write-Host '  1. Create the fields in calculated-and-rollup-fields.xlsx by hand (if that file is here).'
+Write-Host '  2. Check build-report.csv for anything marked "Not included".'
+Write-Host '  3. Run the Dataverse check in the Data Model Explorer against this environment.'
+`;
+}
+async function generateSolution(cfg){
+  const plan=buildPlan(cfg); if(!plan.newTables.length&&!plan.shells.length&&!plan.nn.length) return toast('Nothing to build: no tables or fields with the prefix "'+cfg.prefix+'_"');
+  const files=solutionFiles(plan), inner=new JSZip(); Object.entries(files).forEach(([n,t])=>inner.file(n,t));
+  const ver=cfg.version.replace(/\./g,'_'), innerName=cfg.solName+'_'+ver+'.zip';
+  const innerBytes=await inner.generateAsync({type:'uint8array',compression:'DEFLATE'});
+  const outer=new JSZip(); outer.file(innerName,innerBytes); outer.file('import.ps1',importScript(innerName,cfg));
+  outer.file('build-report.csv',csv([['Table','Item','What','Action','Detail']].concat(plan.report.map(r=>[r.tbl,r.item,r.what,r.action,r.why]))));
+  const mb=await manualWorkbook(); if(mb) outer.file('calculated-and-rollup-fields.xlsx',mb);
+  const notIn=plan.report.filter(r=>r.action==='Not included').length, hand=plan.report.filter(r=>r.action==='Build by hand').length;
+  outer.file('README.txt',[cfg.solDisplay+' ('+cfg.solName+' '+cfg.version+'), generated '+new Date().toLocaleString()+' from '+S.fileName,'',
+    'Contents','  '+innerName+'  the unmanaged solution to import','  import.ps1  signs in with pac and imports it (installs pac if needed)','  build-report.csv  everything included, not included, or to build by hand, and why',(mb?'  calculated-and-rollup-fields.xlsx  fields to create by hand after the import':''),'',
+    'What is in the solution','  '+plan.newTables.length+' new tables, '+plan.shells.length+' existing tables gaining fields, '+plan.fieldCount+' fields, '+plan.rels.length+' one-to-many and '+plan.nn.length+' many-to-many relationships.','  '+plan.counts.auto+' fields are created by Dataverse itself and are not listed. '+notIn+' items are not included and '+hand+' are to build by hand (see build-report.csv).','',
+    'Publisher: '+cfg.pubDisplay+' ('+cfg.pubName+'), prefix '+cfg.prefix+', choice value prefix '+cfg.optPrefix+'. If the environment already has this publisher, its unique name must match.','',
+    'To import:  .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com','Import into a development environment first. Then export the solution from there as managed for test and production.'].filter(l=>l!==undefined).join('\r\n'));
+  const out=await outer.generateAsync({type:'blob',compression:'DEFLATE'});
+  download(cfg.solName+'_'+ver+' build.zip',out);
+  toast('Solution built: '+plan.newTables.length+' new tables, '+plan.fieldCount+' fields, '+(plan.rels.length+plan.nn.length)+' relationships'+(notIn?' · '+notIn+' not included (see the report)':''));
+  return plan;
+}
+// the dialog: publisher and solution settings, a summary of what will be built, then Generate
+function solDialog(){
+  const c=solSettings(), m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Build a Dataverse solution');
+  const f=(k,label,hint)=>`<label class="solf"><span>${label}</span><input data-k="${k}" value="${esc(c[k])}"><small>${hint||''}</small></label>`;
+  m.innerHTML=`<div class="convbox solbox"><h3>Build a Dataverse solution</h3><p class="dim" style="margin:4px 0 12px">Creates an unmanaged solution with your new tables, the fields you add to existing tables, and their relationships, plus a PowerShell script that imports it with pac.</p>
+    <div class="solgrid">${f('solName','Solution unique name')}${f('solDisplay','Solution display name')}${f('version','Version','for example 1.0.0.0')}${f('pubName','Publisher unique name','must match the publisher if it already exists')}${f('pubDisplay','Publisher display name')}${f('prefix','Prefix','tables and fields starting with this are built')}${f('optPrefix','Choice value prefix','numbering for new choice options')}</div>
+    <div class="solsum" id="solsum"></div><div class="solerr" id="solerr"></div>
+    <div class="convbtns"><button class="btn" data-sol="cancel">Cancel</button> <button class="btn primary" data-sol="go">Generate</button></div></div>`;
+  document.body.appendChild(m);
+  const read=()=>{const o={}; m.querySelectorAll('[data-k]').forEach(i=>o[i.dataset.k]=i.value.trim()); o.prefix=o.prefix.toLowerCase(); return o};
+  const summary=()=>{const o=read(), errs=solValidate(o); m.querySelector('#solerr').innerHTML=errs.map(e=>`<div>${esc(e)}</div>`).join('');
+    if(errs.length){m.querySelector('#solsum').innerHTML='';return}
+    const p=buildPlan(o), n=a=>p.report.filter(r=>r.action===a), notIn=n('Not included'), hand=n('Build by hand');
+    m.querySelector('#solsum').innerHTML=`<b>Will be built</b><ul><li>${p.newTables.length} new table${p.newTables.length===1?'':'s'}</li><li>${p.shells.length} existing table${p.shells.length===1?'':'s'} gaining your fields</li><li>${p.fieldCount} field${p.fieldCount===1?'':'s'}, ${p.rels.length} one-to-many and ${p.nn.length} many-to-many relationship${p.nn.length===1?'':'s'}</li></ul>`+
+      (hand.length?`<div><b>${hand.length}</b> to build by hand (calculated and rollup fields), listed in the download.</div>`:'')+
+      (notIn.length?`<div style="color:var(--pink)"><b>${notIn.length} not included:</b> ${notIn.slice(0,4).map(r=>esc(r.tbl+' · '+r.item+': '+r.why)).join('; ')}${notIn.length>4?'; …':''}. Full list in build-report.csv.</div>`:'')};
+  let t; m.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(summary,250)}); summary();
+  const close=()=>{document.removeEventListener('keydown',key,true);m.remove()}, key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}};
+  document.addEventListener('keydown',key,true);
+  m.addEventListener('click',async e=>{const b=e.target.closest('[data-sol]'); if(!b){if(e.target===m)close();return}
+    if(b.dataset.sol==='cancel') return close();
+    const o=read(), errs=solValidate(o); if(errs.length){summary();return}
+    store.set(solKey(),o); b.disabled=true; b.textContent='Building…';
+    try{await generateSolution(o); close()}catch(err){console.error(err); b.disabled=false; b.textContent='Generate'; m.querySelector('#solerr').textContent='Could not build the solution: '+err.message}
+  });
+  m.querySelector('[data-k]').focus();
+}
 
 /* ---------- Mermaid ERD ---------- */
 const SYS_TABLES=new Set(['systemuser','team','businessunit','transactioncurrency','organization','owner','calendar','queue','equipment','role']);
@@ -2140,18 +2499,25 @@ function buildErd(){
       erdTargets(E,s,row).forEach(({tg,tsh})=>{
         const p=node(tg,tsh,tsh?tsh.label:tg);
         const k=p.id+'>'+mid(s.logical)+'>'+lbl; if(seenRel.has(k)) return; seenRel.add(k);
-        rels.push({p:p.id,c:mid(s.logical),lbl,req,unk:!relKnown(s,getVal(s,row,'Logical Name'),tg)});
+        rels.push({p:p.id,c:mid(s.logical),lbl,req,unk:!relKnown(s,row,tg)});
       });
     });
   });
+  const nnSeen=new Set();
+  sels.forEach(s=>s.rows.forEach(row=>{ // N:N rows recorded in the workbook
+    if(!isNNRow(s,row)) return; const nm=getVal(s,row,'Logical Name').trim(), tg=lookupTargetsOf(s,row)[0]; if(!nm||!tg||nnSeen.has(nm.toLowerCase())) return;
+    if(E.sys&&SYS_TABLES.has(tg)) return; const i=S.byLogical[tg], tsh=i!=null?S.sheets[i]:null;
+    if(tsh){if(!E.sel.has(tsh.idx)&&!E.stubs) return} else if(!(E.stubs&&E.ext)) return;
+    nnSeen.add(nm.toLowerCase()); const o=node(tg,tsh,tsh?tsh.label:tg); rels.push({p:mid(s.logical),c:o.id,lbl:mq(getVal(s,row,'Display Name')||nm),req:false,nn:true});
+  }));
   if(S.dv&&E.nn){ // N:N relationships are not in the workbook; they come from the imported Dataverse metadata
-    const seenNN=new Set();
+    const seenNN=nnSeen;
     sels.forEach(s=>{const de=S.dv.ents[s.logical]; if(!de) return;
       de.nn.forEach(r=>{
-        if(seenNN.has(r.schema)||(E.sys&&SYS_TABLES.has(r.other))) return;
+        if(seenNN.has(String(r.schema).toLowerCase())||(E.sys&&SYS_TABLES.has(r.other))) return;
         const i=S.byLogical[r.other], tsh=i!=null?S.sheets[i]:null;
         if(tsh){if(!E.sel.has(tsh.idx)&&!E.stubs) return} else if(!(E.stubs&&E.ext)) return;
-        seenNN.add(r.schema); const o=node(r.other,tsh,tsh?tsh.label:r.other);
+        seenNN.add(String(r.schema).toLowerCase()); const o=node(r.other,tsh,tsh?tsh.label:r.other);
         rels.push({p:mid(s.logical),c:o.id,lbl:mq(r.schema),req:false,nn:true});
       })});
   }
@@ -2726,6 +3092,7 @@ document.addEventListener('click',e=>{
     if(a.startsWith('go:')){go(a.slice(3));return}
     if(a==='open'){pickFile();return}
     if(a==='manual'){doExport('manual');return}
+    if(a==='solution'){solDialog();return}
     if(a==='versions'){renderVersions();return}
     if(a==='changes'){renderChanges();return}
     if(a==='dv'){renderDv();return}
@@ -3007,7 +3374,7 @@ async function convertMetadata(wb,prog){
   };
   const out=XLSX.utils.book_new(), dict=[[],['','','All table names to be validated with the client'],['','Area','Table Name','Out of the box/custom table?','Static Data?','Purpose','FormusPro Comments','Added to ERD?','Defined in data model?']];
   const sheets=[]; let nTabs=0, miss=[];
-  const AH=['Logical Name','Schema Name','Display Name','Attribute Type','Description','Custom Attribute','Type','Required Level','Additional data','Add to RAF Form?','Comment'];
+  const AH=['Logical Name','Schema Name','Display Name','Attribute Type','Description','Custom Attribute','Type','Required Level','Additional data','Add to RAF Form?','Comment','Relationship Type','Relationship Name','Cascade Delete'];
   let nAttr=0, done=0;
   for(const r of ents){
     if(done%6===0){prog&&prog({tables:done,total:ents.length,attrs:nAttr,name:String(r[col('Entity')])}); await new Promise(res=>setTimeout(res,0))}
@@ -3017,8 +3384,11 @@ async function convertMetadata(wb,prog){
     const tab=findTab(disp,sch,lg);
     let name=(disp+' ('+sch+')').replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31);
     while(sheets.some(s=>s.name.toLowerCase()===name.toLowerCase())) name=name.slice(0,28)+'~'+(sheets.length%100);
-    const rows=[['Entity',disp],['Plural Display Name',g('Plural Display Name')],['Description',g('Description')],['Schema Name',sch],['Logical Name',lg],['Object Type Code',g('Object Type Code')],['Is Custom Entity',g('Is Custom Entity')],['Ownership Type',g('Ownership Type')],['Audit Tracking',g('IsAuditEnabled')]];
-    rows.push([]); rows[9][10]='e.g. business logic or related automation'; rows.push(AH.slice());
+    const rows=[['Entity',disp],['Plural Display Name',g('Plural Display Name')],['Description',g('Description')],['Schema Name',sch],['Logical Name',lg],['Object Type Code',g('Object Type Code')],['Is Custom Entity',g('Is Custom Entity')],['Ownership Type',g('Ownership Type')],['Audit Tracking',g('IsAuditEnabled')],
+      // what a solution build needs, from the export's wider Entities list (blank when the export doesn't have them)
+      ['Primary Name Column',g('PrimaryNameAttribute')],['Primary Key',g('PrimaryIdAttribute')],['Is Activity',g('IsActivity')],['Has Notes',g('HasNotes')],['Has Activities',g('HasActivities')]];
+    const hint=[]; hint[10]='e.g. business logic or related automation'; hint[11]='N:1 on a lookup row; N:N on a many-to-many row'; hint[12]='Optional: generated if blank'; hint[13]='Remove Link (default), Restrict or Cascade';
+    rows.push(hint); rows.push(AH.slice());
     if(tab){
       nTabs++;
       const m=grid(tab), ah=m.findIndex(x=>String(x[0]).trim().toLowerCase()==='logical name'&&String(x[1]).trim().toLowerCase()==='schema name');
@@ -3026,12 +3396,12 @@ async function convertMetadata(wb,prog){
         const h=m[ah].map(c=>String(c).trim()), ix=k=>h.indexOf(k);
         m.slice(ah+1).forEach(x=>{ if(x.every(c=>String(c).trim()==='')) return;
           const v=k=>{const i=ix(k);return i<0?'':sv(x[i])};
-          nAttr++; rows.push([v('Logical Name'),v('Schema Name'),v('Display Name'),v('Attribute Type'),v('Description'),v('Custom Attribute'),v('Type'),v('Required Level'),v('Additional data'),'','']);
+          nAttr++; rows.push([v('Logical Name'),v('Schema Name'),v('Display Name'),v('Attribute Type'),v('Description'),v('Custom Attribute'),v('Type'),v('Required Level'),v('Additional data'),'','','','','']);   // relationship columns left blank: lookups stay "to review" until confirmed
         });
       }
     } else miss.push(disp);
     rows.push([],[],[],['Forms:'],['','Form Name','Formus Comments'],[],[],['Views:'],['','View Name','Columns','Filter']);
-    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:34},{wch:26},{wch:30},{wch:18},{wch:50},{wch:14},{wch:10},{wch:16},{wch:44},{wch:16},{wch:30}];
+    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:34},{wch:26},{wch:30},{wch:18},{wch:50},{wch:14},{wch:10},{wch:16},{wch:44},{wch:16},{wch:30},{wch:18},{wch:34},{wch:18}];
     sheets.push({name,ws});
   }
   prog&&prog({tables:done,total:ents.length,attrs:nAttr,name:'',final:true});

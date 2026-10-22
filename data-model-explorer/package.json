@@ -1,12 +1,12 @@
 {
   "name": "data-model-explorer",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "description": "Offline, single-file viewer and editor for Dataverse data-model workbooks",
   "scripts": {
     "build": "python3 build.py",
     "pretest": "npm run build",
-    "test": "node tests/smoke.js && node tests/roundtrip.js && node tests/checks.js && node tests/ui.js"
+    "test": "node tests/smoke.js && node tests/roundtrip.js && node tests/checks.js && node tests/ui.js && node tests/solution.js"
   },
   "dependencies": {
     "exceljs": "4.4.0",
