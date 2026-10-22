@@ -26,19 +26,30 @@ Double-click `Data_Model_Explorer.html` to open it in Chrome or Edge, then open 
 2. A workbook in the template layout opens straight away. A **Metadata Document Generator export** is converted to the template layout first; a progress window shows the tables and fields converted. The converted file keeps the export's name.
 3. The page opens on the **Overview**. Tables are listed in the sidebar, grouped by area when the Table Dictionary has areas.
 
+![Open workbook… in the header](images/01-open.png)
+
 **Browsers.** Chrome or Edge. Saving back to the original file uses a feature only those browsers have; everything else also works in other modern browsers.
 
 ## Switching between workbooks
 
 **Opening a second file.** When a workbook with edits is open, the page asks whether the new file is a **newer version of the same workbook** (your edits carry over and the differences are shown) or a **different workbook** (it gets its own, separate set of edits).
 
-**The workbook selector.** The button with the workbook's name in the header lists every workbook kept in this browser; pick one to switch. **Files** (or **Manage files…**) shows them all, and **Remove all…** clears them.
+**The workbook selector.** The button with the workbook's name in the header lists every workbook kept in this browser; pick one to switch. **Manage files…** in the same menu shows them all, and **Remove all…** there clears them.
+
+![The workbook selector](images/03-workbooks.png)
+
+**1** The workbook selector · **2** Manage files…
+
 
 **Where things are kept.** Open workbooks are stored in the browser (IndexedDB) and your edits, column choices and ERD layouts in local storage, for this browser profile only. They are not in the HTML file, so anyone you send the file to starts with just the empty template. The **Saved** label in the header confirms edits are stored; if the browser refuses to store them it says so.
 
 ## Loading a new version
 
 Click **Load version…** (or drop the new file on the page) and choose **newer version** when asked.
+
+![Carry your edits over?](images/13-loadversion.png)
+
+**1** Newer version: carry edits over · **2** Different workbook: a separate set of edits
 
 - **What changed** opens with every difference: tables and fields added or removed, values changed, columns added or removed, table details, forms and views, and lookup targets. **Version differences (CSV)** in the Export menu downloads them. Tables are matched by tab name, fields by Logical Name, so row order doesn't matter.
 - Your edits are re-applied. Where the new version changed a value you had edited, it is listed under **Needs your attention** in Changes: choose **Keep mine** or **Use new version**. An edit to a field the new version no longer has can be discarded there.
@@ -57,6 +68,10 @@ The Overview is the landing page: it sizes the model, shows how complete it is, 
 | Build a Dataverse solution | Opens the solution builder |
 | Latest changes | Your recent edits, or the differences from the previous version |
 | Dataverse check | Whether the workbook has been compared with a Dataverse environment, and a button to start |
+
+![The Overview](images/02-overview.png)
+
+**1** Count cards open their list · **2** Open all checks · **3** Build solution… · **4** Check against Dataverse…
 
 When the page reopens a workbook from last time, the Overview says which one, so you can switch if it is not the one you want.
 
@@ -87,6 +102,10 @@ Checks starting "Dataverse" appear only after you load Dataverse metadata (see C
 
 Use the **Errors**, **Warnings** and **Info** buttons (with their counts) to show or hide each severity, the **Area** filter to narrow the list, and the search box to find a table or field. **Export (CSV)** downloads the list.
 
+![The Checks page](images/04-checks.png)
+
+**1** Errors · **2** Warnings · **3** Info · **4** Export (CSV)
+
 ## The ERD
 
 The **ERD** draws the tables you pick, joined by their lookups and N:N relationships, so the diagram always matches the workbook.
@@ -95,6 +114,10 @@ The **ERD** draws the tables you pick, joined by their lookups and N:N relations
 2. Click ★ next to a table to make it a **core table**: the diagram is laid out around it, and with **Selecting a table also selects the tables it relates to** on, its neighbours come too.
 3. Choose what each box shows (**Names only**, **Keys + lookups** or **All fields**), the **Direction** (left to right or top to bottom), and when relationship names show.
 4. Drag tables to tidy the layout; **Auto layout** starts again. Layouts are remembered per selection.
+
+![The ERD](images/05-erd.png)
+
+**1** All tables · **2** Keys + lookups · **3** Export to draw.io
 
 **Reading the lines.** A line shows its ends (one or many) only where the relationship type is recorded in the workbook. A relationship whose type isn't recorded is drawn as a plain grey line and listed in Checks for review; N:N relationships are dashed. Custom tables have a pink border; standard tables and tables referenced but not in the workbook have a plain one.
 
@@ -113,12 +136,18 @@ Every table tab is a page: its details along the top, counts by field type, and 
 - **Columns ▾** shows or hides columns. Schema Name, Type and Relationship Name are hidden by default.
 - **Expand / Collapse all rows** switches between full text and two-line rows; the ▾ on a row does it for that row.
 
+![A table page](images/06-table.png)
+
+**1** Search · **2** ＋ Add field · **3** Columns ▾ · **4** Column filter · **5** ✎ Table details
+
 ## Editing values
 
 - **Double-click a cell** to edit it, or click a row to open its panel on the right and click a value there. `Enter` saves, `Esc` cancels, `Shift`+`Enter` starts a new line in long text.
 - Columns with a fixed set of values (Attribute Type, Required Level, Relationship Type, Cascade Delete and similar) edit as a **dropdown**; **＋ New value…** adds one.
 - Edited cells are highlighted. The row panel shows the original value with **revert**, and the **Changes** button lists every edit.
 - In the row panel, `j` and `k` (or ↑ ↓) move to the next and previous row.
+
+![Editing a cell: a dropdown for Required Level](images/07-edit.png)
 
 ## Adding fields and relationships
 
@@ -129,6 +158,10 @@ Every table tab is a page: its details along the top, counts by field type, and 
 3. Pick the **Field type**. For a **Lookup** or an **N:N**, pick the **Related table**; the page fills in `Targets:` and the Relationship Type (`N:1` or `N:N`).
 4. Click **Add**. The new row is tagged **ADDED** and opens on the right for everything else: choice options, length, format, cascade.
 
+![The Add field dialog](images/09-addfield.png)
+
+**1** A field or an N:N relationship · **2** Display name (the names follow it) · **3** Field type · **4** Add
+
 A name already in the table is refused. To remove an added row, click **Remove row** in its panel, or **remove** under **Rows added** in Changes. On other sheets, such as the Table Dictionary, **＋ Add row** adds a blank row.
 
 ## Primary key, primary name and table details
@@ -138,13 +171,25 @@ A name already in the table is refused. To remove an added row, click **Remove r
 - To change them, open a field and click **Set as primary key** or **Set as primary name**. The primary name must be single-line text.
 - **✎ Table details** in the header edits every detail row (ownership, notes, activities and the rest), including details the template has but the table lacks.
 
+![A field's panel](images/08-keys.png)
+
+**1** Set as primary key · **2** Set as primary name · **3** Click a value to edit it
+
 Dataverse primary keys are always unique identifiers (GUIDs) created with the table. Marking a text or number field as the key is flagged in Checks; to keep another field's values unique, use an alternate key in Dataverse.
 
 ## Reviewing and undoing your changes
 
 **Changes** in the header lists rows you added, table details you changed, and every cell edit as original against new, each with **go** and **revert**. **Revert all** undoes everything; **Export log (CSV)** downloads the list.
 
+![The Changes panel](images/10-changes.png)
+
+**1** Changes · **2** Remove an added row · **3** Revert one edit · **4** Revert all
+
 ## Saving and exporting
+
+![The Export menu](images/11-export.png)
+
+**1** Export ▾ · **2** Download an updated copy · **3** New version in template format · **4** Dataverse solution
 
 | Export menu item | What you get |
 | --- | --- |
@@ -159,13 +204,22 @@ The first two only rewrite the cells you changed; formatting, validations and ev
 
 Every workbook download asks for a file name first, suggesting the next version: `Model v1.2` becomes `Model v1.3`, `Model 1.4` becomes `Model 1.5`, and other names get `(updated)` or `(edited)`.
 
+![Naming the file](images/12-filename.png)
+
+**1** Type the name · **2** Download
+
 ## Updating the template
 
 The template sets which columns and table details every workbook has, the dropdown options, and the look of **New version in template format**. The page has the current FormusPro template built in; you can replace it with your own.
 
 ### Checking a workbook against the template
 
-Click **Template** in the header. The panel lists tables not in the template, extra columns the workbook has, and columns or details it is missing. A pink count on the button shows how many tables differ.
+![The More menu](images/14-more.png)
+
+**1** More ▾ · **2** Dataverse check · **3** Template
+
+
+Click **More ▾ → Template**. The panel lists tables not in the template, extra columns the workbook has, and columns or details it is missing. A pink count on the button shows how many tables differ.
 
 ### Bringing an older workbook up to date
 
@@ -177,10 +231,14 @@ Click **Template** in the header. The panel lists tables not in the template, ex
 
 ### Using your own template
 
-1. **Template → Download blank template** to start from the current one.
+1. **More ▾ → Template → Download blank template** to start from the current one.
 2. Change it in Excel and keep the layout: the Table Dictionary, and one example table tab with its detail rows, hint row and header row starting `Logical Name`, `Schema Name`.
 3. **Template → Use a different template…** and pick your file. The page remembers it in this browser; **Reset to bundled** goes back to the built-in one.
 4. Reopen the workbook (or reload the page) so it picks up the new columns.
+
+![The Template panel](images/15-template.png)
+
+**1** Download blank template · **2** Use a different template… · **3** Reset to bundled
 
 ### What you can change
 
@@ -198,11 +256,15 @@ A new column needs a code change only if the solution builder or a check should 
 
 The page can check the workbook against the real table definitions in a Dataverse environment: fields, types, required levels, relationships (with N:N and cascade settings) and alternate keys. It stays offline: you open the links yourself while signed in, save what they return, and load the files.
 
-1. Click **Check against Dataverse…** on the Overview.
+1. Click **Check against Dataverse…** on the Overview, or **More ▾ → Dataverse check**.
 2. Enter the **environment URL**, for example `https://yourorg.crm11.dynamics.com`. The page builds one link per 20 tables.
 3. Open each link in the browser where you are signed in to Dataverse, and save the page (`Ctrl`+`S`) as a `.json` file.
 4. Click **Choose JSON files…** (or drop them onto the page). You can load several, and add more later.
 5. Click **See the differences**: the Dataverse checks appear in **Checks**, and each table page shows what Dataverse has.
+
+![The Dataverse check panel](images/16-dataverse.png)
+
+**1** Environment URL · **2** Open each link · **3** Choose JSON files…
 
 If Dataverse rejects a link (usually a very long one), use the one-link-per-table list instead. The metadata is kept in the browser for this workbook; **Remove imported metadata** forgets it.
 
@@ -220,6 +282,10 @@ If Dataverse rejects a link (usually a very long one), use the one-link-per-tabl
 1. Fill in the dialog. The prefix and choice value prefix are suggested from the workbook.
 2. Read **Will be built**: new tables, existing tables gaining your fields, fields and relationships, plus what is to build by hand or not included and why.
 3. Click **Generate**. One zip downloads: `<SolutionName>_<version> build.zip`.
+
+![The Build a Dataverse solution dialog](images/17-solution.png)
+
+**1** Publisher unique name · **2** Prefix · **3** Choice value prefix · **4** Will be built · **5** Generate
 
 | Field | What to enter |
 | --- | --- |
@@ -277,7 +343,7 @@ If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1`
 
 | Problem or question | What to do |
 | --- | --- |
-| A table shows in the page that isn't in my workbook | You are looking at a different workbook kept in the browser: pick yours in the workbook selector, or **Files → Remove all…** |
+| A table shows in the page that isn't in my workbook | You are looking at a different workbook kept in the browser: pick yours in the workbook selector, or **Manage files… → Remove all…** |
 | My edits disappeared after opening a file | You opened it as a **different workbook**, which has its own edits. Switch back in the workbook selector |
 | Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a detail before the field list. Use **New version in template format**, or add empty rows in Excel and reload |
 | **Save back to the original file** is greyed out | Open the file with the Open workbook… or Load version… button (not by dragging it) in Chrome or Edge to link it, or use **Download an updated copy** |
@@ -294,7 +360,7 @@ If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1`
 
 ## Reference: the workbook layout
 
-The page reads workbooks in the FormusPro data-model template: one **Table Dictionary** sheet plus one tab per table. **Template → Download blank template** in the page gives you an empty copy.
+The page reads workbooks in the FormusPro data-model template: one **Table Dictionary** sheet plus one tab per table. **More ▾ → Template → Download blank template** gives you an empty copy.
 
 **Table Dictionary.** One row per table: Area, Table Name, Out of the box/custom table?, Static Data?, Purpose, FormusPro Comments, Added to ERD?, Defined in data model?. The **Area** groups tables in the sidebar, the filters and the ERD.
 
