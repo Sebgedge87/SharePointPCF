@@ -1,0 +1,13 @@
+{
+ "intro": "This is the Data Model Explorer. A single page that takes your data model, from a humble Excel workbook, all the way to a working Dataverse solution. Let us walk through it.",
+ "s1": "First, open your workbook. Click Open workbook, or simply drag the file onto the page. Nothing is installed, and nothing ever leaves your machine.",
+ "s2": "The Overview gives you the lie of the land. How many tables, fields and lookups there are, how well they are documented, and what needs your attention.",
+ "s3": "Checks examines every table and every field, searching for trouble. Missing primary names. Lookups that lead nowhere. Relationships that do not add up. And it keeps watch as you edit.",
+ "s4": "The diagram draws itself, from the lookups. Choose the tables you care about, and take the result with you, to draw dot io, as a picture, or as Mermaid.",
+ "s5": "Every table has a page of its own. The primary key and the primary name are marked for you. To change a value, simply double click it.",
+ "s6": "Adding a field is just as simple. Give it a name, and the logical and schema names follow, with your prefix. For a lookup, choose the table it points to, and the relationship is recorded for you.",
+ "s7": "Every change you make is kept, and listed here. Any of them can be undone. One at a time, or all at once.",
+ "s8": "When you are ready, write your changes back into the workbook. Only the cells you changed are touched, and the file is checked, before anything is saved.",
+ "s9": "Finally, build the solution. Enter your publisher, check what will be created, and generate. A single download holds the solution, and a script to import it.",
+ "outro": "Unzip it. Run the import script against a development environment. And your data model comes to life, in Dataverse. The full guide, with screenshots, is in the repository."
+}

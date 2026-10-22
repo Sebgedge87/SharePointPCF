@@ -1,0 +1,1 @@
+asetrate=24000*0.94,aresample=24000,atempo=1.0638,equalizer=f=140:t=q:w=1:g=3,acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250,loudnorm=I=-16:TP=-1.5

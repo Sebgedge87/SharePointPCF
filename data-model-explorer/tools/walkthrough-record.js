@@ -1,8 +1,9 @@
 // Records a captioned walkthrough of the Data Model Explorer on the import-test workbook.
-// node walkthrough.js <page.html> <workbook.xlsx> <workbook v2.xlsx> <outdir>
+// node walkthrough.js <page.html> <workbook.xlsx> <workbook v2.xlsx> <outdir> [durations.json]
+// With durations.json (narration length per segment), each step lasts at least as long as its narration.
 const B = process.env.NODE_MODULES; const fs = require('fs'), path = require('path');
 const { chromium } = require(B + '/playwright');
-const [page_, wbk, wbk2, out] = process.argv.slice(2); fs.mkdirSync(out, { recursive: true });
+const [page_, wbk, wbk2, out, durs_] = process.argv.slice(2); const DUR = durs_ ? JSON.parse(fs.readFileSync(durs_, 'utf8')) : {}; fs.mkdirSync(out, { recursive: true });
 const W = 1440, H = 860;
 
 // caption bar, title cards, a visible cursor and click ripples, added to the page for the recording only
@@ -48,8 +49,12 @@ const OVERLAY = `(() => {
   fs.rmSync(path.join(out, 'frames'), { recursive: true, force: true }); fs.mkdirSync(path.join(out, 'frames'));
   const mark = step => marks.push({ t: Date.now() / 1000, step });
   const wait = ms => p.waitForTimeout(ms);
+  // narration: a segment starts once the previous one has finished speaking (plus a short breath)
+  const segs = []; let segEnd = 0;
+  const untilDone = async (gap = 0) => { const ms = (segEnd + gap) * 1000 - Date.now(); if (ms > 0) await wait(ms); };
+  const seg = async key => { await untilDone(0.6); const t = Date.now() / 1000; segs.push({ key, t }); segEnd = t + (DUR[key] || 0); };
   let cx = W / 2, cy = H / 2;
-  const cap = (step, text, sub) => { mark(step ? +String(step).match(/\d+/)[0] : 0); return wait(10); };
+  const cap = async (step, text, sub) => { const n = step ? +String(step).match(/\d+/)[0] : 0; if (n) await seg('s' + n); mark(n); await wait(10); };
   const card = (h, t) => p.evaluate(([a, c]) => window.__card(a, c), [h, t]);
   const box = async sel => { const l = typeof sel === 'string' ? p.locator(sel).first() : sel; await l.scrollIntoViewIfNeeded().catch(() => {}); return l.boundingBox(); };
   const moveTo = async (sel, dx = 0.5, dy = 0.5) => { const bb = await box(sel); const x = bb.x + bb.width * dx, y = bb.y + bb.height * dy; await p.mouse.move(x, y, { steps: 28 }); cx = x; cy = y; await wait(250); return bb; };
@@ -61,7 +66,7 @@ const OVERLAY = `(() => {
   await p.goto('file://' + page_); await wait(1200);
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 88, maxWidth: W, maxHeight: H, everyNthFrame: 1 }); mark(0);
   await p.mouse.move(cx, cy);
-  await card('Data Model Explorer', 'A walkthrough: from the data-model workbook to a Dataverse solution, in one offline page.'); await wait(4200);
+  await card('Data Model Explorer', 'A walkthrough: from the data-model workbook to a Dataverse solution, in one offline page.'); await wait(800); await seg('intro'); await wait(4200); await untilDone(0.2);
   await card(''); await wait(700);
 
   // 1 open
@@ -126,12 +131,12 @@ const OVERLAY = `(() => {
   await type('.solbox [data-k="optPrefix"]', '75047'); await wait(500);
   await point('#solsum', 2200);
   const dl2 = p.waitForEvent('download'); await click('.solbox [data-sol="go"]', 1500); await dl2; await wait(800);
-  await cap('', '');
-  await card('Then import it', 'Unzip the download and run  .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com  against a development environment. The full user guide is in the repo under data-model-explorer/docs.'); await wait(6000);
+  await untilDone(0.3); await cap('', '');
+  await card('Then import it', 'Unzip the download and run  .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com  against a development environment. The full user guide is in the repo under data-model-explorer/docs.'); await wait(600); await seg('outro'); await wait(6000); await untilDone(1.5);
 
   mark(10); await wait(200);
   await cdp.send('Page.stopScreencast'); await wait(300);
-  fs.writeFileSync(path.join(out, 'timeline.json'), JSON.stringify({ end: Date.now() / 1000, frames, marks }));
+  fs.writeFileSync(path.join(out, 'timeline.json'), JSON.stringify({ end: Date.now() / 1000, frames, marks, segs }));
   console.log('frames', frames.length);
   await ctx.close();
   console.log('done', errs.length ? 'errors: ' + errs.join(' | ') : 'no page errors');

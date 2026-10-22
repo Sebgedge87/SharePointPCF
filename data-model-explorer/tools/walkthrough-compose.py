@@ -1,5 +1,5 @@
 # Lays each recorded frame into a 1920x1080 video frame: the step guide in a sidebar, the current step on top,
-# a tip underneath, and the page itself. python3 compose.py <outdir>  ->  <outdir>/walkthrough.mp4
+# a tip underneath, and the page itself. python3 compose.py <outdir> [voicedir]  ->  <outdir>/walkthrough.mp4 (+ walkthrough_narrated.mp4)
 import json, os, sys, subprocess
 from PIL import Image, ImageDraw, ImageFont
 
@@ -89,3 +89,16 @@ mp4 = os.path.join(out, 'walkthrough.mp4')
 subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', os.path.join(fd, 'list.txt'), '-vf', 'fps=30,format=yuv420p',
                 '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-movflags', '+faststart', mp4], check=True)
 print('video', mp4, len(frames), 'frames', len(cache), 'layouts')
+
+# narration: python3 compose.py <outdir> <voicedir>  ->  each <voicedir>/<key>.wav placed where the recording started that segment
+if len(sys.argv) > 2 and tl.get('segs'):
+    vd, t0, segs = sys.argv[2], frames[0]['t'], tl['segs']
+    cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-i', mp4]; fl = []
+    for i, sg in enumerate(segs, 1):
+        cmd += ['-i', os.path.join(vd, sg['key'] + '.wav')]; ms = max(0, round((sg['t'] - t0) * 1000))
+        fl.append(f"[{i}:a]adelay={ms}|{ms}[a{i}]")
+    fl.append(''.join(f'[a{i}]' for i in range(1, len(segs) + 1)) + f"amix=inputs={len(segs)}:normalize=0,apad[aud]")
+    nar = os.path.join(out, 'walkthrough_narrated.mp4')
+    subprocess.run(cmd + ['-filter_complex', ';'.join(fl), '-map', '0:v', '-map', '[aud]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-ar', '44100',
+                          '-shortest', '-movflags', '+faststart', nar], check=True)
+    print('narrated', nar, [(s['key'], round(s['t'] - t0, 1)) for s in segs])
