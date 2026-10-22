@@ -72,6 +72,16 @@ The generated files are checked with Microsoft's own packaging tool (`pac soluti
 solution files. A first import into a development environment is still the real test: if Dataverse rejects anything,
 the message from `import.ps1` says what.
 
+### Trying the import first
+
+`samples/Import_Test_Model.xlsx` is a small made-up model for checking the import end to end before using a real one:
+three custom tables (Test Project, Test Task, Test Resource, prefix `formus_`), each with its primary name column
+and primary key; lookups from Task to Project (Cascade) and to Resource (Remove Link), from Project to Account
+(Restrict); an N:N between Project and Resource; and one field of each common type, with choice values on the
+`75047` choice value prefix. Open it, build the solution with your publisher's unique name, import it into a
+development environment, then delete the solution and the three tables. `samples/make_import_test_model.py`
+rebuilds it from the template (`python3 samples/make_import_test_model.py assets/Data_Model_Template.xlsx samples/Import_Test_Model.xlsx`).
+
 ### Changing the code
 
 After changing the code, rebuild and replace this file (`npm run build`, then copy `dist/Data_Model_Explorer.html`
