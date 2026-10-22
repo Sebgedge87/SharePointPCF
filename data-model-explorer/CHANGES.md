@@ -1,3 +1,19 @@
+# 1.9.1
+
+Solution import fixes (the first real import failed: "Entity Display Collection Name ... not specified")
+- A table's plural name is written as `<LocalizedCollectionName>` (it was `<LocalizedName>`), which Dataverse needs to
+  create the table.
+- Compared element by element with solutions exported by Dataverse (Microsoft's CoE Starter Kit), and brought in line:
+  one-to-many relationships carry `CascadeArchive`; N:N relationships have no description and number their roles
+  (`AssociationRoleOrdinal` 1 and 2); table settings use the exported names and order (`CanModifyMobileClientOffline`,
+  `CanCreateAttributes/Forms/Charts/Views`, `IconVectorName`, `EntityHelpUrl`; no `MobileOfflineEnabled`);
+  `HasRelatedNotes` is written only when notes are on; multi-line text has no `Length` and uses format `text`;
+  multi-select choices have no `AppDefaultValue`; option sets carry `ExternalValue`/`IsHidden` on every option and
+  `ExternalTypeName` on Yes/No.
+- **Has Activities** is not a setting in the solution file: a table with it set is listed in the build report as a
+  step to do by hand after import (turn on Activities in the table's properties).
+- `tests/compare_xml.py` repeats the comparison against exported files.
+
 # 1.9.0
 
 - **Export → Import script (import.ps1)**, and **Import script only** in the solution dialog: the PowerShell import
