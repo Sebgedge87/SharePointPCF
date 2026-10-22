@@ -90,7 +90,7 @@ async function prefixed(src, file) {
   const csvVis = fs.readFileSync(await exportAs('csv'), 'utf8').replace(/^﻿/, '');
   const csvAll = fs.readFileSync(await exportAs('csv-all'), 'utf8').replace(/^﻿/, '');
   ok(XLSX.read(csvVis, { type: 'string' }).Sheets.Sheet1 && csvVis.split('\r\n')[0].split(',').length === visible, `CSV has the ${visible} visible columns`);
-  ok(csvAll.split('\r\n')[0].split(',').length === 9, 'CSV "all columns" has all 9 columns');
+  ok(csvAll.split('\r\n')[0].split(',').length === 14, 'CSV "all columns" has all 14 columns (9 in the workbook, 5 added from the template)');
   ok(csvVis.includes(`"'=HYPERLINK(""x"")"`), 'a value starting with = is written as text in CSV');
 
   // Download an updated copy: only the edited cells change, and the file reads back

@@ -15,7 +15,9 @@ Nothing to install, and it works offline. Nothing is uploaded anywhere.
 3. **Checks** lists problems in the model: missing or duplicated names, lookups to undocumented tables, missing primary
    name columns, relationship types to review. They update as you edit.
 4. **Tables** can be searched, filtered (also by area) and edited; edits are kept in your browser and can be written
-   back to the workbook or exported.
+   back to the workbook or exported. **＋ Add field** adds a field, lookup or N:N relationship to a table (names are
+   suggested with your prefix); **＋ Add row** adds a row to other sheets such as the Table Dictionary. Columns the
+   template has but your workbook lacks, such as Relationship Type, are added so you can fill them in.
 5. **ERD** draws the tables you pick, by area if the Table Dictionary has areas, and exports to draw.io, SVG, PNG or
    Mermaid. Lines only show relationship ends (one / many) when the relationship type is recorded.
 6. **Load version…** compares a newer version of the workbook with the one open, and carries your edits over.
@@ -87,7 +89,7 @@ SheetJS is installed from `cdn.sheetjs.com` (0.20.3). The npm registry only has 
 ## Test
 
 ```
-npm test        # builds first, then runs all five test files. Needs Playwright + Chromium (CHROMIUM=/path if needed)
+npm test        # builds first, then runs all six test files. Needs Playwright + Chromium (CHROMIUM=/path if needed)
 PAC=/path/to/pac npm test   # also checks the generated solution with Microsoft's SolutionPackager
 ```
 
@@ -102,12 +104,14 @@ PAC=/path/to/pac npm test   # also checks the generated solution with Microsoft'
 | `tests/checks.js` | Overview, every data-model check, Dataverse import (both JSON shapes, error files), Dataverse comparison, relationships on table pages, N:N in the ERD and draw.io |
 | `tests/ui.js` | Interface: area filters (ERD, Checks, All fields) and live Area edits, ERD defaults on a 90-table model, header and menus, keyboard access, field-type trimming, severity colours, phone layout |
 | `tests/solution.js` | Solution generator: dialog, every field type, relationships, shells for existing tables, the build report, import.ps1; with `PAC=/path/to/pac` also unpacks and re-packs the solution with Microsoft's SolutionPackager |
+| `tests/addrows.js` | Adding fields, lookups, N:N and dictionary rows; saving them into the original and the template export; refusing when there's no room; reload, carry to a newer version, removing; columns added from the template and written on save |
 | `tests/roundtrip.js` | Edit, export both ways and read back, reload, carry edits to a newer version, keep workbooks separate, structural comparison, refused partial save, CSV columns, small screens |
 
 ## Notes
 
 - Everything runs in the browser; nothing is uploaded. Open workbooks are kept in IndexedDB; edits, column choices and ERD layouts in localStorage, for the browser profile.
 - Edits are stored per project: one workbook plus the newer versions you choose to carry edits forward to (`dme.edits.v3:<project>`). Loading a new file while edits are open asks whether it is a newer version or a different workbook. Edits saved by 1.0 (`dme.edits.v2`) are moved to the workbook that was open, on first start.
+- Rows added in the page are stored with the edits (one record per row) and carried to newer versions. Saving back puts them in the empty rows after the field list, never inserting rows; it is refused if there is no room. Columns from the template that a sheet lacks are appended to the sheet (`tmplAdded`), and their header and hint are written with the first value saved in them.
 - Saving back to the original, or downloading an updated copy, is refused if any edit cannot be written; the file is read back and every edited cell checked before edits are cleared.
 - Adding to the template: any column added to the field header row (on the row that starts `Logical Name`, `Schema Name`) is read, shown, filterable, editable and exported; text in the row just above the header becomes the column's hint. Any label/value row above that hint row is read as a table detail. A column whose values are a short repeated set edits as a dropdown; a data-validation list in the template sets its options. Special display, checks or build behaviour for a new column needs a code change keyed on its header name.
 - Checks (`issues()` in the template) are recomputed whenever a value changes. Rules and severities are in `RULES`.

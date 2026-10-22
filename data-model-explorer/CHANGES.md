@@ -1,3 +1,26 @@
+# 1.7.0
+
+Adding rows
+- **＋ Add field** on a table page adds a field, a lookup or an N:N relationship to the end of its field list. The
+  dialog suggests the logical and schema names from the display name with your prefix, asks for the related table for
+  a lookup or N:N, fills in Targets and the Relationship Type (N:1 / N:N), and refuses a name already in the table.
+  The new row then opens in the detail panel for everything else. Other sheets (the Table Dictionary) get
+  **＋ Add row**, which adds a blank row.
+- Added rows are tagged ADDED, saved in the browser with your edits, checked, drawn in the ERD and included in the
+  Dataverse solution. They are listed under "Rows added" in Changes and can be removed there or from their panel;
+  Revert all removes them.
+- Saving back to the original (or downloading an updated copy) writes added rows into the empty rows after the field
+  list. Nothing is inserted or moved; if a Forms/Views section leaves too few empty rows, the save is refused and the
+  template export is suggested. The template export simply lists them after the existing fields.
+- Carried to a newer version like edits. If the newer version already has a field with the same logical name, you
+  choose whether to keep the new version's or add yours as well.
+
+Columns from the template
+- Columns the template has but a workbook lacks (for example Relationship Type, Relationship Name and Cascade Delete
+  in a workbook made before 1.6.0) are added to the page, marked "added", and listed in the Template panel. Their header
+  (and the template's hint) is written into the file with the first value saved in them, styled like the neighbouring
+  column. Unused added columns are not written.
+
 # 1.6.1
 
 - How it works: the introduction and the step overview now include building the model in Dataverse (step 5).

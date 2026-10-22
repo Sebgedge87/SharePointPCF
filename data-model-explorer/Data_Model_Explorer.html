@@ -242,7 +242,7 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 .solbox{width:min(760px,94vw);max-height:90vh;overflow:auto}
 .solgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
 .solf{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
-.solf input{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 9px;font-size:13.5px;color:var(--text)}
+.solf input,.solf select{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 9px;font-size:13.5px;color:var(--text);background:var(--bg,#fff)}
 .solf small{color:var(--faint);font-size:12px;min-height:14px}
 .solsum{margin-top:14px;padding:10px 12px;background:var(--panel2);border-radius:10px;font-size:13px}.solsum ul{margin:4px 0 6px;padding-left:18px}
 .solsum:empty{display:none} .solerr{color:#B42318;font-size:13px;margin-top:8px}
@@ -4220,7 +4220,18 @@ function parseWorkbook(wb){
       label:kind==='entity'?(mo['entity']||name):name,
       logical:(mo['logical name']||'').toLowerCase(),schema:mo['schema name']||'',
       custom:(mo['is custom entity']||'').toLowerCase()==='true',
-      area:'',colIdx:{},rowMap};
+      area:'',colIdx:{},rowMap,hi,fieldEnd:marks.length?fieldEnd:null};
+    // columns the template has but this sheet lacks are added (blank), so they can be filled in here.
+    // Their header is written into the file with the first value saved in them.
+    sh.tmplAdded=[];
+    const tc=T.entityCols&&T.entityCols.length?(kind==='entity'?T.entityCols:((T.byName[name.toLowerCase()]||{}).cols||[])):[];
+    if(tc.length){
+      const have=new Set(cols.map(c=>c.toLowerCase())); let nx=Math.max(...sh.pos)+1;
+      tc.forEach(c=>{if(have.has(c.toLowerCase())||/^Column \d+$/.test(c)) return; have.add(c.toLowerCase());
+        cols.push(c); sh.pos.push(nx++); rows.forEach(r=>{r.vals.push('');r.orig.push('')}); sh.tmplAdded.push(c);
+        const ts=kind==='entity'?T.sheets.find(t=>t.kind==='entity'&&t.hints[c]):T.byName[name.toLowerCase()];
+        if(ts&&ts.hints[c]&&!hints[c]) hints[c]=ts.hints[c]});
+    }
     cols.forEach((c,i)=>sh.colIdx[c]=i);
     sheets.push(sh);
   });
@@ -4282,13 +4293,26 @@ const EDIT_STORE_OLD='dme.edits.v2';
 const editKey=p=>'dme.edits.v3:'+(p||'bundled');
 const newProj=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function persist(){
-  const arr=[...S.edits.values()].map(e=>({s:e.sh.name,l:e.sh.logical,k:e.row.key,c:e.col,o:e.old,n:e.nw})).concat(S.pending.map(p=>p.rec));
+  // cells of rows added in the page are stored with the row itself, not as edits
+  const arr=[...S.edits.values()].filter(e=>!e.row.added).map(e=>({s:e.sh.name,l:e.sh.logical,k:e.row.key,c:e.col,o:e.old,n:e.nw}))
+    .concat(addedRows().map(({sh,row})=>({a:row.added,s:sh.name,l:sh.logical,v:rowObj(sh,row)})))
+    .concat(S.pending.map(p=>p.rec));
   saveState(store.set(editKey(S.proj),arr.length?arr:null));
 }
 function storedEdits(proj){return store.get(editKey(proj))||[]}
 function applyStored(){
   const arr=storedEdits(S.proj); S.pending=[]; let n=0;
+  const sheetOf=rec=>S.sheets.find(s=>s.name===rec.s)||(rec.l&&S.sheets.find(s=>s.kind==='entity'&&s.logical===rec.l));
+  // rows added in the page first, so edits never depend on them
   arr.forEach(rec=>{
+    if(!rec.a) return;
+    const sh=sheetOf(rec); if(!sh){S.pending.push({type:'orphan',rec});return}
+    const ln=String((rec.v||{})['Logical Name']||'').trim().toLowerCase();
+    if(ln&&sh.rows.some(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===ln)){S.pending.push({type:'exists',rec,sh});return}   // a newer version already has it
+    addRow(sh,rec.v,rec.a); n++;
+  });
+  arr.forEach(rec=>{
+    if(rec.a) return;
     const sh=S.sheets.find(s=>s.name===rec.s)||(rec.l&&S.sheets.find(s=>s.kind==='entity'&&s.logical===rec.l));
     const row=sh&&sh.rowMap[rec.k]; const ci=sh?sh.colIdx[rec.c]:undefined;
     if(!sh||!row||ci===undefined){S.pending.push({type:'orphan',rec});return}
@@ -4299,6 +4323,29 @@ function applyStored(){
   return n;
 }
 function getVal(sh,row,col){const i=sh.colIdx[col];return i===undefined?'':row.vals[i]}
+/* ---------- rows added in the page ---------- */
+// An added row starts blank (orig all ''), so each value is an ordinary edit: it shows as edited, is checked,
+// drawn and built like any other row, and is written by both exports. It is stored as one record per row.
+let addSeq=0;
+const rowObj=(sh,row)=>{const o={};sh.cols.forEach((c,i)=>{if(row.vals[i]!=='')o[c]=row.vals[i]});return o};
+const rowNo=row=>row.r==null?'new row':'row '+(row.r+1);
+function addRow(sh,vals,id){
+  id=id||(Date.now().toString(36)+(addSeq++).toString(36)+Math.random().toString(36).slice(2,5));
+  const row={vals:sh.cols.map(()=>''),orig:sh.cols.map(()=>''),r:null,key:'new:'+id,added:id};
+  sh.rows.push(row); sh.rowMap[row.key]=row;
+  Object.entries(vals||{}).forEach(([c,v])=>{if(v!=null&&v!=='')setVal(sh,row,c,String(v),true)});
+  rowsChanged(); return row;
+}
+function removeRow(sh,row){
+  const i=sh.rows.indexOf(row); if(i>=0) sh.rows.splice(i,1); delete sh.rowMap[row.key];
+  [...S.edits.entries()].forEach(([k,e])=>{if(e.row===row)S.edits.delete(k)});
+  if(S.selItem===row){S.selIt=null;S.selItem=null;$('#detail').classList.remove('open')}
+  rowsChanged();
+}
+function rowsChanged(){S.issues=null;S.adj=null;S.choiceCache={};S.allView=buildAll();relinkAreas()}
+function addedRows(){const o=[];(S.sheets||[]).forEach(sh=>sh.rows.forEach(row=>{if(row.added)o.push({sh,row})}));return o}
+// the number shown on the Changes button: edits, rows added, and edits waiting for a decision
+const changeTotal=()=>[...S.edits.values()].filter(e=>!e.row.added).length+addedRows().length+S.pending.length;
 function setVal(sh,row,col,val,silent){
   const i=sh.colIdx[col]; if(i===undefined) return;
   val=String(val).replace(/\r\n?/g,'\n');
@@ -4312,7 +4359,7 @@ function setVal(sh,row,col,val,silent){
 function isEdited(sh,row,col){return S.edits.has(ekey(sh,row,col))}
 function sheetEditCount(sh){let n=0;S.edits.forEach(e=>{if(e.sh===sh)n++});return n}
 function updateCounts(){
-  const n=S.edits.size+S.pending.length;
+  const n=changeTotal();
   $('#chgCount').textContent=n;
   $('#chgCount').style.display=n?'':'none';
   $('#chgCount').style.background=S.pending.length?'var(--pink)':'';
@@ -4324,6 +4371,7 @@ function updateCounts(){
 /* ---------- template ---------- */
 const T={name:'',b64:'',sheets:[],byName:{},entityCols:[]};
 function loadTemplate(b64,name){
+  T.entityCols=[]; T.byName={};   // the template is read as it is, without columns from the previous one
   const sheets=parseWorkbook(XLSX.read(b64ToU8(b64),{type:'array'}));
   T.name=name;T.b64=b64;T.sheets=sheets;T.byName={};
   sheets.forEach(s=>T.byName[s.name.toLowerCase()]=s);
@@ -4384,7 +4432,9 @@ function renderTemplate(){
   <p class="dim" style="margin-top:0">The template defines the layout and formatting used when you export. Any workbook with the same structure can be loaded. The template only needs the Table Dictionary and one example table. Every other table is laid out and styled like that example when exported. Extra columns are kept, and are formatted like the template.</p>
   <div class="stats" style="margin:0 0 12px">${[['tables in file',C.length],['not in template',newT.length],['with extra columns',extra.length],['missing columns',miss.length]].map(x=>`<div class="stat" style="cursor:default"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('')}</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><button class="btn primary" data-act="tmpl-dl">Download blank template</button><button class="btn" data-act="tmpl-use">Use a different template…</button><button class="btn" data-act="tmpl-reset">Reset to bundled</button></div>`;
-  if(!newT.length&&!extra.length&&!miss.length) h+='<div class="empty">This workbook matches the template exactly.</div>';
+  const addedC=C.filter(x=>x.sh.tmplAdded&&x.sh.tmplAdded.length);
+  if(addedC.length){const u=[...new Set(addedC.flatMap(x=>x.sh.tmplAdded))]; h+=`<div class="vline"><span class="pill p-blue">ADDED FROM THE TEMPLATE</span> ${u.map(c=>`<span class="tchip dead">${esc(c)}</span>`).join('')}<div class="dim">${addedC.length} table${addedC.length===1?' does':'s do'} not have ${u.length===1?'this column':'these columns'} in the workbook. ${u.length===1?'It is':'They are'} shown so you can fill ${u.length===1?'it':'them'} in, and added to the file when you save a value in ${u.length===1?'it':'them'}.</div></div>`}
+  if(!newT.length&&!extra.length&&!miss.length&&!addedC.length) h+='<div class="empty">This workbook matches the template exactly.</div>';
   newT.forEach(x=>h+=`<div class="vline"><span class="pill p-blue">NEW TABLE</span> <a href="#" data-vgo="${x.sh.idx}">${esc(x.sh.label)}</a><div class="dim">Not in the template. It will be formatted like the template's entity tables.</div></div>`);
   C.filter(x=>!x.isNew&&(x.extra.length||x.missing.length)||x.isNew&&x.extra.length).forEach(x=>{
     h+=`<div class="vline"><a href="#" data-vgo="${x.sh.idx}"><b>${esc(x.sh.label)}</b></a>`;
@@ -4822,6 +4872,7 @@ function renderMain(){
     <button class="btn ${st.quick.edited?'on':''}" data-quick="edited">✎ Edited only</button>
     ${S.diff?`<button class="btn ${st.quick.changed?'on':''}" data-quick="changed">Δ Changed in ${esc(S.diff.cl)}</button>`:''}
     ${view.kind==='all'&&hasAreas()?`<button class="btn ${st.areas&&st.areas.size?'on':''}" data-areabtn="all">Area: ${esc(areaLabel(st.areas))} ▾</button>`:''}
+    ${view.kind!=='all'?`<button class="btn" data-act="addrow" title="${sh.kind==='entity'?'Add a field or an N:N relationship to this table':'Add a row to this sheet'}">＋ ${sh.kind==='entity'?'Add field':'Add row'}</button>`:''}
     <button class="btn" data-act="cols">Columns ▾</button>
     <button class="btn" data-act="expall" title="Show full text in every row, or clamp rows to two lines">${S.ui.expanded===false?'⊞ Expand all rows':'⊟ Collapse all rows'}</button>
         <span class="grow"></span>
@@ -4856,7 +4907,7 @@ function renderGrid(append){
     const so=st.sort&&st.sort.col===c?(st.sort.dir>0?' ▲':' ▼'):'';
     const on=fcols.includes(c);
     const hint=(view.sh&&view.sh.hints[c])||'';
-    h+=`<th class="${i===0?'stickycol':''} ${hint?'hint':''}" ${hint?`title="${esc(hint)}"`:''}><div class="th"><span class="lbl" data-sort="${esc(c)}">${esc(c)}${so}${isExtraCol(view,c)?'<span class="xtag" title="Not in the template. It is kept, and formatted like the template header on export.">new</span>':''}</span><button class="fbtn ${on?'on':''}" data-filter="${esc(c)}" title="Filter">${ICON_FILTER}</button></div></th>`;
+    h+=`<th class="${i===0?'stickycol':''} ${hint?'hint':''}" ${hint?`title="${esc(hint)}"`:''}><div class="th"><span class="lbl" data-sort="${esc(c)}">${esc(c)}${so}${isExtraCol(view,c)?'<span class="xtag" title="Not in the template. It is kept, and formatted like the template header on export.">new</span>':''}${view.sh&&view.sh.tmplAdded&&view.sh.tmplAdded.includes(c)?'<span class="xtag" title="From the template: this workbook does not have this column yet. It is added to the file when you save a value in it.">added</span>':''}</span><button class="fbtn ${on?'on':''}" data-filter="${esc(c)}" title="Filter">${ICON_FILTER}</button></div></th>`;
   });
   h+='</tr></thead><tbody>';
   for(let i=0;i<upto;i++){
@@ -4868,7 +4919,7 @@ function renderGrid(append){
       const v=cellVal(view,it,c);
       const upd=c!=='Table'&&it.row.chg&&Object.prototype.hasOwnProperty.call(it.row.chg,c);
       const tog=ci===0?`<button class="rt" data-rt title="${open?'Collapse':'Expand'} this row">${open?'▾':'▸'}</button>`:'';
-      const newTag=tog+(ci===0&&it.row.isNew?'<span class="pill p-green" style="margin-right:6px">NEW</span>':'');
+      const newTag=tog+(ci===0&&it.row.added?'<span class="pill p-green" style="margin-right:6px" title="Added in this page. It is written to the workbook when you save or export.">ADDED</span>':ci===0&&it.row.isNew?'<span class="pill p-green" style="margin-right:6px">NEW</span>':'');
       h+=`<td class="${ci===0?'stickycol':''} ${isEditable(view,c)?'editable':''} ${edited?'edited':''} ${upd&&!edited?'upd':''}" data-col="${esc(c)}" ${upd?`title="Changed in ${esc(S.diff.cl)} — was: ${esc(it.row.chg[c]||'(blank)')}"`:''}><div class="cell">${newTag}${cellHTML(view,it,c,terms)}${ci===0&&isPnameRow(it.sh,it.row)?' <span class="pill p-blue" title="The primary name column of this table">Primary name</span>':''}${ci===0&&isNNRow(it.sh,it.row)?' <span class="pill p-violet" title="A many-to-many relationship, not a field">N:N</span>':''}</div></td>`;
     });
     h+='</tr>';
@@ -4944,7 +4995,7 @@ function renderDetail(){
   const idx=S.filtered.indexOf(it);
   const title=getVal(sh,row,'Display Name')||getVal(sh,row,'Table Name')||getVal(sh,row,sh.cols[0])||'Row';
   let h=`<header><div style="min-width:0;flex:1"><h3>${esc(title)}</h3><div class="mono dim">${esc(sh.label)}${idx>=0?` · ${idx+1} of ${S.filtered.length}`:''}</div></div>
-    <button class="btn" data-dnav="-1" title="Previous (k)">↑</button><button class="btn" data-dnav="1" title="Next (j)">↓</button><button class="btn ghost" data-dclose>✕</button></header><div class="body">`;
+    ${row.added?'<button class="btn danger" data-rmrow title="Remove this added row">Remove row</button>':''}<button class="btn" data-dnav="-1" title="Previous (k)">↑</button><button class="btn" data-dnav="1" title="Next (j)">↓</button><button class="btn ghost" data-dclose>✕</button></header><div class="body">`;
   sh.cols.forEach(c=>{
     const v=getVal(sh,row,c); const edited=isEdited(sh,row,c); const l=c.toLowerCase();
     let shown;
@@ -4983,23 +5034,116 @@ function editInDetail(box,col){
   });
 }
 
+/* ---------- adding rows ---------- */
+function dropAdded(sh,row,fromChanges){
+  const ln=getVal(sh,row,'Logical Name')||getVal(sh,row,'Table Name');
+  removeRow(sh,row); persist(); updateCounts(); applyAndRender();
+  if(fromChanges||$('#changes').classList.contains('open')) renderChanges();
+  toast((ln?'"'+ln+'"':'The row')+' was removed');
+}
+// after a row is added: show it, open it in the detail panel, and keep everything in step
+function showAdded(sh,row){
+  persist(); updateCounts(); go(sh.idx,{focusRow:row});
+  const it=S.filtered.find(x=>x.row===row); if(it) openDetail(it);
+}
+function addRowUI(sh){
+  if(sh.kind!=='entity'){const row=addRow(sh,{}); showAdded(sh,row); toast('Row added at the end. Fill it in on the right.'); return}
+  addFieldDialog(sh);
+}
+const FIELD_TYPES=['String','Memo','Integer','Decimal','Double','Money','DateTime','Boolean','Picklist','MultiSelectPicklist','Lookup','Customer'];
+// the publisher prefix for a new field: the table's own when it is a custom table, otherwise the workbook's usual one
+function fieldPrefix(sh){const m=/^([a-z][a-z0-9]{1,7})_/.exec(sh.logical||''); if(m&&sh.custom&&!/^(ms|adx)/.test(m[1])) return m[1]; return solDefaults().prefix}
+function addFieldDialog(sh){
+  const P=fieldPrefix(sh), strip=s=>String(s||'').toLowerCase().replace(/^[a-z0-9]{2,8}_/,'').replace(/[^a-z0-9]/g,'');
+  const has=c=>sh.colIdx[c]!==undefined;
+  const opts=(col,dflt)=>{const seen=new Set(), o=[]; choiceOptions(sh,col).map(x=>x.label).concat(dflt).forEach(v=>{const k=nk(v); if(v&&!seen.has(k)){seen.add(k);o.push(v)}}); return o};
+  const tables=S.sheets.filter(s=>s.kind==='entity'&&s.logical).map(s=>s.logical).sort();
+  const dl=(id,vals)=>`<datalist id="${id}">${vals.map(v=>`<option value="${esc(v)}"></option>`).join('')}</datalist>`;
+  const f=(k,label,input,hint)=>`<label class="solf" data-f="${k}"><span>${label}</span>${input}<small>${hint||''}</small></label>`;
+  const m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Add a field');
+  m.innerHTML=`<div class="convbox solbox"><h3>Add to ${esc(sh.label)}</h3><p class="dim" style="margin:4px 0 12px">The new row goes at the end of the field list. Everything else (choice options, length, format, cascade) can be filled in on the row afterwards.</p>
+    <div class="solgrid">
+      ${f('kind','Add',`<select data-k="kind"><option value="field">A field</option>${has('Relationship Type')?'<option value="nn">An N:N relationship</option>':''}</select>`,has('Relationship Type')?'':'N:N needs a Relationship Type column (in the current template)')}
+      ${f('Display Name','Display name',`<input data-k="Display Name" autocomplete="off">`)}
+      ${f('Logical Name','Logical name',`<input data-k="Logical Name" autocomplete="off" spellcheck="false">`,'lower case, with the prefix')}
+      ${has('Schema Name')?f('Schema Name','Schema name',`<input data-k="Schema Name" autocomplete="off" spellcheck="false">`):''}
+      ${has('Attribute Type')?f('Attribute Type','Field type',`<input data-k="Attribute Type" list="dme-at" autocomplete="off">`+dl('dme-at',opts('Attribute Type',FIELD_TYPES)),'pick one or type it'):''}
+      ${f('target','Related table',`<input data-k="target" list="dme-tb" autocomplete="off" spellcheck="false">`+dl('dme-tb',tables),'the table it points to (logical name)')}
+      ${has('Required Level')?f('Required Level','Required level',`<input data-k="Required Level" list="dme-rl" autocomplete="off">`+dl('dme-rl',opts('Required Level',['None','Recommended','ApplicationRequired']))):''}
+      ${has('Description')?f('Description','Description',`<input data-k="Description" autocomplete="off">`):''}
+    </div>
+    <div class="solerr" id="adderr"></div>
+    <div class="convbtns"><button class="btn" data-add="cancel">Cancel</button> <button class="btn primary" data-add="go">Add</button></div></div>`;
+  document.body.appendChild(m);
+  const q=k=>m.querySelector(`[data-k="${k}"]`), show=(k,on)=>{const x=m.querySelector(`[data-f="${k}"]`); if(x) x.style.display=on?'':'none'};
+  const touched=new Set();
+  const isNN=()=>q('kind').value==='nn', isLk=()=>!isNN()&&q('Attribute Type')&&isLookupType(q('Attribute Type').value);
+  // names follow the display name (or, for N:N, the two tables) until you type them yourself
+  const auto=()=>{
+    show('Attribute Type',!isNN()); show('Required Level',!isNN()); show('target',isNN()||isLk());
+    m.querySelector('[data-f="target"] small').textContent=isNN()?'the other table in the relationship':'the table the lookup points to';
+    const dn=q('Display Name').value.trim(), words=dn.replace(/[^A-Za-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);
+    let ln, sn;
+    if(isNN()){const tg=q('target').value.trim().toLowerCase(); ln=tg?P+'_'+strip(sh.logical)+'_'+strip(tg):''; sn=ln}
+    else {ln=words.length?P+'_'+words.join('').toLowerCase():''; sn=words.length?P+'_'+words.map(w=>w[0].toUpperCase()+w.slice(1)).join(''):''}
+    if(!touched.has('Logical Name')) q('Logical Name').value=ln;
+    if(q('Schema Name')&&!touched.has('Schema Name')) q('Schema Name').value=sn;
+  };
+  m.addEventListener('input',e=>{const k=e.target.dataset.k; if(k==='Logical Name'||k==='Schema Name') touched.add(k); auto()});
+  m.addEventListener('change',auto); auto();
+  const read=()=>{
+    const o={}; m.querySelectorAll('[data-k]').forEach(i=>o[i.dataset.k]=i.value.trim());
+    const err=[], ln=o['Logical Name'].toLowerCase(), tg=o.target.toLowerCase();
+    if(!ln) err.push('Give it a logical name.');
+    else if(!/^[a-z][a-z0-9_]*$/.test(ln)) err.push('Logical names are lower-case letters, digits and underscores, starting with a letter.');
+    else if(sh.rows.some(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===ln)) err.push('"'+ln+'" is already in this table.');
+    if((isNN()||isLk())&&!tg) err.push(isNN()?'Pick the other table.':'Pick the table the lookup points to.');
+    if(!isNN()&&!o['Display Name']) err.push('Give it a display name.');
+    m.querySelector('#adderr').innerHTML=err.map(x=>`<div>${esc(x)}</div>`).join('');
+    if(err.length) return null;
+    const v={'Logical Name':ln,'Schema Name':o['Schema Name']||'','Display Name':o['Display Name'],'Description':o.Description||''};
+    if(isNN()){v['Relationship Type']='N:N'; v['Additional data']='Targets: '+tg}
+    else {
+      v['Attribute Type']=o['Attribute Type']||''; v['Required Level']=o['Required Level']||'';
+      if(isLk()){v['Relationship Type']='N:1'; v['Additional data']='Targets: '+tg}
+      if(has('Custom Attribute')&&ln.startsWith(P+'_')) v['Custom Attribute']='True';
+    }
+    return v;
+  };
+  const close=()=>{document.removeEventListener('keydown',key,true);m.remove()};
+  const submit=()=>{const v=read(); if(!v) return; close(); const row=addRow(sh,v); showAdded(sh,row); toast('"'+v['Logical Name']+'" added to '+sh.label+'. Fill in the rest on the right.')};
+  const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}else if(e.key==='Enter'&&e.target.tagName!=='SELECT'){e.preventDefault();e.stopPropagation();submit()}};
+  document.addEventListener('keydown',key,true);
+  m.addEventListener('click',e=>{const b=e.target.closest('[data-add]'); if(!b){if(e.target===m)close();return} if(b.dataset.add==='cancel') close(); else submit()});
+  q('Display Name').focus();
+}
+
 /* ---------- change log ---------- */
 function renderChanges(){
   const d=$('#changes');
-  const list=[...S.edits.values()];
-  let h=`<header><h3>Changes (${list.length+S.pending.length})</h3><button class="btn" data-act="exp-log" ${list.length?'':'disabled'}>Export log (CSV)</button><button class="btn" data-act="revert-all" ${list.length?'':'disabled'}>Revert all</button><button class="btn ghost" data-cclose>✕</button></header><div class="body">`;
+  const list=[...S.edits.values()], adds=addedRows();
+  let h=`<header><h3>Changes (${changeTotal()})</h3><button class="btn" data-act="exp-log" ${list.length?'':'disabled'}>Export log (CSV)</button><button class="btn" data-act="revert-all" ${list.length||adds.length?'':'disabled'}>Revert all</button><button class="btn ghost" data-cclose>✕</button></header><div class="body">`;
   if(S.pending.length){
     h+=`<div class="vsec"><h4 style="color:var(--pink)">Needs your attention (${S.pending.length})</h4><div class="dim" style="margin-bottom:8px">These edits were made on an earlier version and could not be applied automatically.</div>`;
     S.pending.forEach((p,i)=>{
       const r=p.rec;
       if(p.type==='conflict') h+=`<div class="chg"><div class="w"><b>${esc(p.sh.label)}</b> · <span class="mono">${esc(r.k)}</span> · ${esc(r.c)} <span style="flex:1"></span><a href="#" data-pgo="${i}">go</a></div><div class="dim" style="margin-top:4px">The new version changed this value, and you had edited it.</div><div class="d"><div class="o">New version: ${p.up?esc(p.up):'<i>(blank)</i>'}</div><div class="nw">Your edit: ${r.n?esc(r.n):'<i>(cleared)</i>'}</div></div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn" data-papply="${i}">Keep mine</button><button class="btn" data-pdrop="${i}">Use new version</button></div></div>`;
+      else if(p.type==='exists') h+=`<div class="chg"><div class="w"><b>${esc(p.sh.label)}</b> · <span class="mono">${esc((r.v||{})['Logical Name']||'')}</span> · row you added</div><div class="dim" style="margin-top:4px">The new version already has a field with this logical name.</div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn" data-pdrop="${i}">Use the new version's</button><button class="btn" data-papply="${i}">Add mine as well</button></div></div>`;
+      else if(r.a) h+=`<div class="chg"><div class="w"><b>${esc(r.s)}</b> · <span class="mono">${esc((r.v||{})['Logical Name']||'')}</span> · row you added</div><div class="dim" style="margin-top:4px">This table is not in the new version.</div><div style="margin-top:6px"><button class="btn" data-pdrop="${i}">Discard</button></div></div>`;
       else h+=`<div class="chg"><div class="w"><b>${esc(r.s)}</b> · <span class="mono">${esc(r.k)}</span> · ${esc(r.c)}</div><div class="dim" style="margin-top:4px">This field or table is not in the new version.</div><div class="d"><div class="nw">Your edit: ${r.n?esc(r.n):'<i>(cleared)</i>'}</div></div><div style="margin-top:6px"><button class="btn" data-pdrop="${i}">Discard</button></div></div>`;
     });
     h+='</div>';
   }
-  if(!list.length&&!S.pending.length) h+='<div class="empty">No edits yet.<br>Double-click any cell to edit it, or open a row and click a value.<br>Edits are saved in this browser and survive a reload.</div>';
+  if(adds.length){
+    h+=`<div class="vsec"><h4>Rows added (${adds.length})</h4>`;
+    adds.forEach(({sh,row},i)=>{const ln=getVal(sh,row,'Logical Name')||getVal(sh,row,'Table Name')||getVal(sh,row,sh.cols[0])||'(blank row)', dn=getVal(sh,row,'Display Name');
+      h+=`<div class="chg"><div class="w"><b>${esc(sh.label)}</b> · <span class="mono">${esc(ln)}</span>${dn&&dn!==ln?' · '+esc(dn):''}${isNNRow(sh,row)?' · N:N':''} <span style="flex:1"></span><a href="#" data-ago="${i}">go</a><a href="#" data-arm="${i}">remove</a></div></div>`});
+    h+='</div>';
+  }
+  if(!list.length&&!adds.length&&!S.pending.length) h+='<div class="empty">No edits yet.<br>Double-click any cell to edit it, or open a row and click a value. Use ＋ Add field to add a row to a table.<br>Edits are saved in this browser and survive a reload.</div>';
   list.forEach((e,i)=>{
-    const key=getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||('row '+(e.row.r+1));
+    if(e.row.added) return;   // listed with its row above
+    const key=getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||rowNo(e.row);
     h+=`<div class="chg"><div class="w"><b>${esc(e.sh.label)}</b> · <span class="mono">${esc(key)}</span> · ${esc(e.col)} <span style="flex:1"></span><a href="#" data-cgo="${i}">go</a><a href="#" data-crev="${i}">revert</a></div><div class="d">${e.old?`<div class="o">${esc(e.old)}</div>`:''}<div class="nw">${e.nw?esc(e.nw):'<i>(cleared)</i>'}</div></div></div>`;
   });
   d.innerHTML=h+'</div>'; $('#versions').classList.remove('open'); $('#detail').classList.remove('open'); d.classList.add('open');
@@ -5117,7 +5261,7 @@ function download(name,blob){const a=document.createElement('a');a.href=URL.crea
 // prefix it with an apostrophe so it stays text
 const csvCell=v=>{v=String(v??'');if(/^[=+\-@\t\r]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
 const csv=rows=>'\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
-const editLabel=e=>getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||('row '+(e.row.r+1));
+const editLabel=e=>getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||rowNo(e.row);
 // the hand-build list: Summary, one block per table, and a flat filterable sheet
 async function exportManual(){
   const buf=await manualWorkbook(); if(!buf) return toast('There are no calculated or rollup fields of your own to list');
@@ -5173,11 +5317,34 @@ async function buildOriginal(){
     const id=s.getAttribute('r:id')||s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id'); let tg=relT[id]||''; tg=tg.replace(/^\/?(xl\/)?/,''); pathOf[s.getAttribute('name')]='xl/'+tg});
   // every edit ends up either placed (and checked below) or in `missed` with a reason. Callers refuse to save while anything is missed.
   const bySheet={}, missed=[], placed=[]; let n=0;
+  // rows added in the page go in the empty rows straight after the field list. Rows are never inserted, so nothing
+  // below (Forms, Views, validations) moves; if a section follows with too few empty rows, the save is refused.
+  const slot=new Map(), styleRow=new Map();
+  S.sheets.forEach(sh=>{
+    const add=sh.rows.filter(r=>r.added&&r.vals.some(v=>v!=='')); if(!add.length) return;
+    const real=sh.rows.filter(r=>!r.added&&r.r!=null).map(r=>r.r);
+    let next=Math.max(sh.hi==null?-1:sh.hi,...real)+1; const lim=sh.fieldEnd==null?Infinity:sh.fieldEnd;
+    add.forEach(r=>{if(next<lim){slot.set(r,next++);if(real.length)styleRow.set(r,Math.max(...real)+1+(sh.r0||0))}});
+  });
   S.edits.forEach(e=>{
     const sh=e.sh, ci=sh.colIdx[e.col];
     if(!pathOf[sh.name]||!zip.file(pathOf[sh.name])){missed.push({e,why:'the sheet was not found in the file'});return}
-    if(ci===undefined||e.row.r==null||!sh.pos){missed.push({e,why:'the cell position is unknown'});return}
-    (bySheet[sh.name]=bySheet[sh.name]||[]).push({e,row:e.row.r+1+(sh.r0||0),col:sh.pos[ci],v:e.nw});
+    const rr=e.row.added?slot.get(e.row):e.row.r;
+    if(e.row.added&&rr==null){missed.push({e,why:'there is no empty row for this new row above the Forms and Views section'});return}
+    if(ci===undefined||rr==null||!sh.pos){missed.push({e,why:'the cell position is unknown'});return}
+    (bySheet[sh.name]=bySheet[sh.name]||[]).push({e,row:rr+1+(sh.r0||0),col:sh.pos[ci],v:e.nw,sr:styleRow.get(e.row)});
+  });
+  // a column added from the template gets its header (and hint) written with the first value saved in it,
+  // styled like the sheet's last original column
+  Object.keys(bySheet).forEach(name=>{
+    const sh=S.sheets.find(x=>x.name===name); if(!sh||!sh.tmplAdded||!sh.tmplAdded.length) return;
+    const lastPos=sh.pos[sh.cols.length-sh.tmplAdded.length-1], list=bySheet[name];
+    const used=new Set(list.filter(ed=>sh.tmplAdded.includes(ed.e.col)).map(ed=>ed.e.col));
+    list.forEach(ed=>{if(sh.tmplAdded.includes(ed.e.col)){ed.sc=lastPos; if(!ed.sr) ed.sr=ed.row}});
+    used.forEach(c=>{const pos=sh.pos[sh.colIdx[c]], hrow={vals:[],orig:[],r:null,key:'header'};
+      list.push({e:{sh,row:hrow,col:c,nw:c},row:sh.hdrRow,col:pos,v:c,sr:sh.hdrRow,sc:lastPos});
+      if(sh.kind==='entity'&&sh.hints[c]&&sh.hdrRow>1) list.push({e:{sh,row:hrow,col:c,nw:sh.hints[c]},row:sh.hdrRow-1,col:pos,v:sh.hints[c],sr:sh.hdrRow-1,sc:lastPos});
+    });
   });
   const esc2=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/\r/g,'_x000D_');
   const colNum=a=>{let n=0;for(const ch of a.replace(/\d+/g,''))n=n*26+ch.charCodeAt(0)-64;return n};
@@ -5199,7 +5366,8 @@ async function buildOriginal(){
       const re=xml.indexOf('</row>',rs), body=xml.slice(rs+tag.length,re);
       const cellRe=new RegExp('<c\\b[^>]*?\\br="'+addr+'"[^>]*?(?:\\/>|>[\\s\\S]*?<\\/c>)');
       const cm=cellRe.exec(body); const old=cm?cm[0]:''; const sm=/\bs="(\d+)"/.exec(old.slice(0,old.indexOf('>')+1));
-      const sa=sm?' s="'+sm[1]+'"':''; const wasNum=old&&!/\bt="/.test(old.slice(0,old.indexOf('>')+1))&&/<v>/.test(old);
+      let sa=sm?' s="'+sm[1]+'"':'';
+      if(!sm&&ed.sr){const sAddr=XLSX.utils.encode_cell({r:ed.sr-1,c:(ed.sc||ed.col)-1}); const st=new RegExp('<c\\b[^>]*?\\br="'+sAddr+'"[^>]*?\\bs="(\\d+)"').exec(xml)||new RegExp('<c\\b[^>]*?\\bs="(\\d+)"[^>]*?\\br="'+sAddr+'"').exec(xml); if(st) sa=' s="'+st[1]+'"'}   /* a new cell borrows the look of a neighbouring one */ const wasNum=old&&!/\bt="/.test(old.slice(0,old.indexOf('>')+1))&&/<v>/.test(old);
       const v=ed.v; let nc;
       if(v==='') nc='<c r="'+addr+'"'+sa+'/>';
       else if(wasNum&&/^-?\d+(\.\d+)?$/.test(v.trim())) nc='<c r="'+addr+'"'+sa+'><v>'+v.trim()+'</v></c>';
@@ -5254,7 +5422,7 @@ async function saveToOriginal(){
     const rec=S.lib.find(x=>x.b64===old); if(rec){rec.b64=nb;rec.size=r.bytes.length;try{await idb.put(rec)}catch(e){}}
     try{await idb.put({id:'__cur',name:S.fileName,b64:nb,proj:S.proj})}catch(e){}
     // the saved edits are now part of the file. Edits still waiting for a decision (Needs your attention) are kept.
-    S.edits.clear(); persist(); S.curB64=nb;
+    S.edits.clear(); S.sheets.forEach(sh=>{sh.rows=sh.rows.filter(r=>!r.added)}); persist(); S.curB64=nb;
     init(XLSX.read(r.bytes,{type:'array'}),S.fileName,{});
     toast('Saved '+r.n+' edit'+(r.n===1?'':'s')+' to '+S.fileName);
   }catch(err){console.error(err);toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use "Download an updated copy" instead.')}
@@ -5317,14 +5485,15 @@ function doExport(kind){
   } else if(kind==='bundled'){
     dlg({title:'Go back to the bundled workbook?',body:'The loaded versions are forgotten. Your edits are kept.',ok:'Go back'}).then(ok=>{if(ok){store.set('dme.cur',null);store.set('dme.prev',null);Promise.all([idb.del('__cur'),idb.del('__prev')]).catch(()=>{}).then(()=>location.reload())}});
   } else if(kind==='reset'){
-    if(!S.edits.size&&!S.pending.length) return toast('Nothing to discard');
-    dlg({title:'Discard all edits?',body:'All '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+' will be reverted to the original values.',ok:'Discard edits',danger:true}).then(ok=>{if(ok)revertAll()});
+    if(!changeTotal()) return toast('Nothing to discard');
+    dlg({title:'Discard all edits?',body:'All '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+' will be reverted to the original values'+(addedRows().length?', and the '+addedRows().length+' row'+(addedRows().length===1?'':'s')+' you added removed':'')+'.',ok:'Discard edits',danger:true}).then(ok=>{if(ok)revertAll()});
   }
 }
 function revertAll(){
   S.issues=null;
   [...S.edits.values()].forEach(e=>{const i=e.sh.colIdx[e.col];e.row.vals[i]=e.row.orig[i]});
-  S.edits.clear(); S.pending=[]; persist(); updateCounts(); applyAndRender(); if($('#changes').classList.contains('open')) renderChanges(); if(S.selIt) renderDetail();
+  S.edits.clear(); S.pending=[];
+  addedRows().forEach(({sh,row})=>removeRow(sh,row)); persist(); updateCounts(); applyAndRender(); if($('#changes').classList.contains('open')) renderChanges(); if(S.selIt) renderDetail();
 }
 
 /* ---------- navigation ---------- */
@@ -5366,6 +5535,8 @@ function renderReadme(){
   <ul>
     <li><b>Double-click</b> any cell to edit it, or click a value in the row detail panel. <kbd>Enter</kbd> saves, <kbd>Esc</kbd> cancels, and <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a new line in long text.</li>
     <li>Columns that hold a fixed set of options (attribute type, required level, custom attribute and similar) edit as a <b>dropdown</b>. The options come from the template's validation lists plus any values found in the data, so a new value in a loaded workbook appears as an option automatically.</li>
+    <li><b>＋ Add field</b> (on a table) adds a field, a lookup or an N:N relationship at the end of the field list: give it a display name and type, and the logical and schema names are suggested with your prefix. A lookup or N:N asks for the related table, and is marked N:1 or N:N. The new row opens on the right to fill in the rest. On other sheets, such as the Table Dictionary, <b>＋ Add row</b> adds a blank row. Added rows are tagged <b>ADDED</b>, are checked, drawn and built like any other row, and can be removed from their panel or from Changes.</li>
+    <li>Columns the template has but the workbook lacks (for example Relationship Type in an older workbook) are <b>added</b> and marked, so you can fill them in. Their header is written into the file with the first value you save in them.</li>
     <li>Edited cells are highlighted. The original value is kept, so every edit can be reverted individually or all at once.</li>
     <li>The <b>Changes</b> panel lists every edit as original against new, with links to jump to the row, and exports the list as a CSV change log.</li>
     <li>Edits are <b>saved automatically in this browser</b>, so they survive closing the tab. Each edit is remembered against the table, the field's Logical Name and the column, along with the value it replaced. That is what makes the next section possible.</li>
@@ -5558,7 +5729,7 @@ function issues(){
     const seen={};
     sh.rows.forEach(row=>{
       const ln=getVal(sh,row,'Logical Name').trim(), at=getVal(sh,row,'Attribute Type');
-      if(!ln){add('field-no-ln',sh,row,getVal(sh,row,'Display Name')||('row '+(row.r+1)),'This field has no Logical Name.');return}
+      if(!ln){add('field-no-ln',sh,row,getVal(sh,row,'Display Name')||rowNo(row),'This field has no Logical Name.');return}
       // relationship columns
       const rt=relTypeOf(sh,row), rawRt=getVal(sh,row,'Relationship Type').trim();
       if(rt==='N:N'){ // a many-to-many row: not a field
@@ -6834,6 +7005,7 @@ document.addEventListener('click',e=>{
   if((n=t.closest('[data-act]'))){
     const a=n.dataset.act;
     if(a==='cols'){e.stopPropagation();colsMenu(n)}
+    else if(a==='addrow'){if(S.view&&S.view.sh) addRowUI(S.view.sh)}
     else if(a==='expall'){S.ui.expanded=S.ui.expanded===false;S.rowOv.clear();store.set('dme.ui',S.ui);renderMain()}
     else if(a==='navexp'){S.collapsed={};renderNav()}
     else if(a==='navcol'){(S.groups||[]).forEach(g=>S.collapsed[g]=true);renderNav()}
@@ -6846,17 +7018,20 @@ document.addEventListener('click',e=>{
     else if(a==='tmpl-dl'){const u=b64ToU8(T.b64);download(T.name,new Blob([u],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))}
     else if(a==='tmpl-use') $('#tfile').click();
     else if(a==='tmpl-reset'){store.set('dme.tmpl',null);loadTemplate(TEMPLATE_B64,TEMPLATE_NAME);conformance();updateCounts();applyAndRender();renderTemplate();toast('Using the bundled template')}
-    else if(a==='revert-all'){dlg({title:'Revert all edits?',body:'All '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+' will be reverted to the original values.',ok:'Revert',danger:true}).then(ok=>{if(ok)revertAll()})}
+    else if(a==='revert-all'){dlg({title:'Revert all edits?',body:'All '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+' will be reverted to the original values'+(addedRows().length?', and the '+addedRows().length+' row'+(addedRows().length===1?'':'s')+' you added removed':'')+'.',ok:'Revert',danger:true}).then(ok=>{if(ok)revertAll()})}
     return;
   }
   if(t.closest('[data-dclose]')){$('#detail').classList.remove('open');return}
+  if(t.closest('[data-rmrow]')&&S.selIt){const {sh,row}=S.selIt;dropAdded(sh,row);return}
+  if((n=t.closest('[data-arm]'))){e.preventDefault();const x=addedRows()[+n.dataset.arm];if(x)dropAdded(x.sh,x.row,true);return}
+  if((n=t.closest('[data-ago]'))){e.preventDefault();const x=addedRows()[+n.dataset.ago];if(x)go(x.sh.idx,{focusRow:x.row});return}
   if(t.closest('[data-cclose]')){$('#changes').classList.remove('open');return}
   if(t.closest('[data-tclose]')){$('#tmplpanel').classList.remove('open');return}
   if(t.closest('[data-vclose]')){$('#versions').classList.remove('open');return}
   if((n=t.closest('[data-vgo]'))){
     e.preventDefault(); const sh=S.sheets[+n.dataset.vgo]; const row=n.dataset.vrow?sh.rowMap[n.dataset.vrow]:null; go(sh.idx,{focusRow:row}); return;
   }
-  if((n=t.closest('[data-papply]'))){e.preventDefault();const i=+n.dataset.papply;const p=S.pending[i];if(p){S.pending.splice(i,1);setVal(p.sh,p.row,p.rec.c,p.rec.n);afterEdit();renderChanges()}return}
+  if((n=t.closest('[data-papply]'))){e.preventDefault();const i=+n.dataset.papply;const p=S.pending[i];if(p){S.pending.splice(i,1);if(p.type==='exists'){addRow(p.sh,p.rec.v,p.rec.a);persist();updateCounts();applyAndRender()}else{setVal(p.sh,p.row,p.rec.c,p.rec.n);afterEdit()}renderChanges()}return}
   if((n=t.closest('[data-pdrop]'))){e.preventDefault();S.pending.splice(+n.dataset.pdrop,1);persist();updateCounts();renderChanges();return}
   if((n=t.closest('[data-pgo]'))){e.preventDefault();const p=S.pending[+n.dataset.pgo];if(p)go(p.sh.idx,{focusRow:p.row});return}
   if((n=t.closest('[data-dnav]'))){
