@@ -1,18 +1,77 @@
 # Data Model Explorer
 
-Offline, single-file viewer and editor for Dataverse data-model workbooks (Table Dictionary plus one tab per table).
-Opens on an overview (size, documentation completeness, latest changes), runs data-model checks, compares the model with a Dataverse environment's metadata, and lets you view, filter, edit, compare versions, convert Metadata Document Generator exports, draw an ERD, export to Excel, Mermaid, SVG, PNG or draw.io.
+Offline, single-file tool for Dataverse data models kept as Excel workbooks (a Table Dictionary plus one tab per table).
+It reviews the model and builds it: open a workbook, check it, compare versions, draw the ERD, and generate a Dataverse
+solution that creates the tables, fields and relationships for you.
 
 ## Just want to use it?
 
 Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge.
-Nothing to install, and it works offline. Everything below is only for changing the code.
+Nothing to install, and it works offline. Nothing is uploaded anywhere.
 
-The ready-built file opens on the empty template; open your own workbook with **Open workbook…** or by dragging it
-onto the page. Nothing is uploaded anywhere. The browser remembers the workbooks you open, and the selector in the
-header switches between them. Those workbooks are kept in your browser only, not in the HTML file, so anyone you
-share the file with starts with just the empty template. **Manage files… → Remove all…** clears them. After changing the code, rebuild and replace this file
-(`npm run build`, then copy `dist/Data_Model_Explorer.html` here). Never commit a build made with `--workbook`, because it contains that workbook.
+1. **Open your workbook** with **Open workbook…** or by dragging it onto the page. A Metadata Document Generator export
+   is converted automatically, and keeps its own file name.
+2. **Overview** shows the size of the model, how complete the documentation is, and the latest changes.
+3. **Checks** lists problems in the model: missing or duplicated names, lookups to undocumented tables, missing primary
+   name columns, relationship types to review. They update as you edit.
+4. **Tables** can be searched, filtered (also by area) and edited; edits are kept in your browser and can be written
+   back to the workbook or exported.
+5. **ERD** draws the tables you pick, by area if the Table Dictionary has areas, and exports to draw.io, SVG, PNG or
+   Mermaid. Lines only show relationship ends (one / many) when the relationship type is recorded.
+6. **Load version…** compares a newer version of the workbook with the one open, and carries your edits over.
+
+The browser remembers the workbooks you open; the selector in the header switches between them. They are kept in your
+browser only, not in the HTML file, so anyone you share the file with starts with just the empty template.
+**Manage files… → Remove all…** clears them.
+
+### Building the model in Dataverse
+
+**Export → Dataverse solution (.zip)…** turns the workbook into an unmanaged solution, so nothing has to be created by
+hand in Power Apps.
+
+1. Set the solution name, version and publisher in the dialog. The prefix and choice value prefix are suggested from the
+   workbook; if the environment already has your publisher, use its exact unique name. The dialog shows what will be
+   built and what won't.
+2. **Generate** downloads one zip. Unzip it and run, in PowerShell:
+
+   ```powershell
+   .\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com          # add -Check to run the solution checker first
+   ```
+
+   The script installs the Power Platform CLI (pac) if it is missing, opens a browser window to sign in, and imports
+   the solution. Your account needs the System Customizer or System Administrator role. **Import into a development
+   environment first.**
+3. Read **build-report.csv**: everything included, left out (and why), or to build by hand.
+4. Create the fields in **calculated-and-rollup-fields.xlsx** by hand. Their formulas aren't in the workbook.
+5. Lay out forms and views in Power Apps, then export the solution as managed for test and production.
+
+What is built: every new table with your prefix (with its primary name column, primary key, ownership, notes and
+activities settings) and its fields; your new fields on existing tables such as Contact, included without changing
+anything else about them; a relationship for every lookup and customer lookup; and every N:N relationship.
+Field settings carry over: text length and format, number ranges and precision, currency precision, date format,
+Yes/No labels, choice options with their values, defaults, required level and field security.
+
+Not built (listed in the report instead): calculated and rollup fields, activity tables, lookups to several tables,
+image and file fields, and choice fields with no options.
+
+What the workbook needs, in the template from this folder:
+
+| Where | Row or column | What to put |
+|---|---|---|
+| Table details | **Primary Name Column**, **Primary Key** | The table's name field and key (filled in automatically from a Metadata Document Generator export) |
+| Table details | **Is Activity**, **Has Notes**, **Has Activities** | True / False |
+| Field list | **Relationship Type** | `N:1` on a lookup; `N:N` on a row that describes a many-to-many relationship, with the other table in Additional data as `Targets: other_table` |
+| Field list | **Relationship Name** | Optional; generated if blank |
+| Field list | **Cascade Delete** | Remove Link (default), Restrict or Cascade |
+
+The generated files are checked with Microsoft's own packaging tool (`pac solution unpack` / `pack`), so they are valid
+solution files. A first import into a development environment is still the real test: if Dataverse rejects anything,
+the message from `import.ps1` says what.
+
+### Changing the code
+
+After changing the code, rebuild and replace this file (`npm run build`, then copy `dist/Data_Model_Explorer.html`
+here). Never commit a build made with `--workbook`, because it contains that workbook.
 
 ## Build
 
@@ -28,7 +87,8 @@ SheetJS is installed from `cdn.sheetjs.com` (0.20.3). The npm registry only has 
 ## Test
 
 ```
-npm test        # builds first, then runs both tests. Needs Playwright + Chromium (CHROMIUM=/path if needed)
+npm test        # builds first, then runs all five test files. Needs Playwright + Chromium (CHROMIUM=/path if needed)
+PAC=/path/to/pac npm test   # also checks the generated solution with Microsoft's SolutionPackager
 ```
 
 ## Layout
