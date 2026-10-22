@@ -1619,13 +1619,14 @@ function renderReadme(){
   const sec=(n,title,body)=>`<h2><span class="n">${n}</span>${title}</h2>${body}`;
   main.innerHTML=`<div class="readme">
   <h1>How it works</h1>
-  <p class="lead">This page turns a multi-tab Excel data model document into something you can search, filter, review and edit, and then writes it back out in the same layout and formatting as the original. Everything runs inside this one file in your browser. Nothing is uploaded anywhere.</p>
+  <p class="lead">This page turns a multi-tab Excel data model document into something you can search, filter, check and edit, writes it back out in the same layout, and builds it in Dataverse as a solution, so tables, fields and relationships don't have to be created by hand. Everything runs inside this one file in your browser. Nothing is uploaded anywhere.</p>
 
   <div class="flow">
     <div class="step"><b>1. Read</b>Workbook is parsed tab by tab. Layout is detected, not hard-coded.</div><div class="arrow">→</div>
     <div class="step"><b>2. Review</b>Search, filter, expand, and edit cells or comments.</div><div class="arrow">→</div>
     <div class="step"><b>3. Update</b>Load a newer version. Differences are shown and your edits carry over.</div><div class="arrow">→</div>
-    <div class="step"><b>4. Export</b>Data is written into the template, so formatting matches.</div>
+    <div class="step"><b>4. Export</b>Data is written into the template, so formatting matches.</div><div class="arrow">→</div>
+    <div class="step"><b>5. Build</b>Export → Dataverse solution creates the tables, fields and relationships, imported with one script.</div>
   </div>
 
   ${sec(1,'Reading the workbook',`

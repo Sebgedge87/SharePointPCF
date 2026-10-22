@@ -1,3 +1,8 @@
+# 1.6.1
+
+- How it works: the introduction and the step overview now include building the model in Dataverse (step 5).
+- README: a step-by-step guide to using the page and building a solution, and the template rows and columns it needs.
+
 # 1.6.0
 
 Build a Dataverse solution
