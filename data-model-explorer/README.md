@@ -6,7 +6,7 @@ solution that creates the tables, fields and relationships for you.
 
 ## Just want to use it?
 
-The full user guide is in [`docs/User_Guide.md`](docs/User_Guide.md) (also as Word: `docs/User_Guide.docx`).
+The full user guide, with marked screenshots, is in [`docs/User_Guide.md`](docs/User_Guide.md) (also as Word: `docs/User_Guide.docx`). A 13-slide overview deck is in `docs/Data_Model_Explorer_Overview.pptx`.
 
 Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge.
 Nothing to install, and it works offline. Nothing is uploaded anywhere.
