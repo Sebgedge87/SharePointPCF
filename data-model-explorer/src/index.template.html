@@ -396,7 +396,7 @@ const ICON_FILTER='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" s
 
 /* ---------- state ---------- */
 const S={fileName:'',sheets:[],byLogical:{},views:{},cur:null,edits:new Map(),metaEd:new Map(),pending:[],diff:null,rowOv:new Map(),ui:{density:'normal',hidden:{}},sideFilter:'',storeKey:'',collapsed:{}};
-const HIDE_DEFAULT=['Schema Name','Type','Object Type Code'];
+const HIDE_DEFAULT=['Schema Name','Type','Object Type Code','Relationship Name'];   // Relationship Name: optional, the solution generator names relationships when it is blank
 const WIDTHS={'Logical Name':240,'Schema Name':200,'Display Name':190,'Attribute Type':150,'Description':300,'Custom Attribute':100,'Type':84,'Required Level':175,'Additional data':290,'Add to RAF Form?':190,'Comment':280,'Field Level Security':110,
  'Table':190,'Area':130,'Table Name':170,'Out of the box/custom table?':130,'Static Data?':90,'Purpose':360,'FormusPro Comments':300,'Added to ERD?':90,'Defined in data model?':110};
 const ENUM_COLS=new Set(['custom attribute','required level','attribute type','type']);
@@ -3520,6 +3520,8 @@ function init(wb,name,opts){
   conformance();
   const restored=applyStored(); relinkAreas();
   S.ui=Object.assign(S.ui,store.get('dme.ui')||{}); if(!S.ui.hidden)S.ui.hidden={};
+  // 1.8.1: Relationship Name is hidden by default, also for tables whose column choices were saved earlier
+  if(!S.ui.relNameHidden){Object.values(S.ui.hidden).forEach(a=>{if(Array.isArray(a)&&!a.includes('Relationship Name'))a.push('Relationship Name')});S.ui.relNameHidden=true;store.set('dme.ui',S.ui)}
   $('#btnOpen').textContent=isStarter()?'Open workbook…':'Load version…'; wbLabel();
   $('#fileLabel').textContent=(isStarter()?'No workbook open · starter template':name+' · '+S.sheets.length+' sheets')+(S.diff?' · vs '+S.diff.pl:'')+(S.handle?' · linked to file':'');
   document.title='Data Model Explorer';

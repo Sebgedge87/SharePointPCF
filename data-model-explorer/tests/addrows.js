@@ -162,7 +162,8 @@ function model(file, extra = [], old = false, gap = false) {
   // an older workbook without the relationship columns: they are added from the template, and written with the first value
   await load(model('add_old.xlsx', [], true)); await openTab('Case');
   const heads = await p.$$eval('#gridwrap thead th', e => e.map(x => x.innerText));
-  ok(['Relationship Type', 'Relationship Name', 'Cascade Delete', 'Comment'].every(c => heads.some(h => h.startsWith(c) && /added/i.test(h))), 'columns the template has but the workbook lacks are added, and marked');
+  ok(!heads.some(h => h.startsWith('Relationship Name')), 'Relationship Name is hidden by default (it is optional)');
+  ok(['Relationship Type', 'Cascade Delete', 'Comment'].every(c => heads.some(h => h.startsWith(c) && /added/i.test(h))), 'columns the template has but the workbook lacks are added, and marked');
   await row('customerid').locator('td[data-col="Relationship Type"]').dblclick();
   await p.selectOption('#gridwrap td[data-col="Relationship Type"] select', 'N:1'); await p.waitForTimeout(200);
   await addField({ kind: 'nn', target: 'account' });

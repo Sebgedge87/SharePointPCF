@@ -1,3 +1,9 @@
+# 1.8.1
+
+- The Relationship Name column is hidden by default, also where column choices were saved before: it is optional, as
+  the solution generator names each relationship when it is blank. Columns ▾ shows it again; a name typed there is
+  still used.
+
 # 1.8.0
 
 Primary key and table details

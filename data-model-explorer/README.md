@@ -65,7 +65,7 @@ What the workbook needs, in the template from this folder:
 | Table details | **Primary Name Column**, **Primary Key** | The table's name field and key (filled in automatically from a Metadata Document Generator export) |
 | Table details | **Is Activity**, **Has Notes**, **Has Activities** | True / False |
 | Field list | **Relationship Type** | `N:1` on a lookup; `N:N` on a row that describes a many-to-many relationship, with the other table in Additional data as `Targets: other_table` |
-| Field list | **Relationship Name** | Optional; generated if blank |
+| Field list | **Relationship Name** | Optional; generated if blank. Hidden in the page by default (Columns ▾ shows it) |
 | Field list | **Cascade Delete** | Remove Link (default), Restrict or Cascade |
 
 The generated files are checked with Microsoft's own packaging tool (`pac solution unpack` / `pack`), so they are valid
