@@ -45,7 +45,8 @@ async function prefixed(src, file) {
   const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
   const count = async () => { const t = await p.$eval('#chgCount', e => e.style.display === 'none' ? '0' : e.textContent); return +t; };
   const download = async (act) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }), act()]); return d.path(); };
-  const exportAs = x => download(async () => { await p.click('#btnExport'); await p.click(`.menu [data-x="${x}"]`); });
+  // workbook downloads ask for a file name first: keep the suggested one
+  const exportAs = x => download(async () => { await p.click('#btnExport'); await p.click(`.menu [data-x="${x}"]`); if (/^xlsx/.test(x)) { await p.waitForSelector('.namebox'); await p.click('.namebox [data-n="1"]'); } });
   const load = async (f, answer) => {   // answer: 'carry' | 'separate' | undefined (no question expected)
     await p.setInputFiles('#file', f);
     if (answer) { await p.waitForSelector('.dlgbox'); await p.click(answer === 'carry' ? '.dlgbox [data-d="1"]' : '.dlgbox [data-d="0"]'); }

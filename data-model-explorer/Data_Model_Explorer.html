@@ -84,7 +84,8 @@ tr.rcol .cell{max-height:3em;overflow:hidden;position:relative}
 .vhead .note{margin-top:8px;padding:6px 10px;border-left:3px solid var(--pink);background:var(--violet-bg);color:var(--edit);border-radius:0 6px 6px 0;font-size:12.5px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;font-size:11.5px;background:var(--slate-bg);color:var(--muted)}
-.chip.custom{background:var(--violet-bg);color:var(--violet)} .chip.ootb{background:var(--blue-bg);color:var(--blue)}
+.keybar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
+.chip.custom{background:var(--violet-bg);color:var(--violet)} .chip.pkchip{background:#FEF3D7;color:#7A5200} .chip.warnchip{background:#fff;color:var(--pink);box-shadow:inset 0 0 0 1px var(--pink)} .p-pk{background:#FEF3D7;color:#7A5200;font-weight:600} .chip.ootb{background:var(--blue-bg);color:var(--blue)}
 .stats{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
 .stat{border:1px solid var(--line);border-radius:14px;padding:6px 12px;background:var(--panel);min-width:96px;cursor:pointer;text-align:left}
 .stat:hover{border-color:var(--accent)} .stat.on{border-color:var(--accent);background:var(--accent-bg)}
@@ -4108,7 +4109,7 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 const ICON_FILTER='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
 
 /* ---------- state ---------- */
-const S={fileName:'',sheets:[],byLogical:{},views:{},cur:null,edits:new Map(),pending:[],diff:null,rowOv:new Map(),ui:{density:'normal',hidden:{}},sideFilter:'',storeKey:'',collapsed:{}};
+const S={fileName:'',sheets:[],byLogical:{},views:{},cur:null,edits:new Map(),metaEd:new Map(),pending:[],diff:null,rowOv:new Map(),ui:{density:'normal',hidden:{}},sideFilter:'',storeKey:'',collapsed:{}};
 const HIDE_DEFAULT=['Schema Name','Type','Object Type Code'];
 const WIDTHS={'Logical Name':240,'Schema Name':200,'Display Name':190,'Attribute Type':150,'Description':300,'Custom Attribute':100,'Type':84,'Required Level':175,'Additional data':290,'Add to RAF Form?':190,'Comment':280,'Field Level Security':110,
  'Table':190,'Area':130,'Table Name':170,'Out of the box/custom table?':130,'Static Data?':90,'Purpose':360,'FormusPro Comments':300,'Added to ERD?':90,'Defined in data model?':110};
@@ -4201,13 +4202,13 @@ function parseWorkbook(wb){
       subs.push(sub);
     });
     // meta + hints + notes
-    const meta=[],hints={},notes=[],noteCells=[];
+    const meta=[],hints={},notes=[],noteCells=[],metaR={},metaFree=[];
     for(let r=0;r<hi;r++){
-      const cells=m[r].map(clean);
+      const cells=(m[r]||[]).map(clean);
       const nz=cells.map((v,i)=>[v,i]).filter(x=>x[0]!=='');
-      if(!nz.length) continue;
+      if(!nz.length){if(r<hi-1) metaFree.push(r+1+r0); continue;}
       if(kind==='entity'){
-        if(nz.length>=1&&cells[0]!==''&&nz.length<=2&&r<hi-1){meta.push([cells[0],cells[1]||'']);continue;}   // every label/value row above the hint row is a table detail, however many there are
+        if(nz.length>=1&&cells[0]!==''&&nz.length<=2&&r<hi-1){meta.push([cells[0],cells[1]||'']);metaR[cells[0].toLowerCase()]=r+1+r0;continue;}   // every label/value row above the hint row is a table detail, however many there are
         // hint row: text sitting above header columns
         nz.forEach(([v,ci])=>{const k=colIdx.indexOf(ci);if(k>=0)hints[cols[k]]=v;});
       } else {
@@ -4220,7 +4221,9 @@ function parseWorkbook(wb){
       label:kind==='entity'?(mo['entity']||name):name,
       logical:(mo['logical name']||'').toLowerCase(),schema:mo['schema name']||'',
       custom:(mo['is custom entity']||'').toLowerCase()==='true',
-      area:'',colIdx:{},rowMap,hi,fieldEnd:marks.length?fieldEnd:null};
+      area:'',colIdx:{},rowMap,hi,fieldEnd:marks.length?fieldEnd:null,c0,metaR,metaFree,metaOrig:Object.assign({},mo),metaAdded:[]};
+    // table details the template has but this table lacks are added blank, so they can be filled in here
+    if(kind==='entity'&&T.entityMeta&&T.entityMeta.length) T.entityMeta.forEach(k=>{if(mo[k.toLowerCase()]===undefined){meta.push([k,'']);mo[k.toLowerCase()]='';sh.metaAdded.push(k)}});
     // columns the template has but this sheet lacks are added (blank), so they can be filled in here.
     // Their header is written into the file with the first value saved in them.
     sh.tmplAdded=[];
@@ -4296,6 +4299,7 @@ function persist(){
   // cells of rows added in the page are stored with the row itself, not as edits
   const arr=[...S.edits.values()].filter(e=>!e.row.added).map(e=>({s:e.sh.name,l:e.sh.logical,k:e.row.key,c:e.col,o:e.old,n:e.nw}))
     .concat(addedRows().map(({sh,row})=>({a:row.added,s:sh.name,l:sh.logical,v:rowObj(sh,row)})))
+    .concat([...S.metaEd.values()].map(e=>({d:1,s:e.sh.name,l:e.sh.logical,k:e.k,o:e.old,n:e.nw})))
     .concat(S.pending.map(p=>p.rec));
   saveState(store.set(editKey(S.proj),arr.length?arr:null));
 }
@@ -4311,8 +4315,16 @@ function applyStored(){
     if(ln&&sh.rows.some(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===ln)){S.pending.push({type:'exists',rec,sh});return}   // a newer version already has it
     addRow(sh,rec.v,rec.a); n++;
   });
+  // changed table details
   arr.forEach(rec=>{
-    if(rec.a) return;
+    if(!rec.d) return;
+    const sh=sheetOf(rec); if(!sh){S.pending.push({type:'orphan',rec});return}
+    const cur=sh.metaOrig[String(rec.k).toLowerCase()]==null?'':sh.metaOrig[String(rec.k).toLowerCase()];
+    if(cur===rec.o){setMeta(sh,rec.k,rec.n,true);n++}
+    else if(cur!==rec.n) S.pending.push({type:'mconflict',rec,sh,up:cur});
+  });
+  arr.forEach(rec=>{
+    if(rec.a||rec.d) return;
     const sh=S.sheets.find(s=>s.name===rec.s)||(rec.l&&S.sheets.find(s=>s.kind==='entity'&&s.logical===rec.l));
     const row=sh&&sh.rowMap[rec.k]; const ci=sh?sh.colIdx[rec.c]:undefined;
     if(!sh||!row||ci===undefined){S.pending.push({type:'orphan',rec});return}
@@ -4344,8 +4356,23 @@ function removeRow(sh,row){
 }
 function rowsChanged(){S.issues=null;S.adj=null;S.choiceCache={};S.allView=buildAll();relinkAreas()}
 function addedRows(){const o=[];(S.sheets||[]).forEach(sh=>sh.rows.forEach(row=>{if(row.added)o.push({sh,row})}));return o}
-// the number shown on the Changes button: edits, rows added, and edits waiting for a decision
-const changeTotal=()=>[...S.edits.values()].filter(e=>!e.row.added).length+addedRows().length+S.pending.length;
+// the number shown on the Changes button: edits, rows added, table details changed, and edits waiting for a decision
+const changeTotal=()=>[...S.edits.values()].filter(e=>!e.row.added).length+addedRows().length+S.metaEd.size+S.pending.length;
+// anything to write into the workbook
+const hasWrites=()=>S.edits.size>0||S.metaEd.size>0;
+/* ---------- table details (the label/value rows above the field list) ---------- */
+const mkey=(sh,k)=>sh.name+'\u0001'+String(k).toLowerCase();
+// the label as this sheet writes it ("Primary Key" or "primary key"), or the given one when the sheet lacks it
+const metaLabel=(sh,want)=>{const m=sh.meta.find(x=>x[0].toLowerCase()===want.toLowerCase());return m?m[0]:want};
+function setMeta(sh,label,val,silent){
+  val=String(val==null?'':val).replace(/\r\n?/g,'\n'); const k=label.toLowerCase();
+  let m=sh.meta.find(x=>x[0].toLowerCase()===k); if(!m){m=[label,''];sh.meta.push(m)}
+  m[1]=val; sh.mo[k]=val; S.issues=null; S.adj=null;
+  const o=sh.metaOrig[k]==null?'':sh.metaOrig[k];
+  if(val===o) S.metaEd.delete(mkey(sh,k)); else S.metaEd.set(mkey(sh,k),{sh,k:m[0],old:o,nw:val});
+  if(!silent){persist();updateCounts();}
+}
+const isGuidType=t=>/^(uniqueidentifier|primarykey|guid)$/i.test(String(t||'').replace(/[^a-z]/gi,''));
 function setVal(sh,row,col,val,silent){
   const i=sh.colIdx[col]; if(i===undefined) return;
   val=String(val).replace(/\r\n?/g,'\n');
@@ -4371,13 +4398,14 @@ function updateCounts(){
 /* ---------- template ---------- */
 const T={name:'',b64:'',sheets:[],byName:{},entityCols:[]};
 function loadTemplate(b64,name){
-  T.entityCols=[]; T.byName={};   // the template is read as it is, without columns from the previous one
+  T.entityCols=[]; T.byName={}; T.entityMeta=[];   // the template is read as it is, without columns from the previous one
   const sheets=parseWorkbook(XLSX.read(b64ToU8(b64),{type:'array'}));
   T.name=name;T.b64=b64;T.sheets=sheets;T.byName={};
   sheets.forEach(s=>T.byName[s.name.toLowerCase()]=s);
   const ents=sheets.filter(s=>s.kind==='entity');
   const u=[];ents.forEach(s=>s.cols.forEach(c=>{if(!u.includes(c))u.push(c)}));
   T.entityCols=u;
+  {const tm=[];ents.forEach(s=>s.meta.forEach(([k])=>{if(!tm.some(x=>x.toLowerCase()===k.toLowerCase()))tm.push(k)}));T.entityMeta=tm}
   readTemplateOpts(b64);
 }
 async function readTemplateOpts(b64){
@@ -4519,14 +4547,15 @@ async function exportTemplated(){
     const fv=proto&&proto.views&&proto.views[0];
     if(fv&&fv.state==='frozen') ws.views=[{state:'frozen',xSplit:fv.xSplit||0,ySplit:hr,topLeftCell:'A'+(hr+1)}];
   });
-  if(S.edits.size){
+  if(hasWrites()){
     const cl=tw.addWorksheet('Change log');
     changeRows().forEach((r,i)=>{const row=cl.addRow(r);if(i===0)row.font={bold:true}});
     [26,30,24,50,50].forEach((w,i)=>cl.getColumn(i+1).width=w);
   }
   const out=await tw.xlsx.writeBuffer();
-  download(base+' (edited).xlsx',new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  toast('Exported in template format');
+  const fn=await nameDialog(nextName(S.fileName,' (edited)'),'New version in template format'); if(!fn) return;
+  download(fn,new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  toast('Exported '+fn+' in template format');
 }
 
 /* ---------- version diff ---------- */
@@ -4855,9 +4884,13 @@ function renderMain(){
   if(sh&&sh.kind==='entity'){
     head+=`${sh.custom?'<span class="chip custom">Custom table</span>':'<span class="chip ootb">Out of the box</span>'}</h1><div class="sub">${esc(sh.schema)} · ${esc(sh.logical)}</div>`;
     const d=sh.mo['description']; if(d) head+=`<div class="desc">${esc(d)}</div>`;
-    const ch=[['Primary name',sh.mo['primary name column']],['Primary key',sh.mo['primary key']],['Plural',sh.mo['plural display name']],['Ownership',sh.mo['ownership type']],['Audit',sh.mo['audit tracking']],['Type code',sh.mo['object type code']],['Area',sh.area]].filter(x=>x[1]);
+    // primary name and key are always shown: "not set" or "assumed" when the workbook doesn't record them
+    const pkRec=String(sh.mo['primary key']||'').trim(), pkGuess=!pkRec&&sh.logical&&sh.rows.some(r=>isPkRow(sh,r))?pkOf(sh):'';
+    const pn=String(sh.mo['primary name column']||'').trim();
+    const pchips=`${pn?`<span class="chip pkchip">Primary name: <b>${esc(pn)}</b></span>`:`<span class="chip warnchip" title="Use Set as primary name on a field, or Table details. A new table can't be built without it.">Primary name: <b>not set</b></span>`}${pkRec?`<span class="chip pkchip">Primary key: <b>${esc(pkRec)}</b></span>`:pkGuess?`<span class="chip pkchip" title="Not recorded in the workbook, so the table name followed by id is assumed. Use Set as primary key on a field, or Table details, to record it.">Primary key: <b>${esc(pkGuess)}</b> (assumed)</span>`:`<span class="chip warnchip" title="Use Set as primary key on a field, or Table details.">Primary key: <b>not set</b></span>`}`;
+    const ch=[['Plural',sh.mo['plural display name']],['Ownership',sh.mo['ownership type']],['Audit',sh.mo['audit tracking']],['Type code',sh.mo['object type code']],['Area',sh.area]].filter(x=>x[1]);
     (sh.subs||[]).filter(s=>s.cols.length).forEach(s=>ch.push([s.title,String(s.rows.length)]));
-    head+=`<div class="chips">${ch.map(c=>`<span class="chip">${esc(c[0])}: <b>${esc(c[1])}</b></span>`).join('')}</div>`;
+    head+=`<div class="chips">${pchips}${ch.map(c=>`<span class="chip">${esc(c[0])}: <b>${esc(c[1])}</b></span>`).join('')}<button class="btn ghost" data-act="details" style="height:22px;font-size:12px" title="See and change this table's details: primary name column, primary key, ownership and the rest">✎ Table details${[...S.metaEd.values()].some(e=>e.sh===sh)?' •':''}</button></div>`;
   } else if(view.kind==='all'){
     head+=`</h1><div class="sub">${view.ents.length} tables · every attribute in one filterable list</div>`;
   } else {
@@ -4920,7 +4953,7 @@ function renderGrid(append){
       const upd=c!=='Table'&&it.row.chg&&Object.prototype.hasOwnProperty.call(it.row.chg,c);
       const tog=ci===0?`<button class="rt" data-rt title="${open?'Collapse':'Expand'} this row">${open?'▾':'▸'}</button>`:'';
       const newTag=tog+(ci===0&&it.row.added?'<span class="pill p-green" style="margin-right:6px" title="Added in this page. It is written to the workbook when you save or export.">ADDED</span>':ci===0&&it.row.isNew?'<span class="pill p-green" style="margin-right:6px">NEW</span>':'');
-      h+=`<td class="${ci===0?'stickycol':''} ${isEditable(view,c)?'editable':''} ${edited?'edited':''} ${upd&&!edited?'upd':''}" data-col="${esc(c)}" ${upd?`title="Changed in ${esc(S.diff.cl)} — was: ${esc(it.row.chg[c]||'(blank)')}"`:''}><div class="cell">${newTag}${cellHTML(view,it,c,terms)}${ci===0&&isPnameRow(it.sh,it.row)?' <span class="pill p-blue" title="The primary name column of this table">Primary name</span>':''}${ci===0&&isNNRow(it.sh,it.row)?' <span class="pill p-violet" title="A many-to-many relationship, not a field">N:N</span>':''}</div></td>`;
+      h+=`<td class="${ci===0?'stickycol':''} ${isEditable(view,c)?'editable':''} ${edited?'edited':''} ${upd&&!edited?'upd':''}" data-col="${esc(c)}" ${upd?`title="Changed in ${esc(S.diff.cl)} — was: ${esc(it.row.chg[c]||'(blank)')}"`:''}><div class="cell">${newTag}${cellHTML(view,it,c,terms)}${ci===0&&isPkRow(it.sh,it.row)?' <span class="pill p-pk" title="The primary key of this table">Primary key</span>':''}${ci===0&&isPnameRow(it.sh,it.row)?' <span class="pill p-blue" title="The primary name column of this table">Primary name</span>':''}${ci===0&&isNNRow(it.sh,it.row)?' <span class="pill p-violet" title="A many-to-many relationship, not a field">N:N</span>':''}</div></td>`;
     });
     h+='</tr>';
   }
@@ -4996,6 +5029,10 @@ function renderDetail(){
   const title=getVal(sh,row,'Display Name')||getVal(sh,row,'Table Name')||getVal(sh,row,sh.cols[0])||'Row';
   let h=`<header><div style="min-width:0;flex:1"><h3>${esc(title)}</h3><div class="mono dim">${esc(sh.label)}${idx>=0?` · ${idx+1} of ${S.filtered.length}`:''}</div></div>
     ${row.added?'<button class="btn danger" data-rmrow title="Remove this added row">Remove row</button>':''}<button class="btn" data-dnav="-1" title="Previous (k)">↑</button><button class="btn" data-dnav="1" title="Next (j)">↓</button><button class="btn ghost" data-dclose>✕</button></header><div class="body">`;
+  if(sh.kind==='entity'&&getVal(sh,row,'Logical Name').trim()&&!isNNRow(sh,row)){
+    const isK=String(sh.mo['primary key']||'').trim().toLowerCase()===getVal(sh,row,'Logical Name').trim().toLowerCase(), isN=isPnameRow(sh,row);
+    h+=`<div class="keybar">${isK?'<span class="pill p-pk">Primary key</span>':'<button class="btn" data-setkey="pk" title="Record this field as the table\'s primary key in its table details">Set as primary key</button>'}${isN?'<span class="pill p-blue">Primary name</span>':'<button class="btn" data-setkey="pn" title="Record this field as the table\'s primary name column in its table details">Set as primary name</button>'}</div>`;
+  }
   sh.cols.forEach(c=>{
     const v=getVal(sh,row,c); const edited=isEdited(sh,row,c); const l=c.toLowerCase();
     let shown;
@@ -5118,17 +5155,36 @@ function addFieldDialog(sh){
   q('Display Name').focus();
 }
 
+/* ---------- table details dialog ---------- */
+function detailsDialog(sh){
+  const fields=sh.rows.map(r=>getVal(sh,r,'Logical Name').trim()).filter(Boolean);
+  const listFor=k=>/^(primary name column|primary key)$/i.test(k)?'dme-fl':/^(is activity|has notes|has activities|is custom entity|audit tracking)$/i.test(k)?'dme-tf':/^ownership type$/i.test(k)?'dme-own':'';
+  const m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Table details');
+  m.innerHTML=`<div class="convbox solbox"><h3>Table details · ${esc(sh.label)}</h3><p class="dim" style="margin:4px 0 12px">The label and value rows above the field list. Details the template has but this table lacks are included, blank. Changes are kept with your edits and written to the workbook when you save or export.</p>
+    <div class="solgrid">${sh.meta.map(([k,v],i)=>{const o=sh.metaOrig[k.toLowerCase()]; return `<label class="solf"><span>${esc(k)}${sh.metaAdded.includes(k)?' <span class="xtag" title="From the template">added</span>':''}</span><input data-mi="${i}" value="${esc(v)}" ${listFor(k)?`list="${listFor(k)}"`:''} autocomplete="off" spellcheck="false"><small>${o!=null&&o!==v?'was: '+esc(o||'(blank)'):''}</small></label>`}).join('')}</div>
+    <datalist id="dme-fl">${fields.map(x=>`<option value="${esc(x)}"></option>`).join('')}</datalist><datalist id="dme-tf"><option value="True"></option><option value="False"></option></datalist><datalist id="dme-own"><option value="UserOwned"></option><option value="OrganizationOwned"></option></datalist>
+    <div class="convbtns"><button class="btn" data-dd="cancel">Cancel</button> <button class="btn primary" data-dd="save">Save</button></div></div>`;
+  document.body.appendChild(m);
+  const close=()=>{document.removeEventListener('keydown',key,true);m.remove()};
+  const save=()=>{let n=0; m.querySelectorAll('[data-mi]').forEach(i=>{const d=sh.meta[+i.dataset.mi]; if(d&&i.value!==d[1]){setMeta(sh,d[0],i.value,true);n++}}); close(); if(n){persist();updateCounts();applyAndRender();if($('#changes').classList.contains('open'))renderChanges();toast(n+' detail'+(n===1?'':'s')+' changed')}};
+  const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();save()}};
+  document.addEventListener('keydown',key,true);
+  m.addEventListener('click',e=>{const b=e.target.closest('[data-dd]'); if(!b){if(e.target===m)close();return} if(b.dataset.dd==='cancel') close(); else save()});
+  const first=m.querySelector('[data-mi]'); if(first) first.focus();
+}
 /* ---------- change log ---------- */
 function renderChanges(){
   const d=$('#changes');
   const list=[...S.edits.values()], adds=addedRows();
-  let h=`<header><h3>Changes (${changeTotal()})</h3><button class="btn" data-act="exp-log" ${list.length?'':'disabled'}>Export log (CSV)</button><button class="btn" data-act="revert-all" ${list.length||adds.length?'':'disabled'}>Revert all</button><button class="btn ghost" data-cclose>✕</button></header><div class="body">`;
+  let h=`<header><h3>Changes (${changeTotal()})</h3><button class="btn" data-act="exp-log" ${list.length?'':'disabled'}>Export log (CSV)</button><button class="btn" data-act="revert-all" ${list.length||adds.length||S.metaEd.size?'':'disabled'}>Revert all</button><button class="btn ghost" data-cclose>✕</button></header><div class="body">`;
   if(S.pending.length){
     h+=`<div class="vsec"><h4 style="color:var(--pink)">Needs your attention (${S.pending.length})</h4><div class="dim" style="margin-bottom:8px">These edits were made on an earlier version and could not be applied automatically.</div>`;
     S.pending.forEach((p,i)=>{
       const r=p.rec;
-      if(p.type==='conflict') h+=`<div class="chg"><div class="w"><b>${esc(p.sh.label)}</b> · <span class="mono">${esc(r.k)}</span> · ${esc(r.c)} <span style="flex:1"></span><a href="#" data-pgo="${i}">go</a></div><div class="dim" style="margin-top:4px">The new version changed this value, and you had edited it.</div><div class="d"><div class="o">New version: ${p.up?esc(p.up):'<i>(blank)</i>'}</div><div class="nw">Your edit: ${r.n?esc(r.n):'<i>(cleared)</i>'}</div></div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn" data-papply="${i}">Keep mine</button><button class="btn" data-pdrop="${i}">Use new version</button></div></div>`;
+      if(p.type==='mconflict') h+=`<div class="chg"><div class="w"><b>${esc(p.sh.label)}</b> · table details · ${esc(r.k)} <span style="flex:1"></span></div><div class="dim" style="margin-top:4px">The new version changed this detail, and you had changed it.</div><div class="d"><div class="o">New version: ${p.up?esc(p.up):'<i>(blank)</i>'}</div><div class="nw">Yours: ${r.n?esc(r.n):'<i>(cleared)</i>'}</div></div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn" data-papply="${i}">Keep mine</button><button class="btn" data-pdrop="${i}">Use new version</button></div></div>`;
+      else if(p.type==='conflict') h+=`<div class="chg"><div class="w"><b>${esc(p.sh.label)}</b> · <span class="mono">${esc(r.k)}</span> · ${esc(r.c)} <span style="flex:1"></span><a href="#" data-pgo="${i}">go</a></div><div class="dim" style="margin-top:4px">The new version changed this value, and you had edited it.</div><div class="d"><div class="o">New version: ${p.up?esc(p.up):'<i>(blank)</i>'}</div><div class="nw">Your edit: ${r.n?esc(r.n):'<i>(cleared)</i>'}</div></div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn" data-papply="${i}">Keep mine</button><button class="btn" data-pdrop="${i}">Use new version</button></div></div>`;
       else if(p.type==='exists') h+=`<div class="chg"><div class="w"><b>${esc(p.sh.label)}</b> · <span class="mono">${esc((r.v||{})['Logical Name']||'')}</span> · row you added</div><div class="dim" style="margin-top:4px">The new version already has a field with this logical name.</div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn" data-pdrop="${i}">Use the new version's</button><button class="btn" data-papply="${i}">Add mine as well</button></div></div>`;
+      else if(r.d) h+=`<div class="chg"><div class="w"><b>${esc(r.s)}</b> · table details · ${esc(r.k)}</div><div class="dim" style="margin-top:4px">This table is not in the new version.</div><div style="margin-top:6px"><button class="btn" data-pdrop="${i}">Discard</button></div></div>`;
       else if(r.a) h+=`<div class="chg"><div class="w"><b>${esc(r.s)}</b> · <span class="mono">${esc((r.v||{})['Logical Name']||'')}</span> · row you added</div><div class="dim" style="margin-top:4px">This table is not in the new version.</div><div style="margin-top:6px"><button class="btn" data-pdrop="${i}">Discard</button></div></div>`;
       else h+=`<div class="chg"><div class="w"><b>${esc(r.s)}</b> · <span class="mono">${esc(r.k)}</span> · ${esc(r.c)}</div><div class="dim" style="margin-top:4px">This field or table is not in the new version.</div><div class="d"><div class="nw">Your edit: ${r.n?esc(r.n):'<i>(cleared)</i>'}</div></div><div style="margin-top:6px"><button class="btn" data-pdrop="${i}">Discard</button></div></div>`;
     });
@@ -5140,7 +5196,12 @@ function renderChanges(){
       h+=`<div class="chg"><div class="w"><b>${esc(sh.label)}</b> · <span class="mono">${esc(ln)}</span>${dn&&dn!==ln?' · '+esc(dn):''}${isNNRow(sh,row)?' · N:N':''} <span style="flex:1"></span><a href="#" data-ago="${i}">go</a><a href="#" data-arm="${i}">remove</a></div></div>`});
     h+='</div>';
   }
-  if(!list.length&&!adds.length&&!S.pending.length) h+='<div class="empty">No edits yet.<br>Double-click any cell to edit it, or open a row and click a value. Use ＋ Add field to add a row to a table.<br>Edits are saved in this browser and survive a reload.</div>';
+  if(S.metaEd.size){
+    h+=`<div class="vsec"><h4>Table details (${S.metaEd.size})</h4>`;
+    [...S.metaEd.values()].forEach((e,i)=>{h+=`<div class="chg"><div class="w"><b>${esc(e.sh.label)}</b> · ${esc(e.k)} <span style="flex:1"></span><a href="#" data-mgo="${i}">go</a><a href="#" data-mrev="${i}">revert</a></div><div class="d">${e.old?`<div class="o">${esc(e.old)}</div>`:''}<div class="nw">${e.nw?esc(e.nw):'<i>(cleared)</i>'}</div></div></div>`});
+    h+='</div>';
+  }
+  if(!list.length&&!adds.length&&!S.metaEd.size&&!S.pending.length) h+='<div class="empty">No edits yet.<br>Double-click any cell to edit it, or open a row and click a value. Use ＋ Add field to add a row to a table.<br>Edits are saved in this browser and survive a reload.</div>';
   list.forEach((e,i)=>{
     if(e.row.added) return;   // listed with its row above
     const key=getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||rowNo(e.row);
@@ -5261,7 +5322,7 @@ function download(name,blob){const a=document.createElement('a');a.href=URL.crea
 // prefix it with an apostrophe so it stays text
 const csvCell=v=>{v=String(v??'');if(/^[=+\-@\t\r]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
 const csv=rows=>'\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
-const editLabel=e=>getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||rowNo(e.row);
+const editLabel=e=>e.meta?'table details':getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||rowNo(e.row);
 // the hand-build list: Summary, one block per table, and a flat filterable sheet
 async function exportManual(){
   const buf=await manualWorkbook(); if(!buf) return toast('There are no calculated or rollup fields of your own to list');
@@ -5302,10 +5363,11 @@ async function manualWorkbook(){
 function changeRows(){
   const rows=[['Table','Row key','Column','Original','New']];
   S.edits.forEach(e=>rows.push([e.sh.label,editLabel(e),e.col,e.old,e.nw]));
+  S.metaEd.forEach(e=>rows.push([e.sh.label,'(table details)',e.k,e.old,e.nw]));
   return rows;
 }
 async function buildOriginal(){
-  if(!S.edits.size){toast('No edits to apply to the original');return null}
+  if(!hasWrites()){toast('No edits to apply to the original');return null}
   if(!/\.xlsx$/i.test(S.fileName)){toast('Updating the original needs an .xlsx file. Use the template export instead.');return null}
   // Patch only the edited cells inside the original file's XML, so everything else (line breaks, styles,
   // validations, widths) is carried over byte for byte.
@@ -5333,6 +5395,20 @@ async function buildOriginal(){
     if(e.row.added&&rr==null){missed.push({e,why:'there is no empty row for this new row above the Forms and Views section'});return}
     if(ci===undefined||rr==null||!sh.pos){missed.push({e,why:'the cell position is unknown'});return}
     (bySheet[sh.name]=bySheet[sh.name]||[]).push({e,row:rr+1+(sh.r0||0),col:sh.pos[ci],v:e.nw,sr:styleRow.get(e.row)});
+  });
+  // table details: written beside their label; a detail the sheet lacks goes in an empty row above the field list
+  const freeUsed=new Map();
+  S.metaEd.forEach(me=>{
+    const sh=me.sh, c0=sh.c0||0, e={sh,row:{vals:[],orig:[],r:null,key:'__meta'},col:me.k,nw:me.nw,meta:true};
+    if(!pathOf[sh.name]||!zip.file(pathOf[sh.name])){missed.push({e,why:'the sheet was not found in the file'});return}
+    const rs=Object.values(sh.metaR), ref=rs.length?Math.max(...rs):null;
+    let r=sh.metaR[me.k.toLowerCase()], newRow=false;
+    if(r==null){const used=freeUsed.get(sh)||[]; const free=(sh.metaFree||[]).filter(x=>!used.includes(x));
+      if(!free.length){missed.push({e,why:'the table details have no empty row to add "'+me.k+'" in'});return}
+      r=free[0]; used.push(r); freeUsed.set(sh,used); newRow=true}
+    const L=bySheet[sh.name]=bySheet[sh.name]||[];
+    if(newRow) L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+c0,v:me.k,sr:ref,sc:1+c0});
+    L.push({e,row:r,col:2+c0,v:me.nw,sr:ref,sc:2+c0});
   });
   // a column added from the template gets its header (and hint) written with the first value saved in it,
   // styled like the sheet's last original column
@@ -5392,7 +5468,31 @@ async function buildOriginal(){
 // tells the person which edits could not be written; nothing is saved or cleared while this list is not empty
 function reportMissed(r,what){
   const items=r.missed.slice(0,12).map(m=>'<li><b>'+esc(m.e.sh.label)+'</b> · <span class="mono">'+esc(editLabel(m.e))+'</span> · '+esc(m.e.col)+' <span class="dim">('+esc(m.why)+')</span></li>').join('');
-  return dlg({title:what+' was stopped',body:r.missed.length+' of your '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+' could not be written into '+esc(S.fileName)+', so nothing was saved and all your edits are kept.<ul style="margin:8px 0 0;padding-left:18px">'+items+(r.missed.length>12?'<li>… and '+(r.missed.length-12)+' more</li>':'')+'</ul><br>Use <b>New version in template format</b> to export everything instead.',ok:'OK',cancel:null});
+  return dlg({title:what+' was stopped',body:r.missed.length+' of your changes could not be written into '+esc(S.fileName)+', so nothing was saved and all your edits are kept.<ul style="margin:8px 0 0;padding-left:18px">'+items+(r.missed.length>12?'<li>… and '+(r.missed.length-12)+' more</li>':'')+'</ul><br>Use <b>New version in template format</b> to export everything instead.',ok:'OK',cancel:null});
+}
+// the suggested name for a new copy: a version number in the name goes up by one (v1.2 -> v1.3), otherwise a suffix is added
+function nextName(name,suffix){
+  const base=String(name||'workbook').replace(/\.[^.]+$/,'');
+  const m=base.match(/^(.*(?:^|[^a-z])v)(\d+(?:\.\d+)*)(.*)$/i)||base.match(/^(.*\D|)(\d+(?:\.\d+)+)(\D*)$/);
+  if(m){const parts=m[2].split('.'); parts[parts.length-1]=String(+parts[parts.length-1]+1); return m[1]+parts.join('.')+m[3]+'.xlsx'}
+  return base+suffix+'.xlsx';
+}
+// asks for the file name before a workbook is downloaded; resolves to the name (ending .xlsx) or null when cancelled
+function nameDialog(def,what){
+  return new Promise(res=>{
+    const m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Name the file');
+    m.innerHTML=`<div class="convbox dlgbox namebox"><h3>Name the file</h3><p class="dim" style="margin:4px 0 10px">${esc(what)}</p>
+      <label class="solf"><span>File name</span><input data-k="name" value="${esc(def)}" spellcheck="false" autocomplete="off"><small id="nameerr"></small></label>
+      <div class="convbtns"><button class="btn" data-n="0">Cancel</button><button class="btn primary" data-n="1">Download</button></div></div>`;
+    const inp=m.querySelector('input');
+    const done=ok=>{
+      if(ok){let v=inp.value.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'').trim(); if(!v.replace(/\.xlsx$/i,'').trim()){m.querySelector('#nameerr').textContent='Give the file a name.';return} if(!/\.xlsx$/i.test(v)) v+='.xlsx'; ok=v}
+      document.removeEventListener('keydown',key,true); m.remove(); res(ok||null)};
+    const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();done(false)}else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();done(true)}};
+    m.addEventListener('click',e=>{const b=e.target.closest('[data-n]'); if(b) done(b.dataset.n==='1'); else if(e.target===m) done(false)});
+    document.addEventListener('keydown',key,true); document.body.appendChild(m);
+    inp.focus(); inp.setSelectionRange(0,inp.value.replace(/\.xlsx$/i,'').length);   // the name is selected, ready to type over
+  });
 }
 const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 // true while the page shows its built-in empty starter template rather than a workbook someone opened
@@ -5400,12 +5500,13 @@ const isStarter=()=>S.curB64===EMBEDDED_B64&&EMBEDDED_B64===TEMPLATE_B64;
 async function exportOriginal(){
   const r=await buildOriginal(); if(!r) return;
   if(r.missed.length) return reportMissed(r,'The download');
-  download(S.fileName.replace(/\.[^.]+$/,'')+' (updated).xlsx',new Blob([r.bytes],{type:XLSX_MIME}));
-  toast('Updated '+r.n+' cell'+(r.n===1?'':'s')+' in a copy of the original workbook');
+  const fn=await nameDialog(nextName(S.fileName,' (updated)'),'Updated copy of the workbook'); if(!fn) return;
+  download(fn,new Blob([r.bytes],{type:XLSX_MIME}));
+  toast('Updated '+r.n+' cell'+(r.n===1?'':'s')+' in '+fn);
 }
 async function saveToOriginal(){
   const h=S.handle; if(!h) return toast('Open the file with "Load version…" in Chrome or Edge to link it first');
-  if(!S.edits.size) return toast('No edits to save');
+  if(!hasWrites()) return toast('No edits to save');
   if(!await dlg({title:'Overwrite the original file?',body:'This replaces <b>'+esc(S.fileName)+'</b> on your computer with your '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+'. Only the edited cells change.',ok:'Overwrite',danger:true})) return;
   try{
     let perm=await h.queryPermission({mode:'readwrite'}); if(perm!=='granted') perm=await h.requestPermission({mode:'readwrite'});
@@ -5422,7 +5523,7 @@ async function saveToOriginal(){
     const rec=S.lib.find(x=>x.b64===old); if(rec){rec.b64=nb;rec.size=r.bytes.length;try{await idb.put(rec)}catch(e){}}
     try{await idb.put({id:'__cur',name:S.fileName,b64:nb,proj:S.proj})}catch(e){}
     // the saved edits are now part of the file. Edits still waiting for a decision (Needs your attention) are kept.
-    S.edits.clear(); S.sheets.forEach(sh=>{sh.rows=sh.rows.filter(r=>!r.added)}); persist(); S.curB64=nb;
+    S.edits.clear(); S.metaEd.clear(); S.sheets.forEach(sh=>{sh.rows=sh.rows.filter(r=>!r.added)}); persist(); S.curB64=nb;
     init(XLSX.read(r.bytes,{type:'array'}),S.fileName,{});
     toast('Saved '+r.n+' edit'+(r.n===1?'':'s')+' to '+S.fileName);
   }catch(err){console.error(err);toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use "Download an updated copy" instead.')}
@@ -5473,9 +5574,8 @@ function doExport(kind){
       ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:hdrAt,c:0},e:{r:aoa.length-1,c:sh.cols.length-1}})};
       XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31));
     });
-    if(S.edits.size) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeRows()),'Change log');
-    XLSX.writeFile(wb,base+' (edited).xlsx');
-    toast('Exported — values only, original cell styling is not carried over');
+    if(hasWrites()) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeRows()),'Change log');
+    nameDialog(nextName(S.fileName,' (edited)'),'Full workbook, plain values').then(fn=>{if(!fn) return; XLSX.writeFile(wb,fn); toast('Exported '+fn+'. Values only: cell styling is not carried over')});
   } else if(kind==='solution'){
     solDialog();
   } else if(kind==='manual'){
@@ -5493,7 +5593,8 @@ function revertAll(){
   S.issues=null;
   [...S.edits.values()].forEach(e=>{const i=e.sh.colIdx[e.col];e.row.vals[i]=e.row.orig[i]});
   S.edits.clear(); S.pending=[];
-  addedRows().forEach(({sh,row})=>removeRow(sh,row)); persist(); updateCounts(); applyAndRender(); if($('#changes').classList.contains('open')) renderChanges(); if(S.selIt) renderDetail();
+  addedRows().forEach(({sh,row})=>removeRow(sh,row));
+  [...S.metaEd.values()].forEach(e=>setMeta(e.sh,e.k,e.old,true)); S.metaEd.clear(); persist(); updateCounts(); applyAndRender(); if($('#changes').classList.contains('open')) renderChanges(); if(S.selIt) renderDetail();
 }
 
 /* ---------- navigation ---------- */
@@ -5536,6 +5637,8 @@ function renderReadme(){
     <li><b>Double-click</b> any cell to edit it, or click a value in the row detail panel. <kbd>Enter</kbd> saves, <kbd>Esc</kbd> cancels, and <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a new line in long text.</li>
     <li>Columns that hold a fixed set of options (attribute type, required level, custom attribute and similar) edit as a <b>dropdown</b>. The options come from the template's validation lists plus any values found in the data, so a new value in a loaded workbook appears as an option automatically.</li>
     <li><b>＋ Add field</b> (on a table) adds a field, a lookup or an N:N relationship at the end of the field list: give it a display name and type, and the logical and schema names are suggested with your prefix. A lookup or N:N asks for the related table, and is marked N:1 or N:N. The new row opens on the right to fill in the rest. On other sheets, such as the Table Dictionary, <b>＋ Add row</b> adds a blank row. Added rows are tagged <b>ADDED</b>, are checked, drawn and built like any other row, and can be removed from their panel or from Changes.</li>
+    <li>The <b>primary key</b> and <b>primary name</b> fields are tagged in the field list and shown in the table header. <b>Set as primary key</b> / <b>Set as primary name</b> on a field's panel records it, and <b>✎ Table details</b> edits every detail row of the table. Dataverse primary keys are always unique identifiers: to keep another field unique, use an alternate key.</li>
+    <li>Downloading a new copy of the workbook asks for the file name first, suggesting the next version number.</li>
     <li>Columns the template has but the workbook lacks (for example Relationship Type in an older workbook) are <b>added</b> and marked, so you can fill them in. Their header is written into the file with the first value you save in them.</li>
     <li>Edited cells are highlighted. The original value is kept, so every edit can be reverted individually or all at once.</li>
     <li>The <b>Changes</b> panel lists every edit as original against new, with links to jump to the row, and exports the list as a CSV change log.</li>
@@ -5663,6 +5766,7 @@ const RULES={
   'manual-build':['info','Calculated or rollup field to create by hand'],
   'rel-review':['info','Relationship type not recorded'],
   'pname-missing':['error','No primary name column'],
+  'pk-type':['error','Primary key is not a unique identifier'],
   'pname-notfound':['error','Primary name column not in the field list'],
   'pname-type':['error','Primary name column is not single-line text'],
   'rel-type-bad':['warn','Relationship type not valid here'],
@@ -5762,6 +5866,8 @@ function issues(){
       else if(!/^(text|string|single ?line)/i.test(getVal(sh,prow,'Attribute Type').trim())) add('pname-type',sh,prow,pn,'The primary name column must be single-line text; it is "'+getVal(sh,prow,'Attribute Type')+'".');
     }
     if(sh.rows.length&&sh.logical&&!seen[pk]) add('pk-missing',sh,null,'','The primary key field ('+pk+') is not listed.');
+    {const krow=sh.mo['primary key']&&sh.rows.find(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===pkOf(sh)), kt=krow&&getVal(sh,krow,'Attribute Type').trim();
+      if(kt&&!isGuidType(kt)) add('pk-type',sh,krow,pkOf(sh),'Dataverse primary keys are always unique identifiers (GUIDs), created with the table; "'+pkOf(sh)+'" is '+kt+'. To keep its values unique, give the table an alternate key on it instead, and leave Primary Key as the table name followed by id.',sh.logical&&own.has(sh.logical.split('_')[0])&&sh.logical.includes('_')?'error':'warn')}
   });
   // your own publisher prefixes: those of the custom tables in the workbook, leaving out Microsoft's (ms…, adx)
   Object.keys(missing).sort().forEach(t=>{
@@ -6029,6 +6135,8 @@ function cascadeOf(sh,row){const v=getVal(sh,row,'Cascade Delete').trim().toLowe
 const pnameOf=sh=>String(sh.mo['primary name column']||'').trim().toLowerCase();
 const pkOf=sh=>String(sh.mo['primary key']||'').trim().toLowerCase()||(sh.logical?sh.logical+'id':'');
 const isPnameRow=(sh,row)=>{const p=pnameOf(sh);return !!p&&getVal(sh,row,'Logical Name').trim().toLowerCase()===p};
+// the primary key row: the Primary Key detail, or <table>id when the workbook doesn't record it
+const isPkRow=(sh,row)=>{const k=pkOf(sh);return !!k&&getVal(sh,row,'Logical Name').trim().toLowerCase()===k};
 
 /* ---------- Dataverse solution generator ---------- */
 // Builds an unmanaged solution (solution.xml + customizations.xml) from the workbook: new tables with their fields,
@@ -6112,6 +6220,7 @@ function buildPlan(cfg){
       else if(!prow) why.push('its primary name column '+pn+' is not in the field list');
       else if(fieldSpec(sh,prow).t!=='nvarchar') why.push('its primary name column '+pn+' is not single-line text');
       if(/^(true|yes|1)$/i.test(String(sh.mo['is activity']||''))) why.push('activity tables are created by hand');
+      {const kr=sh.rows.find(r=>getVal(sh,r,'Logical Name').trim().toLowerCase()===pkOf(sh)), kt=kr&&getVal(sh,kr,'Attribute Type').trim(); if(kt&&!isGuidType(kt)) why.push('its primary key '+pkOf(sh)+' is '+kt+', but Dataverse primary keys are unique identifiers (use an alternate key)')}
       if(why.length){rep(sh.label,sh.logical,'Table','Not included',why.join('; ')); return}
       planned.add(sh.logical);
     }
@@ -6421,7 +6530,7 @@ function buildErd(){
     sh.rows.forEach(row=>{
       const ln=getVal(sh,row,'Logical Name'); if(!ln) return;
       const at=getVal(sh,row,'Attribute Type'); const isL=/lookup|owner|customer/i.test(at);
-      const isPK=ln.toLowerCase()===(sh.logical+'id').toLowerCase();
+      const isPK=ln.toLowerCase()===pkOf(sh);
       if(E.attrs==='keys'&&!isPK&&!(isL&&erdTargets(E,sh,row).length)) return;
       const id=mid(ln); if(seen.has(id)) return; seen.add(id);
       L.push('    '+mtype(at)+' '+id+(isPK?' PK':isL?' FK':'')+' "'+mq(getVal(sh,row,'Display Name'))+'"'); n.rows.push({k:isPK?'PK':isL?'FK':'',name:id,type:mtype(at),label:getVal(sh,row,'Display Name')}); stats.attrs++;
@@ -7006,6 +7115,7 @@ document.addEventListener('click',e=>{
     const a=n.dataset.act;
     if(a==='cols'){e.stopPropagation();colsMenu(n)}
     else if(a==='addrow'){if(S.view&&S.view.sh) addRowUI(S.view.sh)}
+    else if(a==='details'){if(S.view&&S.view.sh) detailsDialog(S.view.sh)}
     else if(a==='expall'){S.ui.expanded=S.ui.expanded===false;S.rowOv.clear();store.set('dme.ui',S.ui);renderMain()}
     else if(a==='navexp'){S.collapsed={};renderNav()}
     else if(a==='navcol'){(S.groups||[]).forEach(g=>S.collapsed[g]=true);renderNav()}
@@ -7024,6 +7134,11 @@ document.addEventListener('click',e=>{
   if(t.closest('[data-dclose]')){$('#detail').classList.remove('open');return}
   if(t.closest('[data-rmrow]')&&S.selIt){const {sh,row}=S.selIt;dropAdded(sh,row);return}
   if((n=t.closest('[data-arm]'))){e.preventDefault();const x=addedRows()[+n.dataset.arm];if(x)dropAdded(x.sh,x.row,true);return}
+  if((n=t.closest('[data-mrev]'))){e.preventDefault();const x=[...S.metaEd.values()][+n.dataset.mrev];if(x){setMeta(x.sh,x.k,x.old);applyAndRender();renderChanges()}return}
+  if((n=t.closest('[data-mgo]'))){e.preventDefault();const x=[...S.metaEd.values()][+n.dataset.mgo];if(x)go(x.sh.idx);return}
+  if((n=t.closest('[data-setkey]'))&&S.selIt){const {sh,row}=S.selIt, ln=getVal(sh,row,'Logical Name').trim(), pk=n.dataset.setkey==='pk';
+    setMeta(sh,metaLabel(sh,pk?'Primary Key':'Primary Name Column'),ln); applyAndRender(); const it=S.filtered.find(x=>x.row===row); if(it) openDetail(it);
+    toast(ln+' is now the '+(pk?'primary key':'primary name column')+' of '+sh.label+(pk&&!isGuidType(getVal(sh,row,'Attribute Type'))?'. Note: Dataverse primary keys are always unique identifiers (see Checks).':''));return}
   if((n=t.closest('[data-ago]'))){e.preventDefault();const x=addedRows()[+n.dataset.ago];if(x)go(x.sh.idx,{focusRow:x.row});return}
   if(t.closest('[data-cclose]')){$('#changes').classList.remove('open');return}
   if(t.closest('[data-tclose]')){$('#tmplpanel').classList.remove('open');return}
@@ -7031,7 +7146,7 @@ document.addEventListener('click',e=>{
   if((n=t.closest('[data-vgo]'))){
     e.preventDefault(); const sh=S.sheets[+n.dataset.vgo]; const row=n.dataset.vrow?sh.rowMap[n.dataset.vrow]:null; go(sh.idx,{focusRow:row}); return;
   }
-  if((n=t.closest('[data-papply]'))){e.preventDefault();const i=+n.dataset.papply;const p=S.pending[i];if(p){S.pending.splice(i,1);if(p.type==='exists'){addRow(p.sh,p.rec.v,p.rec.a);persist();updateCounts();applyAndRender()}else{setVal(p.sh,p.row,p.rec.c,p.rec.n);afterEdit()}renderChanges()}return}
+  if((n=t.closest('[data-papply]'))){e.preventDefault();const i=+n.dataset.papply;const p=S.pending[i];if(p){S.pending.splice(i,1);if(p.type==='exists'){addRow(p.sh,p.rec.v,p.rec.a);persist();updateCounts();applyAndRender()}else if(p.type==='mconflict'){setMeta(p.sh,p.rec.k,p.rec.n);applyAndRender()}else{setVal(p.sh,p.row,p.rec.c,p.rec.n);afterEdit()}renderChanges()}return}
   if((n=t.closest('[data-pdrop]'))){e.preventDefault();S.pending.splice(+n.dataset.pdrop,1);persist();updateCounts();renderChanges();return}
   if((n=t.closest('[data-pgo]'))){e.preventDefault();const p=S.pending[+n.dataset.pgo];if(p)go(p.sh.idx,{focusRow:p.row});return}
   if((n=t.closest('[data-dnav]'))){
@@ -7113,7 +7228,7 @@ function init(wb,name,opts){
   S.fileName=name;
   S.sheets=parseWorkbook(wb);
   S.byLogical={}; S.sheets.forEach(s=>{if(s.kind==='entity'&&s.logical)S.byLogical[s.logical]=s.idx});
-  S.erd=null; S.adj=null; S.issues=null; S.issSt=null; S.choiceCache={}; S.edits=new Map(); S.pending=[]; S.views={}; S.selIt=null; S.rowOv=new Map();
+  S.erd=null; S.adj=null; S.issues=null; S.issSt=null; S.choiceCache={}; S.edits=new Map(); S.metaEd=new Map(); S.pending=[]; S.views={}; S.selIt=null; S.rowOv=new Map();
   S.diff=opts.prevSheets?computeDiff(opts.prevSheets,S.sheets,opts.prevName,name):null;
   S.allView=buildAll();
   conformance();

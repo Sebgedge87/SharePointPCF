@@ -18,6 +18,8 @@ Nothing to install, and it works offline. Nothing is uploaded anywhere.
    back to the workbook or exported. **＋ Add field** adds a field, lookup or N:N relationship to a table (names are
    suggested with your prefix); **＋ Add row** adds a row to other sheets such as the Table Dictionary. Columns the
    template has but your workbook lacks, such as Relationship Type, are added so you can fill them in.
+   **Set as primary key** / **Set as primary name** on a field, or **✎ Table details**, record a table's keys and other
+   details. Downloads of the workbook ask for a file name first.
 5. **ERD** draws the tables you pick, by area if the Table Dictionary has areas, and exports to draw.io, SVG, PNG or
    Mermaid. Lines only show relationship ends (one / many) when the relationship type is recorded.
 6. **Load version…** compares a newer version of the workbook with the one open, and carries your edits over.
@@ -104,7 +106,7 @@ PAC=/path/to/pac npm test   # also checks the generated solution with Microsoft'
 | `tests/checks.js` | Overview, every data-model check, Dataverse import (both JSON shapes, error files), Dataverse comparison, relationships on table pages, N:N in the ERD and draw.io |
 | `tests/ui.js` | Interface: area filters (ERD, Checks, All fields) and live Area edits, ERD defaults on a 90-table model, header and menus, keyboard access, field-type trimming, severity colours, phone layout |
 | `tests/solution.js` | Solution generator: dialog, every field type, relationships, shells for existing tables, the build report, import.ps1; with `PAC=/path/to/pac` also unpacks and re-packs the solution with Microsoft's SolutionPackager |
-| `tests/addrows.js` | Adding fields, lookups, N:N and dictionary rows; saving them into the original and the template export; refusing when there's no room; reload, carry to a newer version, removing; columns added from the template and written on save |
+| `tests/addrows.js` | Primary key markers, setting the key and name, the Table details dialog and writing details back; naming downloads; adding fields, lookups, N:N and dictionary rows; saving them into the original and the template export; refusing when there's no room; reload, carry to a newer version, removing; columns added from the template and written on save |
 | `tests/roundtrip.js` | Edit, export both ways and read back, reload, carry edits to a newer version, keep workbooks separate, structural comparison, refused partial save, CSV columns, small screens |
 
 ## Notes

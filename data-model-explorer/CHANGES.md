@@ -1,3 +1,22 @@
+# 1.8.0
+
+Primary key and table details
+- The primary key is marked: a **Primary key** tag on its row in the field list, and in the table header. When the
+  workbook doesn't record it, the table name followed by id is shown as "(assumed)"; a missing primary name column
+  shows as "not set".
+- **Set as primary key** and **Set as primary name** on any field's detail panel record it in the table details.
+- **✎ Table details** in the table header edits every detail row (primary name column, primary key, ownership,
+  notes, activities and the rest), including details the template has but the table lacks.
+- Changed details are kept with your edits, listed under "Table details" in Changes (with revert), carried to newer
+  versions, and written by every export. Saving back to the original writes a detail beside its label; a detail the
+  sheet lacks goes in an empty row above the field list, and the save is refused if there is none.
+- New check: a primary key that isn't a unique identifier (Dataverse keys are always GUIDs; use an alternate key to
+  keep another field unique). The solution generator leaves such a table out, with the reason.
+
+Naming downloads
+- Downloading a new copy of the workbook (updated copy, template format, plain values) first asks for the file name.
+  It suggests the next version (Model v1.2 -> Model v1.3, Model 1.4 -> Model 1.5), or adds "(updated)" / "(edited)".
+
 # 1.7.0
 
 Adding rows
