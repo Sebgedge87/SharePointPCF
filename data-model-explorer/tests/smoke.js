@@ -40,7 +40,7 @@ function fakeExport() {
   ok(await p.locator('#erdcv svg g.node').count() > 0, 'ERD draws');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]);
   const xml = fs.readFileSync(await dl.path(), 'utf8');
-  ok(/<mxfile/.test(xml) && /ERzeroToMany/.test(xml), 'draw.io export is valid-looking mxGraph XML');
+  ok(/<mxfile/.test(xml) && /startArrow=none;endArrow=none/.test(xml) && !/ERzeroToMany/.test(xml), 'draw.io export is valid mxGraph XML, with relationships of unrecorded type as plain lines');
 
   await p.reload(); await p.waitForTimeout(2000);
   ok(/fake_export\.xlsx/.test(await p.innerText('#fileLabel')), 'open workbook survives a reload');

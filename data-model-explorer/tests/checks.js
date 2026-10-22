@@ -142,6 +142,7 @@ function dataverse() {
   ok(/From Dataverse/.test(sec) && /incident_customer_accounts/.test(sec) && /Cascade \/ NoCascade/.test(sec) && /N:N/.test(sec) && /fp_ticketref/.test(sec), 'table page shows relationships, cascade settings and keys from Dataverse');
   await p.click('#nav .navitem[data-view="__erd"]'); await p.waitForTimeout(1500); await p.click('[data-eq=all]'); await p.waitForTimeout(2500);
   ok((await p.inputValue('#erdsrc')).includes('}o..o{'), 'ERD includes the N:N relationship');
+  ok(/ERmandOne|ERzeroToOne/.test(await (async () => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]); return fs.readFileSync(await d.path(), 'utf8') })()) && /\d+ of \d+ relationships have no recorded type/.test(await p.innerText('#erdinfo')), 'relationships confirmed by Dataverse keep their ends; the rest are counted as unrecorded');
   ok(await p.locator('#erdcv svg g.node').count() > 0 && !(await p.locator('#erdcv .err').count()), 'ERD draws with N:N lines');
   const xml = await download(() => p.click('.tb [data-ea="drawio"]'));
   ok(/dashed=1/.test(xml), 'draw.io export draws N:N as a dashed line');

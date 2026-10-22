@@ -4200,7 +4200,7 @@ function parseWorkbook(wb){
       const nz=cells.map((v,i)=>[v,i]).filter(x=>x[0]!=='');
       if(!nz.length) continue;
       if(kind==='entity'){
-        if(nz.length>=1&&cells[0]!==''&&nz.length<=2&&r<9){meta.push([cells[0],cells[1]||'']);continue;}
+        if(nz.length>=1&&cells[0]!==''&&nz.length<=2&&r<hi-1){meta.push([cells[0],cells[1]||'']);continue;}   // every label/value row above the hint row is a table detail, however many there are
         // hint row: text sitting above header columns
         nz.forEach(([v,ci])=>{const k=colIdx.indexOf(ci);if(k>=0)hints[cols[k]]=v;});
       } else {
@@ -5099,7 +5099,7 @@ function moreMenu(anchor){
 function exportMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu';
-  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
+  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
   el.addEventListener('click',e=>{const b=e.target.closest('[data-x]');const x=b&&b.dataset.x;if(!x)return;closePops();doExport(x)});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
@@ -5111,6 +5111,40 @@ function download(name,blob){const a=document.createElement('a');a.href=URL.crea
 const csvCell=v=>{v=String(v??'');if(/^[=+\-@\t\r]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
 const csv=rows=>'\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
 const editLabel=e=>getVal(e.sh,e.row,'Logical Name')||getVal(e.sh,e.row,'Table Name')||('row '+(e.row.r+1));
+// the hand-build list: Summary, one block per table, and a flat filterable sheet
+async function exportManual(){
+  const list=manualFields(); if(!list.length) return toast('There are no calculated or rollup fields of your own to list');
+  const v=(m,c)=>getVal(m.sh,m.row,c);
+  const COLS=[['Display Name',28],['Logical Name',32],['Schema Name',30],['Kind',12],['Data type',16],['Description',48],['Details',36],['Required level',16],['Formula / definition (fill in)',48],['Created?',10]];
+  const fieldVals=m=>[v(m,'Display Name'),m.ln,v(m,'Schema Name'),m.kind,v(m,'Attribute Type'),v(m,'Description'),v(m,'Additional data'),v(m,'Required Level'),'',''];
+  const byTable=new Map(); list.forEach(m=>{(byTable.get(m.sh)||byTable.set(m.sh,[]).get(m.sh)).push(m)});
+  const tables=[...byTable.keys()].sort((a,b)=>a.label.localeCompare(b.label));
+  const NAVY='FF0A4873', GREY='FFECF1F5', head=r=>{r.font={bold:true};r.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:GREY}}})};
+  const wb=new ExcelJS.Workbook();
+  const sm=wb.addWorksheet('Summary');
+  sm.addRow(['Calculated and rollup fields to create by hand']).font={bold:true,size:14};
+  sm.addRow([S.fileName+' · '+new Date().toLocaleDateString()]).font={color:{argb:'FF4D6A82'}};
+  sm.addRow([]); sm.addRow(['These fields are not in the generated solution. After importing it, create each one in Power Apps using the details on the "By table" sheet, and record the formula and progress there.']);
+  sm.addRow([]); head(sm.addRow(['Table','Logical name','Area','Calculated','Rollup','Formula','Total']));
+  tables.forEach(t=>{const ms=byTable.get(t), n=k=>ms.filter(m=>m.kind===k).length; sm.addRow([t.label,t.logical,areaOf(t),n('Calculated'),n('Rollup'),n('Formula'),ms.length])});
+  const tot=k=>list.filter(m=>m.kind===k).length; sm.addRow(['Total','','',tot('Calculated'),tot('Rollup'),tot('Formula'),list.length]).font={bold:true};
+  [34,32,18,12,10,10,10].forEach((w,i)=>sm.getColumn(i+1).width=w); sm.getRow(4).alignment={wrapText:true}; sm.mergeCells(4,1,4,7); sm.getRow(4).height=32;
+  const bt=wb.addWorksheet('By table'); COLS.forEach(([,w],i)=>bt.getColumn(i+1).width=w);
+  tables.forEach(t=>{
+    const tr=bt.addRow([t.label+'  ('+t.logical+')'+(t.area?'  ·  '+t.area:'')+'  ·  '+byTable.get(t).length+' field'+(byTable.get(t).length===1?'':'s')]);
+    bt.mergeCells(tr.number,1,tr.number,COLS.length); tr.font={bold:true,color:{argb:'FFFFFFFF'}}; tr.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}};
+    head(bt.addRow(COLS.map(c=>c[0])));
+    byTable.get(t).forEach(m=>{const r=bt.addRow(fieldVals(m)); r.alignment={wrapText:true,vertical:'top'}});
+    bt.addRow([]);
+  });
+  const al=wb.addWorksheet('All fields'); const ah=['Table','Table logical name','Area',...COLS.map(c=>c[0])];
+  [26,26,16,...COLS.map(c=>c[1])].forEach((w,i)=>al.getColumn(i+1).width=w); head(al.addRow(ah));
+  tables.forEach(t=>byTable.get(t).forEach(m=>{const r=al.addRow([t.label,t.logical,areaOf(t),...fieldVals(m)]); r.alignment={wrapText:true,vertical:'top'}}));
+  al.autoFilter={from:{row:1,column:1},to:{row:1,column:ah.length}}; al.views=[{state:'frozen',ySplit:1}];
+  const buf=await wb.xlsx.writeBuffer();
+  download(S.fileName.replace(/\.[^.]+$/,'')+' - calculated and rollup fields.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  toast(list.length+' field'+(list.length===1?'':'s')+' in '+tables.length+' table'+(tables.length===1?'':'s')+' listed');
+}
 function changeRows(){
   const rows=[['Table','Row key','Column','Original','New']];
   S.edits.forEach(e=>rows.push([e.sh.label,editLabel(e),e.col,e.old,e.nw]));
@@ -5264,6 +5298,8 @@ function doExport(kind){
     if(S.edits.size) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeRows()),'Change log');
     XLSX.writeFile(wb,base+' (edited).xlsx');
     toast('Exported — values only, original cell styling is not carried over');
+  } else if(kind==='manual'){
+    exportManual().catch(err=>{console.error(err);toast('Could not create the list ('+err.message+')')});
   } else if(kind==='diff'){
     download(base+' - differences '+S.diff.pl+' to '+S.diff.cl+'.csv',new Blob([csv(diffRows())],{type:'text/csv'}));
   } else if(kind==='bundled'){
@@ -5347,7 +5383,7 @@ function renderReadme(){
   <p>Exported files can be loaded straight back in, which makes a round trip possible: <i>load, review and edit, export, reload</i>.</p>`)}
 
   ${sec(6,'ERD diagram',`
-  <p>The <b>ERD</b> tab generates a Mermaid entity-relationship diagram from the lookup columns. It opens with the custom tables when there are 30 or fewer, otherwise with nothing selected so you can pick a readable set; you are asked before drawing more than 80 tables. Pick the tables and the detail level, and system tables such as users and teams are shown as light stubs. Tables are laid out automatically so related tables sit together. If the Table Dictionary has areas, <b>Area ▾</b> picks one or more areas: the list narrows to them and their tables are drawn; <b>Colour by area</b> gives each area its own border colour (also in the draw.io file). Click the <b>★</b> next to one or more tables to make them <b>core tables</b>: they are placed in the middle, glow gold, and everything else is arranged around them by how closely it is linked. Each line has a small arrow pointing at the table being looked up. Lines between the same two tables are merged into one (untick <b>Merge lines</b> to see them separately), and relationship names show when you hover a table (or choose Always / Hidden). Drag any table to move it (the lines follow) and drag the background to pan. Your arrangement is remembered in this browser for that selection of tables and options, and <b>Auto layout</b> discards it and lays the tables out again. Scroll the mouse wheel over the canvas to zoom in or out at the pointer, and drag empty space to move around. The <b>draw.io</b> button downloads the diagram, with your layout and the attributes currently shown, as a draw.io file to keep editing; re-exporting later does not keep edits made in draw.io. The diagram can be zoomed, copied as Mermaid source, or saved as .mmd, SVG or PNG; SVG and PNG use your arrangement.</p>`)}
+  <p>The <b>ERD</b> tab generates a Mermaid entity-relationship diagram from the lookup columns. It opens with the custom tables when there are 30 or fewer, otherwise with nothing selected so you can pick a readable set; you are asked before drawing more than 80 tables. Pick the tables and the detail level, and system tables such as users and teams are shown as light stubs. Tables are laid out automatically so related tables sit together. If the Table Dictionary has areas, <b>Area ▾</b> picks one or more areas: the list narrows to them and their tables are drawn; <b>Colour by area</b> gives each area its own border colour (also in the draw.io file). Click the <b>★</b> next to one or more tables to make them <b>core tables</b>: they are placed in the middle, glow gold, and everything else is arranged around them by how closely it is linked. Each line has a small arrow pointing at the table being looked up. A line only shows relationship ends (one, many) when the relationship is recorded, for now by importing Dataverse metadata; otherwise it is a plain grey line, counted above the diagram and listed per table in Checks under <b>Relationship type not recorded</b> for review. Lines between the same two tables are merged into one (untick <b>Merge lines</b> to see them separately), and relationship names show when you hover a table (or choose Always / Hidden). Drag any table to move it (the lines follow) and drag the background to pan. Your arrangement is remembered in this browser for that selection of tables and options, and <b>Auto layout</b> discards it and lays the tables out again. Scroll the mouse wheel over the canvas to zoom in or out at the pointer, and drag empty space to move around. The <b>draw.io</b> button downloads the diagram, with your layout and the attributes currently shown, as a draw.io file to keep editing; re-exporting later does not keep edits made in draw.io. The diagram can be zoomed, copied as Mermaid source, or saved as .mmd, SVG or PNG; SVG and PNG use your arrangement.</p>`)}
 
   ${sec(7,'Overview and checks',`
   <p>The page opens on the <b>Overview</b>: how many tables, fields and lookups the model has, how complete the documentation is (fields and tables with a description, dictionary entries with an area and purpose), the least-described tables, a summary by area, and the latest changes and edits. Click a tile to jump to the detail.</p>
@@ -5355,6 +5391,7 @@ function renderReadme(){
   <ul>
     <li><b>Errors:</b> a table or field without a logical name, a field listed twice in one table, the same table on two tabs.</li>
     <li><b>Warnings:</b> fields without an attribute type; lookups with no targets; lookups to a table with your own prefix that has no tab (one finding per missing table); dictionary entries with no tab, and tabs missing from the dictionary.</li>
+    <li><b>To build by hand:</b> calculated, rollup and formula fields of your own. Their definitions aren't in the workbook, so they can't go in a generated solution; <b>Export → Calculated and rollup fields</b> lists them per table, with a column for the formula and a Created? column to track progress.</li>
     <li><b>Info:</b> lookups to standard or Microsoft tables that have no tab (user, team and similar system tables are left out entirely); logical names that are not lower-case letters, digits and underscores; custom fields without a publisher prefix; tables whose primary key field is not listed. In a full Dataverse export these are usually Microsoft's own and fine.</li>
     <li>The empty starter template built into the page is not checked.</li>
   </ul>
@@ -5427,7 +5464,9 @@ const RULES={
   'dv-field-undocumented':['warn','Custom Dataverse field not documented'],
   'dv-custom':['info','Custom flag differs from Dataverse'],
   'dv-ownership':['info','Ownership differs from Dataverse'],
-  'dv-std-undocumented':['info','Standard Dataverse fields not listed']
+  'dv-std-undocumented':['info','Standard Dataverse fields not listed'],
+  'manual-build':['info','Calculated or rollup field to create by hand'],
+  'rel-review':['info','Relationship type not recorded']
 };
 const isLookupType=t=>/lookup|customer|owner/i.test(t||'');
 // workbook wording ("Whole Number", "Two Options") and Dataverse AttributeType ("Integer", "Boolean") put in the same buckets
@@ -5453,6 +5492,24 @@ function reqClass(v){
   if(k==='recommended'||k==='businessrecommended') return 'recommended';
   if(k==='none'||k==='optional') return 'none';
   return '';
+}
+// your own publisher prefixes: those of the custom tables in the workbook, leaving out Microsoft's (ms…, adx)
+// a lookup's relationship is only "known" when something records it: today, imported Dataverse metadata
+// (an N:1 from this field to that table). Unknown ones are drawn as plain lines and flagged for review.
+function relKnown(sh,ln,target){const de=S.dv&&sh&&S.dv.ents[sh.logical];return !!(de&&de.m1.some(r=>r.attr===String(ln).toLowerCase()&&(r.target===target||(r.target==='owner'&&(target==='systemuser'||target==='team')))))}
+function ownPrefixes(ents){return new Set((ents||S.sheets.filter(s=>s.kind==='entity')).filter(s=>s.custom&&s.logical.includes('_')).map(s=>s.logical.split('_')[0]).filter(p=>!/^(ms|adx)/.test(p)))}
+// calculated, rollup and formula fields can't go in a generated solution (their definitions aren't in the workbook),
+// so they are listed to be created by hand after import. Only your own fields: Microsoft's come with their solutions.
+const MANUAL_RE=/calculated|rollup|formula/i;
+function manualFields(){
+  const ents=S.sheets.filter(s=>s.kind==='entity'), own=ownPrefixes(ents), out=[];
+  const mine=ln=>own.size?(ln.includes('_')&&own.has(ln.split('_')[0])):true;
+  ents.forEach(sh=>{ if(sh.colIdx['Type']===undefined) return;
+    sh.rows.forEach(row=>{const k=getVal(sh,row,'Type'), ln=getVal(sh,row,'Logical Name').trim();
+      if(!ln||!MANUAL_RE.test(k)) return;
+      const cust=sh.colIdx['Custom Attribute']===undefined||facet('Custom Attribute',getVal(sh,row,'Custom Attribute'))==='True';
+      if(cust&&mine(ln.toLowerCase())) out.push({sh,row,ln,kind:/rollup/i.test(k)?'Rollup':/formula/i.test(k)?'Formula':'Calculated'})})});
+  return out;
 }
 function issues(){
   if(S.issues) return S.issues;
@@ -5485,7 +5542,7 @@ function issues(){
     if(sh.rows.length&&sh.logical&&!seen[pk]) add('pk-missing',sh,null,'','The primary key field ('+pk+') is not listed.');
   });
   // your own publisher prefixes: those of the custom tables in the workbook, leaving out Microsoft's (ms…, adx)
-  const own=new Set(ents.filter(s=>s.custom&&s.logical.includes('_')).map(s=>s.logical.split('_')[0]).filter(p=>!/^(ms|adx)/.test(p)));
+  const own=ownPrefixes(ents);
   Object.keys(missing).sort().forEach(t=>{
     const m=missing[t], n=m.fields.length, nt=m.tables.size, mine=t.includes('_')&&own.has(t.split('_')[0]);
     add('lookup-unknown',m.sh,m.row,t,'"'+t+'" has no tab in this workbook'+(S.dv&&S.dv.ents[t]?' (it does exist in Dataverse)':'')+'. Looked up by '+n+' field'+(n===1?'':'s')+': '+m.fields.slice(0,4).join(', ')+(n>4?', …':'')+'.'+(mine?'':' It looks like a standard or Microsoft table, which is often fine to leave out.'),mine?'warn':'info',nt>1?nt+' tables':'');
@@ -5496,6 +5553,11 @@ function issues(){
     dict.rows.forEach(row=>{const n=getVal(dict,row,'Table Name'); if(!n) return; if(row.link!=null) linked.add(row.link); else add('dict-unlinked',dict,row,n,'No table tab matches this dictionary entry.')});
     ents.forEach(sh=>{if(!linked.has(sh.idx)) add('tab-not-in-dict',sh,null,'','This table is not listed in the Table Dictionary.')});
   }
+  ents.forEach(sh=>{ // lookups whose relationship isn't recorded anywhere: one finding per table
+    const list=[]; sh.rows.forEach(row=>{if(!isLookupType(getVal(sh,row,'Attribute Type'))) return; const ln=getVal(sh,row,'Logical Name').trim(); lookupTargetsOf(sh,row).forEach(t=>{if(!relKnown(sh,ln,t)) list.push(ln+' → '+t)})});
+    if(list.length) add('rel-review',sh,null,'',list.length+' relationship'+(list.length===1?' has':'s have')+' no recorded type, so the ERD shows '+(list.length===1?'it as a plain line':'them as plain lines')+': '+list.slice(0,6).join(', ')+(list.length>6?', …':'')+'. Confirm '+(list.length===1?'it':'them')+' by importing Dataverse metadata (or, later, in the Relationships tab).');
+  });
+  manualFields().forEach(m=>add('manual-build',m.sh,m.row,m.ln,m.kind+' field. It can\'t be included in a generated solution, so create it by hand after import. Listed in Export → Calculated and rollup fields.'));
   if(S.dv) dvChecks(add,ents);
   out.forEach((x,i)=>x.i=i); out.sort((a,b)=>SEV[a.sev].rank-SEV[b.sev].rank||a.i-b.i);
   return S.issues=out;
@@ -5691,6 +5753,8 @@ function renderOverview(){
   const ed=[...S.edits.values()];
   if(ed.length) lc+=`<div class="ovrow"><b>Your edits (${ed.length})</b><a href="#" data-ov="changes">All changes</a></div><ul style="margin:4px 0 0;padding-left:18px">${ed.slice(-5).reverse().map(e=>`<li><a href="#" data-cgo="${ed.indexOf(e)}">${esc(e.sh.label)} · ${esc(editLabel(e))}</a> <span class="dim">${esc(e.col)}</span></li>`).join('')}</ul>`;
   if(S.pending.length) lc+=`<div style="margin-top:8px;color:var(--pink)">${S.pending.length} carried-over edit${S.pending.length===1?'':'s'} need${S.pending.length===1?'s':''} your attention. <a href="#" data-ov="changes">Review</a></div>`;
+  {const mf=manualFields(); if(mf.length){const k=x=>mf.filter(m=>m.kind===x).length, tb=new Set(mf.map(m=>m.sh)).size;
+    h+=`<div class="ovcard"><h3>To build by hand</h3><div>${mf.length} calculated or rollup field${mf.length===1?'':'s'} in ${tb} table${tb===1?'':'s'} (${[['Calculated',k('Calculated')],['Rollup',k('Rollup')],['Formula',k('Formula')]].filter(x=>x[1]).map(x=>x[1]+' '+x[0].toLowerCase()).join(', ')}).</div><div class="dim" style="margin-top:4px">Their formulas aren't in the workbook, so they can't go in a generated solution. Create them in Power Apps after import.</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-ov="manual">Download the list (.xlsx)</button><button class="btn" data-ov="issues:rule:manual-build">See them in Checks</button></div></div>`}}
   h+=`<div class="ovcard"><h3>Latest changes</h3>${lc||'<div class="dim">No edits yet, and no earlier version to compare with. Use <b>Load version…</b> to compare.</div>'}</div>`;
   // Dataverse
   const ds=S.dv?dvSummary():null;
@@ -5790,7 +5854,7 @@ function buildErd(){
       erdTargets(E,s,row).forEach(({tg,tsh})=>{
         const p=node(tg,tsh,tsh?tsh.label:tg);
         const k=p.id+'>'+mid(s.logical)+'>'+lbl; if(seenRel.has(k)) return; seenRel.add(k);
-        rels.push({p:p.id,c:mid(s.logical),lbl,req});
+        rels.push({p:p.id,c:mid(s.logical),lbl,req,unk:!relKnown(s,getVal(s,row,'Logical Name'),tg)});
       });
     });
   });
@@ -5826,7 +5890,7 @@ function buildErd(){
     });
     L.push('  }');
   });
-  rels.forEach(r=>L.push('  '+r.p+(r.nn?' }o..o{ ':r.req?' ||--o{ ':' |o--o{ ')+r.c+' : "'+r.lbl+'"')); stats.rels=rels.length;
+  rels.forEach(r=>L.push('  '+r.p+(r.nn?' }o..o{ ':r.unk?' }|--|{ ':r.req?' ||--o{ ':' |o--o{ ')+r.c+' : "'+r.lbl+'"')); stats.rels=rels.length; stats.unk=rels.filter(r=>r.unk).length; E.unkCount=stats.unk;
   const cust=[...nodes.values()].filter(n=>n.sel&&n.sh&&n.sh.custom).map(n=>n.id);
   const oo=[...nodes.values()].filter(n=>!(n.sel&&n.sh&&n.sh.custom)).map(n=>n.id);
   if(E.acol&&hasAreas()){
@@ -5849,10 +5913,10 @@ function erdRefresh(now){clearTimeout(erdTimer);erdTimer=setTimeout(drawErd,now?
 async function drawErd(){
   const cv=$('#erdcv'); if(!cv) return; const E=erdInit();
   const {src,stats}=buildErd(); E.srcText=src;
-  {const lg=$('#erdlegend'); if(lg){ if(E.acol&&hasAreas()) lg.innerHTML='<span style="margin-right:6px">Areas:</span>'+areaList().map(([a])=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="display:inline-block;width:14px;height:10px;border:3px solid ${areaColour(a)};border-radius:2px"></span>${esc(a)}</span>`).join('')+'<span>Thick border: custom table</span>';
-    else lg.innerHTML='<span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced'}}
+  {const lg=$('#erdlegend'); if(lg){ const unkKey=stats.unk?' &nbsp; <span style="display:inline-block;width:22px;border-top:2px solid #98A2B3;vertical-align:3px"></span> Relationship type not recorded – review':''; if(E.acol&&hasAreas()) lg.innerHTML='<span style="margin-right:6px">Areas:</span>'+areaList().map(([a])=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="display:inline-block;width:14px;height:10px;border:3px solid ${areaColour(a)};border-radius:2px"></span>${esc(a)}</span>`).join('')+'<span>Thick border: custom table</span>'+unkKey;
+    else lg.innerHTML='<span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced'+unkKey}}
   const ta=$('#erdsrc'); if(ta&&ta!==document.activeElement) ta.value=src;
-  $('#erdinfo').textContent=stats.tables+' tables'+(stats.stubs?' + '+stats.stubs+' referenced':'')+' · '+stats.rels+' relationships'+(E.attrs!=='none'?' · '+stats.attrs+' attributes':'')+(stats.hidden?' · '+stats.hidden+' unrelated hidden':'');
+  $('#erdinfo').textContent=stats.tables+' tables'+(stats.stubs?' + '+stats.stubs+' referenced':'')+' · '+stats.rels+' relationships'+(E.attrs!=='none'?' · '+stats.attrs+' attributes':'')+(stats.hidden?' · '+stats.hidden+' unrelated hidden':'')+(stats.unk?' · '+stats.unk+' of '+stats.rels+' relationships have no recorded type (plain lines)':'');
   if(!E.sel.size){const n=S.sheets.filter(s=>s.kind==='entity').length; cv.innerHTML=`<div class="msg" style="max-width:520px"><b>Pick the tables to draw.</b><br>Tick tables on the left, filter them (for example by prefix), or click ★ next to a table to build the diagram around it.${n>ERD_EASY?` With ${n} tables in this workbook, drawing them all at once is slow and hard to read; a few dozen at a time works best.`:''}</div>`;E.svg='';return}
   if(typeof mermaid==='undefined'){cv.innerHTML='<div class="err">The Mermaid library did not load. The source is below and can be pasted into any Mermaid viewer.</div>';return}
   const my=++E.n;
@@ -5973,12 +6037,14 @@ function erdWire(){
     const id=p.getAttribute('data-id')||''; const m=/id_entity-(.+)-(\d+)_entity-(.+)-(\d+)_(\d+)$/.exec(id); if(!m) return;
     const a=nodes[m[1]+'-'+m[2]], b=nodes[m[3]+'-'+m[4]]; if(!a||!b) return;
     const pk=[a.key,b.key].sort().join('|'); (pairs[pk]=pairs[pk]||[]).push(1);
-    const ms=p.getAttribute('marker-start')||'', me=p.getAttribute('marker-end')||'', nn=/zeroOrMore|oneOrMore/i.test(ms)&&/zeroOrMore|oneOrMore/i.test(me); edges.push({p,a,b,nn,k:pairs[pk].length-1,pk,lab:labels[id],parA:/onlyOne|zeroOrOne/i.test(ms)||!/onlyOne|zeroOrOne/i.test(p.getAttribute('marker-end')||'')});
+    const ms=p.getAttribute('marker-start')||'', me=p.getAttribute('marker-end')||'', nn=/zeroOrMore/i.test(ms)&&/zeroOrMore/i.test(me), unk=/oneOrMore/i.test(ms)&&/oneOrMore/i.test(me);
+    if(unk){p.removeAttribute('marker-start');p.removeAttribute('marker-end');p.style.stroke='#98A2B3';p.classList.add('erdunk')}
+    edges.push({p,a,b,nn,unk,k:pairs[pk].length-1,pk,lab:labels[id],parA:/onlyOne|zeroOrOne/i.test(ms)||!/onlyOne|zeroOrOne/i.test(p.getAttribute('marker-end')||'')});
   });
   edges.forEach(e=>{e.n=pairs[e.pk].length});
   const move=(n,cx,cy)=>{n.cx=cx;n.cy=cy;n.g.setAttribute('transform','translate('+(cx-n.ox)+','+(cy-n.oy)+')')};
   // merge parallel lines between the same two tables into one labelled line
-  const groups={}; edges.forEach(e=>{if(e.a!==e.b){const k=e.pk+'|'+(e.parA?e.a.key:e.b.key)+(e.nn?'|nn':''); (groups[k]=groups[k]||[]).push(e)}});
+  const groups={}; edges.forEach(e=>{if(e.a!==e.b){const k=e.pk+'|'+(e.parA?e.a.key:e.b.key)+(e.nn?'|nn':'')+(e.unk?'|unk':''); (groups[k]=groups[k]||[]).push(e)}});
   const shown=[]; const txt=e=>e.lab?(e.lab.textContent||'').trim():'';
   edges.forEach(e=>{if(e.a===e.b) shown.push(e)});
   Object.values(groups).forEach(g=>{
@@ -6009,7 +6075,7 @@ function erdWire(){
       const bz=u=>{const m=1-u;return [0,1].map(i=>m*m*m*P[0][i]+3*m*m*u*P[1][i]+3*m*u*u*P[2][i]+u*u*u*P[3][i])};
       const mid=bz(.5); if(e.lab) e.lab.setAttribute('transform','translate('+mid[0]+','+mid[1]+')');
       const p1=bz(.45),p2=bz(.55); let ux=p2[0]-p1[0],uy=p2[1]-p1[1]; const ln=Math.hypot(ux,uy)||1; ux/=ln;uy/=ln; if(e.parA){ux=-ux;uy=-uy}
-      if(e.nn){if(e.arr)e.arr.setAttribute('d','');return} // many-to-many: no direction arrow
+      if(e.nn||e.unk){if(e.arr)e.arr.setAttribute('d','');return} // many-to-many or type unknown: no direction arrow
       const mx=mid[0],my=mid[1],L=11,Wd=6; if(!e.arr){e.arr=document.createElementNS('http://www.w3.org/2000/svg','path');e.arr.setAttribute('fill','#0A4873');e.arr.setAttribute('class','erdarr');e.arr.style.pointerEvents='none';e.p.parentNode.appendChild(e.arr)}
       e.arr.setAttribute('d','M'+(mx+ux*L/2)+','+(my+uy*L/2)+'L'+(mx-ux*L/2-uy*Wd)+','+(my-uy*L/2+ux*Wd)+'L'+(mx-ux*L/2+uy*Wd)+','+(my-uy*L/2-ux*Wd)+'Z');
     });
@@ -6121,11 +6187,11 @@ function erdDrawio(base){
     t.lines.forEach((l,i)=>{const k=t.rows[i].k; out.push('<mxCell id="'+tid+'r'+i+'" value="'+x(l)+'" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=6;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;fontFamily=Courier New;fontSize=11;fontColor='+(k==='FK'?'#BB1C73':'#0A4873')+';'+(k==='PK'?'fontStyle=1;':'')+'" vertex="1" parent="'+tid+'"><mxGeometry y="'+(HD+i*RH)+'" width="'+t.w+'" height="'+RH+'" as="geometry"/></mxCell>')});
   });
   // relationships: parent (the table looked up) -> child (holds the lookup). One line per pair unless merging is off.
-  const groups=new Map(); M.rels.forEach(r=>{const k=(r.nn?'nn:':'')+(E.merge?r.p+'>'+r.c:r.p+'>'+r.c+'>'+r.lbl); (groups.get(k)||groups.set(k,[]).get(k)).push(r)});
+  const groups=new Map(); M.rels.forEach(r=>{const k=(r.nn?'nn:':r.unk?'unk:':'')+(E.merge?r.p+'>'+r.c:r.p+'>'+r.c+'>'+r.lbl); (groups.get(k)||groups.set(k,[]).get(k)).push(r)});
   groups.forEach(g=>{
     const r=g[0], P=byId[r.p.toLowerCase()], C=byId[r.c.toLowerCase()]; if(!P||!C) return;
     const lbl=[...new Set(g.map(q=>q.lbl))].join(' · '), req=g.some(q=>q.req), eid='e'+(id++);
-    const style='edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;fontColor=#0A4873;labelBackgroundColor=#FFFFFF;strokeColor=#0A4873;startArrow='+(r.nn?'ERzeroToMany':req?'ERmandOne':'ERzeroToOne')+(r.nn?';dashed=1':'')+';startFill=0;endArrow=ERzeroToMany;endFill=0;';
+    const style='edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;fontColor=#0A4873;labelBackgroundColor=#FFFFFF;'+(r.unk?'strokeColor=#98A2B3;startArrow=none;endArrow=none;':'strokeColor=#0A4873;startArrow='+(r.nn?'ERzeroToMany':req?'ERmandOne':'ERzeroToOne')+(r.nn?';dashed=1':'')+';startFill=0;endArrow=ERzeroToMany;endFill=0;');
     let geo='<mxGeometry relative="1" as="geometry"/>';
     if(P===C) geo='<mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="'+(P.x+P.w+50)+'" y="'+(P.y+HD)+'"/><mxPoint x="'+(P.x+P.w+50)+'" y="'+(P.y+HD+40)+'"/></Array></mxGeometry>';
     out.push('<mxCell id="'+eid+'" value="'+x(lbl)+'" style="'+style+'" edge="1" parent="1" source="'+P.tid+'" target="'+C.tid+'">'+geo+'</mxCell>');
@@ -6373,6 +6439,7 @@ document.addEventListener('click',e=>{
     e.preventDefault(); const a=n.dataset.ov;
     if(a.startsWith('go:')){go(a.slice(3));return}
     if(a==='open'){pickFile();return}
+    if(a==='manual'){doExport('manual');return}
     if(a==='versions'){renderVersions();return}
     if(a==='changes'){renderChanges();return}
     if(a==='dv'){renderDv();return}

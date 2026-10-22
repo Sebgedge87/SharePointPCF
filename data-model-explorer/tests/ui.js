@@ -30,6 +30,7 @@ function areaModel() {
   T.forEach(([disp, ln], i) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Entity', disp], ['Plural Display Name', disp], ['Description', 'd'], ['Schema Name', ln],
     ['Logical Name', ln], ['Object Type Code', 20000 + i], ['Is Custom Entity', 'True'], ['Ownership Type', 'UserOwned'], ['Audit Tracking', 'False'], [], H,
     ['fp_name', 'Name', 'Name', 'Text', 'x', 'True', 'Simple', 'None', ''],
+    ...(ln === 'fp_a1' ? [['fp_total', 'Total', 'Total value', 'Currency', 'Sum of quotes', 'True', 'Calculated', 'None', 'Precision: 2']] : ln === 'fp_a2' ? [['fp_count', 'Count', 'Open count', 'Whole number', 'Rollup of open items', 'True', 'Rollup', 'None', '']] : []),
     ['fp_linkid', 'Link', 'Link', 'Lookup', 'x', 'True', 'Simple', 'None', 'Targets:\n' + (ln === 'fp_s1' ? 'fp_a1' : ln === 'fp_s2' ? 'fp_s1' : 'fp_a1')]]), disp + ' (' + ln + ')'));
   const f = path.join(out, 'area_model.xlsx'); XLSX.writeFile(wb, f); return f;
 }
@@ -112,9 +113,24 @@ function areaModel() {
 
   await p.click('#nav .navitem[data-view="__all"]'); await p.waitForTimeout(400);
   await pickAreas('[data-areabtn="all"]', ['Service']);
-  ok(/^4 of 12 rows/.test(await p.innerText('#count')), 'All fields can be filtered to the Service area (4 of 12 fields)');
+  ok(/^4 of 14 rows/.test(await p.innerText('#count')), 'All fields can be filtered to the Service area (4 of 14 fields)');
   await p.click('[data-clr="areas"]'); await p.waitForTimeout(300);
-  ok(/^12 rows/.test(await p.innerText('#count')), 'the area filter clears from its chip');
+  ok(/^14 rows/.test(await p.innerText('#count')), 'the area filter clears from its chip');
+
+  // calculated and rollup fields: listed to build by hand, per table
+  await p.click('#nav .navitem[data-view="__overview"]'); await p.waitForTimeout(300);
+  ok(/To build by hand[\s\S]*2 calculated or rollup fields in 2 tables \(1 calculated, 1 rollup\)/.test(await p.innerText('.ov')), 'the Overview counts the fields to build by hand');
+  const [dlm] = await Promise.all([p.waitForEvent('download'), p.click('[data-ov="manual"]')]);
+  const mw = XLSX.readFile(await dlm.path());
+  ok(JSON.stringify(mw.SheetNames) === '["Summary","By table","All fields"]', 'the hand-build list has Summary, By table and All fields sheets');
+  const allRows = XLSX.utils.sheet_to_json(mw.Sheets['All fields']);
+  ok(allRows.length === 2 && allRows.some(r => r.Table === 'Account' && r['Logical Name'] === 'fp_total' && r.Kind === 'Calculated' && r.Area === 'Sales')
+     && allRows.some(r => r.Table === 'Lead' && r['Logical Name'] === 'fp_count' && r.Kind === 'Rollup'), 'it lists each field with its table, area and kind');
+  const byT = XLSX.utils.sheet_to_json(mw.Sheets['By table'], { header: 1 }).map(r => r[0] || '');
+  ok(byT.some(c => /^Account\s+\(fp_a1\)/.test(c)) && byT.some(c => /^Lead\s+\(fp_a2\)/.test(c)), 'the By table sheet has a heading per table');
+  await p.click('#nav .navitem[data-view="__issues"]'); await p.selectOption('#irule', 'manual-build'); await p.waitForTimeout(300);
+  ok(await p.locator('#isswrap tbody tr').count() === 2, 'Checks lists them under "Calculated or rollup field to create by hand"');
+  await p.selectOption('#irule', '');
 
   // give Ghost an area in the dictionary: it moves to Service straight away
   await p.click('#nav .navitem:has-text("Table Dictionary")'); await p.waitForTimeout(400);
@@ -125,6 +141,28 @@ function areaModel() {
   await p.waitForTimeout(400);
   ok((await p.innerText('#nav [data-grp="Service"]')).includes('3'), 'editing Area in the dictionary regroups the sidebar at once (Service now has 3)');
   ok(!(await p.locator('#nav [data-grp="Other tables"]').count()), 'and the "no area" group is gone');
+
+  // a template with an extra table-detail row and an extra field column reads both
+  {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[], [], ['', 'Area', 'Table Name', 'Purpose'], ['', 'Sales', 'Widget', 'p']]), 'Table Dictionary');
+    const H = ['Logical Name', 'Schema Name', 'Display Name', 'Attribute Type', 'Description', 'Custom Attribute', 'Type', 'Required Level', 'Additional data', 'Data Owner'];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Entity', 'Widget'], ['Plural Display Name', 'Widgets'], ['Description', 'd'], ['Schema Name', 'fp_widget'], ['Logical Name', 'fp_widget'],
+      ['Object Type Code', 1], ['Is Custom Entity', 'True'], ['Ownership Type', 'UserOwned'], ['Audit Tracking', 'False'], ['Primary Name Column', 'fp_name'], ['', '', '', '', '', '', '', '', '', 'Who owns the data'], H,
+      ['fp_widgetid', 'Id', 'Id', 'Uniqueidentifier', 'x', 'True', 'Simple', 'None', '', 'IT'], ['fp_name', 'Name', 'Name', 'Text', 'x', 'True', 'Simple', 'ApplicationRequired', 'Format: Text\nMax length: 100', 'Sales ops']]), 'Widget (fp_widget)');
+    const f = path.join(out, 'extra_cols.xlsx'); XLSX.writeFile(wb, f);
+    await p.setInputFiles('#file', f); await p.waitForTimeout(800); if (await p.locator('.dlgbox').count()) await p.click('.dlgbox [data-d="0"]');
+    await p.waitForTimeout(1500); await p.keyboard.press('Escape');
+    if (!await p.locator('#nav .navitem:has-text("Widget")').count()) await p.click('#nav [data-grp="Sales"]');
+    await p.click('#nav .navitem:has-text("Widget")'); await p.waitForTimeout(500);
+    ok(await p.locator('#gridwrap table.grid thead th:has-text("Data Owner")').count() === 1 && /Sales ops/.test(await p.innerText('#gridwrap')), 'a new field column appears in the grid with its values');
+    ok(await p.locator('#gridwrap table.grid thead th:has-text("Data Owner") .xtag').count() === 1, 'and is tagged "new" when the template does not have it');
+    ok(/Who owns the data/.test(await p.$eval('#gridwrap table.grid thead th:has-text("Data Owner")', e => e.title)), 'its hint text shows on the column heading');
+    await p.locator('#gridwrap tbody tr').first().click(); await p.waitForTimeout(400);
+    ok(/Data Owner[\s\S]*IT/i.test(await p.innerText('#detail')), 'and in the row details, where it can be edited');
+    ok(!/Primary Name Column/.test(await p.$eval('#gridwrap table.grid thead', e => e.innerText)), 'a tenth table-detail row is read as a detail, not as column hints');
+    await p.keyboard.press('Escape');
+  }
 
   // phone width: header fits, everything else is in the ⋯ menu
   await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(300);

@@ -1,3 +1,16 @@
+# 1.5.0
+
+- **To build by hand:** calculated, rollup and formula fields of your own (their definitions aren't in the workbook,
+  so they can't go in a generated solution) are listed per table in **Export → Calculated and rollup fields
+  (.xlsx)**: Summary, By table (a heading per table, with blank Formula and Created? columns) and a filterable All
+  fields sheet. Also an Overview card and a Checks entry per field.
+- **ERD relationships of unknown type:** a line only shows relationship ends (one / many) when the relationship is
+  recorded (for now, by imported Dataverse metadata). Otherwise it is a plain grey line with no ends or arrow, in
+  the diagram and the draw.io export; the info bar counts them and Checks lists them per table under
+  "Relationship type not recorded" for review.
+- **Template changes:** table-detail rows are read however many there are (they were limited to the first nine), so
+  new detail rows such as "Primary Name Column" can be added to the template. New field columns were already read.
+
 # 1.4.0
 
 Areas (from the Table Dictionary's Area column)
