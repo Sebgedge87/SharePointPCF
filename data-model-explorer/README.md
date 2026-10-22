@@ -44,7 +44,10 @@ hand in Power Apps.
 
    The script installs the Power Platform CLI (pac) if it is missing, opens a browser window to sign in, and imports
    the solution. Your account needs the System Customizer or System Administrator role. **Import into a development
-   environment first.**
+   environment first.** If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1` once.
+
+   To import a solution zip you already have, **Export → Import script (import.ps1)** downloads the script on its own:
+   put it next to the zip and run the same command (or add `-SolutionPath .\MySolution.zip`).
 3. Read **build-report.csv**: everything included, left out (and why), or to build by hand.
 4. Create the fields in **calculated-and-rollup-fields.xlsx** by hand. Their formulas aren't in the workbook.
 5. Lay out forms and views in Power Apps, then export the solution as managed for test and production.

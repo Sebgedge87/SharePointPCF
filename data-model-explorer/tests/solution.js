@@ -131,6 +131,13 @@ function model() {
   const ps1 = await outer.file('import.ps1').async('string');
   ok(/'FP_DataModel_1_0_0_0\.zip'/.test(ps1) && /pac solution import --path \$solution --publish-changes --async/.test(ps1) && /pac auth create --environment \$EnvironmentUrl/.test(ps1), 'import.ps1 signs in with pac and imports the solution');
   ok(/dotnet tool install --global Microsoft\.PowerApps\.CLI\.Tool/.test(ps1) && /winget install --id Microsoft\.PowerAppsCLI/.test(ps1) && /Get-Command pac/.test(ps1), 'import.ps1 checks for pac and installs it if missing');
+  ok(/-SolutionPath/.test(ps1) && /Unblock-File/.test(ps1) && /\r\n/.test(ps1), 'import.ps1 takes -SolutionPath, says how to unblock it, and has Windows line endings');
+  fs.writeFileSync(path.join(out, 'import_bundled.ps1'), ps1);
+  // the script on its own, from the Export menu
+  const [sd] = await Promise.all([p.waitForEvent('download'), (async () => { await p.click('#btnExport'); await p.click('.menu [data-x="ps1"]'); })()]);
+  const solo = fs.readFileSync(await sd.path(), 'utf8');
+  ok(sd.suggestedFilename() === 'import.ps1' && /Get-ChildItem -Path \$PSScriptRoot -Filter \*\.zip/.test(solo) && /-SolutionPath/.test(solo) && /pac solution import --path \$solution/.test(solo) && !/FP_DataModel/.test(solo), 'Export -> Import script downloads a general import.ps1 that finds the solution zip next to it');
+  fs.writeFileSync(path.join(out, 'import_solo.ps1'), solo);
   ok(XLSX.utils.sheet_to_json(XLSX.read(await outer.file('calculated-and-rollup-fields.xlsx').async('nodebuffer')).Sheets['All fields']).some(r => r['Logical Name'] === 'fp_total'), 'the hand-build list is included');
 
   // optional: Microsoft's SolutionPackager must be able to unpack and re-pack the solution

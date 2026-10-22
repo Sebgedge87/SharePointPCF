@@ -1,3 +1,13 @@
+# 1.9.0
+
+- **Export → Import script (import.ps1)**, and **Import script only** in the solution dialog: the PowerShell import
+  script on its own, for a solution zip you already have. Put it next to the zip and run it; it imports the one
+  solution zip in its folder, or the one given with `-SolutionPath`.
+- import.ps1 (also the one in the build zip) takes `-SolutionPath`, prints which solution it imports, writes solution
+  checker results next to the solution, uses Windows line endings, and says to run `Unblock-File .\import.ps1` if
+  Windows refuses to run a downloaded script. Both versions are parsed with PowerShell 7.4 and run against a stand-in
+  pac in testing.
+
 # 1.8.1
 
 - The Relationship Name column is hidden by default, also where column choices were saved before: it is optional, as

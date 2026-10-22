@@ -5311,7 +5311,7 @@ function moreMenu(anchor){
 function exportMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu';
-  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button><hr><button data-x="solution">Dataverse solution (.zip)…<small>Tables, fields and relationships, with a script to import them</small></button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
+  el.innerHTML=`<button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>${S.handle?'<button data-x="save-orig">Save back to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Load version… in Chrome or Edge to link it">Save back to the original file<small>Open the file in Chrome or Edge to link it</small></button>'}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)</button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)</button><button data-x="log">Change log (CSV)</button><hr><button data-x="solution">Dataverse solution (.zip)…<small>Tables, fields and relationships, with a script to import them</small></button><button data-x="ps1">Import script (import.ps1)<small>Imports a solution zip with pac: installs pac if needed and signs you in</small></button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
   el.addEventListener('click',e=>{const b=e.target.closest('[data-x]');const x=b&&b.dataset.x;if(!x)return;closePops();doExport(x)});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
@@ -5578,6 +5578,9 @@ function doExport(kind){
     nameDialog(nextName(S.fileName,' (edited)'),'Full workbook, plain values').then(fn=>{if(!fn) return; XLSX.writeFile(wb,fn); toast('Exported '+fn+'. Values only: cell styling is not carried over')});
   } else if(kind==='solution'){
     solDialog();
+  } else if(kind==='ps1'){
+    download('import.ps1',new Blob([importScript().replace(/\r?\n/g,'\r\n')],{type:'text/plain'}));
+    toast('import.ps1 downloaded. Put it next to the solution zip and run it in PowerShell.');
   } else if(kind==='manual'){
     exportManual().catch(err=>{console.error(err);toast('Could not create the list ('+err.message+')')});
   } else if(kind==='diff'){
@@ -5698,7 +5701,7 @@ function renderReadme(){
   <p><b>Export → Dataverse solution (.zip)…</b> turns the model into an unmanaged solution you import with the Power Platform CLI. Set the solution name, version and publisher (the prefix and choice value prefix are suggested from the workbook); the dialog shows what will be built and what won't. The download holds:</p>
   <ul>
     <li>the <b>solution</b>: every new table with your prefix (with its primary name column, primary key, ownership, notes and activities settings) and its fields; your new fields on existing tables, which are included as shells so nothing else about them changes; a relationship for every lookup and customer lookup; and every N:N row.</li>
-    <li><b>import.ps1</b>: checks for pac and installs it if needed, signs you in through the browser, and imports the solution. Run <span class="mono">.\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com</span>, into a development environment first.</li>
+    <li><b>import.ps1</b> (also on its own from <b>Export → Import script</b>, for a solution zip you already have): checks for pac and installs it if needed, signs you in through the browser, and imports the solution. Run <span class="mono">.\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com</span>, into a development environment first.</li>
     <li><b>build-report.csv</b>: every table, field and relationship, and whether it is included, left out (and why), or to build by hand.</li>
     <li>the <b>hand-build list</b> of calculated and rollup fields.</li>
   </ul>
@@ -6329,12 +6332,22 @@ function solutionFiles(plan){
   const types=X+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/octet-stream" /></Types>';
   return {'[Content_Types].xml':types,'solution.xml':solution,'customizations.xml':customizations};
 }
+// zipName and c are given for the script in a build zip; without them it is the general script from Export -> Import script
 function importScript(zipName,c){
+  const what=c?c.solName+' '+c.version:'a solution (.zip)';
+  const pick=zipName?`  $SolutionPath = Join-Path $PSScriptRoot '${zipName}'`:`  # the one solution zip in this folder (build zips from the Data Model Explorer are left out)
+  $zips = @(Get-ChildItem -Path $PSScriptRoot -Filter *.zip | Where-Object { $_.Name -notlike '* build.zip' })
+  if ($zips.Count -ne 1) { throw "Found $($zips.Count) solution zips next to this script. Say which one with -SolutionPath." }
+  $SolutionPath = $zips[0].FullName`;
   return `<#
-  Imports ${c.solName} ${c.version} into a Dataverse environment with the Power Platform CLI (pac).
+  Imports ${what} into a Dataverse environment with the Power Platform CLI (pac).
 
   Usage:   .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com
            .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com -Check   # run Microsoft's solution checker first
+           .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com -SolutionPath .\\MySolution_1_0_0_0.zip
+  ${zipName?'Without -SolutionPath it imports '+zipName+' from this folder.':'Without -SolutionPath it imports the one solution zip in this folder.'}
+
+  If Windows refuses to run a downloaded script, run this once first:   Unblock-File .\\import.ps1
 
   Needs PowerShell 7 (or Windows PowerShell 5.1) and pac. If pac is missing, it is installed:
   with the .NET SDK when present (dotnet tool install), otherwise with winget on Windows.
@@ -6342,11 +6355,16 @@ function importScript(zipName,c){
 #>
 param(
   [Parameter(Mandatory = $true)][string]$EnvironmentUrl,
+  [string]$SolutionPath,
   [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
-$solution = Join-Path $PSScriptRoot '${zipName}'
-if (-not (Test-Path $solution)) { throw "Solution file not found: $solution" }
+if (-not $SolutionPath) {
+${pick}
+}
+if (-not (Test-Path $SolutionPath)) { throw "Solution file not found: $SolutionPath" }
+$solution = (Resolve-Path $SolutionPath).Path
+Write-Host "Solution: $solution"
 
 function Test-Pac { [bool](Get-Command pac -ErrorAction SilentlyContinue) }
 if (-not (Test-Pac)) {
@@ -6369,7 +6387,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sign-in failed.' }
 pac env who
 
 if ($Check) {
-  pac solution check --path $solution --outputDirectory (Join-Path $PSScriptRoot 'check-results')
+  pac solution check --path $solution --outputDirectory (Join-Path (Split-Path $solution) 'check-results')
 }
 
 Write-Host 'Importing (this can take a while for a large model)...'
@@ -6388,7 +6406,7 @@ async function generateSolution(cfg){
   const files=solutionFiles(plan), inner=new JSZip(); Object.entries(files).forEach(([n,t])=>inner.file(n,t));
   const ver=cfg.version.replace(/\./g,'_'), innerName=cfg.solName+'_'+ver+'.zip';
   const innerBytes=await inner.generateAsync({type:'uint8array',compression:'DEFLATE'});
-  const outer=new JSZip(); outer.file(innerName,innerBytes); outer.file('import.ps1',importScript(innerName,cfg));
+  const outer=new JSZip(); outer.file(innerName,innerBytes); outer.file('import.ps1',importScript(innerName,cfg).replace(/\r?\n/g,'\r\n'));
   outer.file('build-report.csv',csv([['Table','Item','What','Action','Detail']].concat(plan.report.map(r=>[r.tbl,r.item,r.what,r.action,r.why]))));
   const mb=await manualWorkbook(); if(mb) outer.file('calculated-and-rollup-fields.xlsx',mb);
   const notIn=plan.report.filter(r=>r.action==='Not included').length, hand=plan.report.filter(r=>r.action==='Build by hand').length;
@@ -6409,7 +6427,7 @@ function solDialog(){
   m.innerHTML=`<div class="convbox solbox"><h3>Build a Dataverse solution</h3><p class="dim" style="margin:4px 0 12px">Creates an unmanaged solution with your new tables, the fields you add to existing tables, and their relationships, plus a PowerShell script that imports it with pac.</p>
     <div class="solgrid">${f('solName','Solution unique name')}${f('solDisplay','Solution display name')}${f('version','Version','for example 1.0.0.0')}${f('pubName','Publisher unique name','must match the publisher if it already exists')}${f('pubDisplay','Publisher display name')}${f('prefix','Prefix','tables and fields starting with this are built')}${f('optPrefix','Choice value prefix','numbering for new choice options')}</div>
     <div class="solsum" id="solsum"></div><div class="solerr" id="solerr"></div>
-    <div class="convbtns"><button class="btn" data-sol="cancel">Cancel</button> <button class="btn primary" data-sol="go">Generate</button></div></div>`;
+    <div class="convbtns"><button class="btn ghost" data-sol="ps1" title="Just the PowerShell script, for importing a solution zip you already have" style="margin-right:auto">Import script only</button><button class="btn" data-sol="cancel">Cancel</button> <button class="btn primary" data-sol="go">Generate</button></div></div>`;
   document.body.appendChild(m);
   const read=()=>{const o={}; m.querySelectorAll('[data-k]').forEach(i=>o[i.dataset.k]=i.value.trim()); o.prefix=o.prefix.toLowerCase(); return o};
   const summary=()=>{const o=read(), errs=solValidate(o); m.querySelector('#solerr').innerHTML=errs.map(e=>`<div>${esc(e)}</div>`).join('');
@@ -6423,6 +6441,7 @@ function solDialog(){
   document.addEventListener('keydown',key,true);
   m.addEventListener('click',async e=>{const b=e.target.closest('[data-sol]'); if(!b){if(e.target===m)close();return}
     if(b.dataset.sol==='cancel') return close();
+    if(b.dataset.sol==='ps1') return doExport('ps1');
     const o=read(), errs=solValidate(o); if(errs.length){summary();return}
     store.set(solKey(),o); b.disabled=true; b.textContent='Building…';
     try{await generateSolution(o); close()}catch(err){console.error(err); b.disabled=false; b.textContent='Generate'; m.querySelector('#solerr').textContent='Could not build the solution: '+err.message}
