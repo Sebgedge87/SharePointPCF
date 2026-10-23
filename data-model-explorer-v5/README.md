@@ -17,6 +17,17 @@ the connected environment's address, so the page runs in its "inside Dynamics 36
   the environment as the connected user;
 - only read requests are passed on: the tool cannot change the environment.
 
+### Try it without building
+
+`xrmtoolbox/release/FormusPro.DataModelExplorer.XrmToolBox.dll` is the tool, ready built (5.0.0, for XrmToolBox
+1.2025.10 or later).
+
+1. Download it, right-click it → **Properties** → tick **Unblock** → OK. (Windows marks downloaded files, and XrmToolBox
+   won't load a marked dll. Or in PowerShell: `Unblock-File .\FormusPro.DataModelExplorer.XrmToolBox.dll`.)
+2. Close XrmToolBox and copy the dll into `%APPDATA%\MscrmTools\XrmToolBox\Plugins` (for a portable XrmToolBox, its
+   own `Plugins` folder).
+3. Start XrmToolBox, connect, and open **Data Model Explorer** from the tool list.
+
 ### Build and try it (Windows, .NET SDK 8 or later)
 
 ```
