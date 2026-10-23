@@ -110,8 +110,29 @@ function areaModel() {
   ok(/Area: Service/.test(await p.innerText('[data-areabtn="erd"]')), 'the Area button shows the choice');
   await p.check('#erdacol'); await p.waitForTimeout(2500);
   ok(/classDef ar\d+c stroke:/.test(await p.inputValue('#erdsrc')) && /Service/.test(await p.innerText('#erdlegend')), 'Colour by area colours each table by its area, with a legend');
+  ok(await p.locator('#erdcv svg g.node').count() >= 3 && !(await p.locator('#erdcv .err').count()), 'and the coloured diagram draws (Mermaid rejects decimal line widths)');
   const dio = await (async () => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]); return fs.readFileSync(await d.path(), 'utf8'); })();
   ok(/strokeColor=#BB1C73/.test(dio) || /strokeColor=#1B7F5C/.test(dio) || /strokeColor=#0A4873/.test(dio), 'the draw.io file carries the area colours');
+
+  // hiding a table's relationships: Case looks up Account, and Queue looks up Case
+  const caseBtn = p.locator('.erdv .lst label:has(.lg:text-is("fp_s1")) [data-relopen]');
+  ok(/2 rel/.test(await caseBtn.innerText()), 'a table in the ERD list shows how many relationships it has');
+  await caseBtn.click(); await p.waitForTimeout(200);
+  const relTxt = await p.innerText('[data-relpanel]');
+  ok(/Link → Account/.test(relTxt) && /Link ← Queue/.test(relTxt), 'its panel lists its own lookups and the lookups to it');
+  const nodePos = async () => { await p.waitForSelector('#erdcv svg g.node[id*="entity-fp_s1-"]', { timeout: 15000 }); return p.evaluate(() => { const all = JSON.parse(localStorage.getItem('dme.erdpos')), pos = all[Object.keys(all).pop()]; return JSON.stringify([pos.fp_s1, pos.fp_s2].map(a => a && a.map(Math.round))); }); };
+  const before = await nodePos();
+  ok(/fp_a1\[/.test(await p.inputValue('#erdsrc')), 'before hiding, Account is drawn as the table Case looks up');
+  await p.uncheck('[data-relk="l:fp_s1|fp_linkid|fp_a1"]'); await p.waitForTimeout(2500);
+  ok(!/fp_a1\[/.test(await p.inputValue('#erdsrc')) && /1 hidden by you/.test(await p.innerText('#erdinfo')), 'unticking Case → Account removes that line (and the Account table it brought in)');
+  ok(/fp_s2.*fp_s1|fp_s1.*fp_s2/.test((await p.inputValue('#erdsrc')).split('\n').filter(l => /:/.test(l) && /fp_s/.test(l)).join('\n')), 'the other relationship stays');
+  { const after = await nodePos(); ok(after === before, 'the tables stay where they were' + (after === before ? '' : ' (' + before + ' → ' + after + ')')); }
+  ok(/1 of 2 hidden/.test(await caseBtn.innerText()) && /1 hidden relationship/.test(await p.innerText('#erdhid')), 'the list and the panel header show what is hidden');
+  ok(await p.evaluate(() => Object.keys(localStorage).some(k => (localStorage.getItem(k) || '').includes('l:fp_s1|fp_linkid|fp_a1'))), 'hidden relationships are remembered');
+  await p.click('[data-relpanel] [data-relall][data-on="0"]'); await p.waitForTimeout(2500);
+  ok(/0 relationships/.test(await p.innerText('#erdinfo')) && /2 of 2 hidden/.test(await caseBtn.innerText()), 'Hide all hides every relationship of the table');
+  await p.click('#erdhid [data-hidclear]'); await p.waitForTimeout(2500);
+  ok(/fp_a1\[/.test(await p.inputValue('#erdsrc')) && !/hidden by you/.test(await p.innerText('#erdinfo')) && !(await p.innerText('#erdhid')), 'show all brings every relationship back');
 
   await p.click('#nav .navitem[data-view="__issues"]'); await p.waitForTimeout(300);
   await pickAreas('[data-areabtn="iss"]', ['Sales']);

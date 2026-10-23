@@ -268,7 +268,7 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 }
 .cellsel{width:100%;height:28px;border:1px solid var(--accent);border-radius:6px;background:#fff;padding:0 4px}
 .erdv{flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr}
-.erdv .ctl{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.erdv .ctl{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:auto;background:var(--panel)}
 .erdv .ctl .ctop{padding:14px 14px 8px;border-bottom:1px solid var(--line2)}
 .erdv .ctl h1{margin:0 0 2px;font-size:20px;color:var(--accent);letter-spacing:-.02em}
 .erdv .ctl .opt{display:flex;flex-direction:column;gap:6px;margin-top:10px}
@@ -277,7 +277,7 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 .erdv .ctl .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .erdv .ctl .seg button{flex:1;border:0;background:transparent;padding:5px 4px;font-size:12px}
 .erdv .ctl .seg button.on{background:var(--accent);color:#fff}
-.erdv .ctl .lst{flex:1;overflow:auto;padding:6px 10px 20px}
+.erdv .ctl .lst{flex:1 0 auto;min-height:260px;height:0;overflow:auto;padding:6px 10px 20px}
 .erdv .ctl .lst h4{margin:12px 4px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
 .erdv .ctl .lst label{padding:3px 4px;border-radius:6px}.erdv .ctl .lst label:hover{background:var(--panel2)}
 .erdv .ctl .lst small{margin-left:auto;color:var(--faint)}
@@ -290,6 +290,12 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 .erdv .lst label{position:relative}
 .erdv .corebtn{margin-left:6px;border:0;background:none;color:#7a8b98;cursor:pointer;font-size:15px;line-height:1;padding:4px;min-width:26px;min-height:26px}
 .erdv .corebtn:hover{color:#E8A317}.erdv .corebtn.on{color:#E8A317}
+.erdv .relbtn{margin-left:4px;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:6px;font-size:11px;padding:1px 6px;cursor:pointer;white-space:nowrap}
+.erdv .relbtn:hover,.erdv .relbtn.on{border-color:var(--accent);color:var(--accent)}
+.erdv .relbtn.hid{border-color:#E8A317;color:#93370D;background:#FEF0C7}
+.erdv .relpanel{margin:0 0 8px 26px;padding:6px 8px;border-left:2px solid var(--line);font-size:12.5px}
+.erdv .relpanel label{display:flex;align-items:flex-start;gap:6px;padding:2px 0}
+.erdv .relpanel .quick{margin-top:4px}
 .erdv .cv{flex:1;overflow:auto;background:#fff;padding:12px;position:relative;display:flex;cursor:grab;min-height:0}
 .erdv .cv svg{display:block;flex:none}
 .erdv .cv .msg{padding:30px;color:var(--muted)}
@@ -2768,15 +2774,18 @@ const ERD_EASY=30, ERD_BIG=80;   // tables: drawn by default up to EASY; asked b
 function erdInit(){
   if(S.erd) return S.erd;
   const ui=S.ui.erd||{};
-  S.erd={sel:new Set(S.sheets.filter(s=>s.kind==='entity'&&s.custom).map(s=>s.idx)),attrs:ui.attrs||'keys',stubs:ui.stubs!==false,sys:ui.sys!==false,ext:!!ui.ext,rel:ui.rel!==false,dir:ui.dir||'LR',zoom:0,fit:'screen',q:'',src:false,n:0,pos:{},merge:ui.merge!==false,dock:ui.dock||'right',sw:ui.sw||440,sh:ui.sh||260,smax:false,follow:ui.follow!==false,auto:{},prim:new Set(),lbl:ui.lbl||'hover',nn:ui.nn!==false,areas:new Set(),acol:!!ui.acol,core:new Set((ui.core||[]).map(x=>String(x).toLowerCase()))};
+  S.erd={sel:new Set(S.sheets.filter(s=>s.kind==='entity'&&s.custom).map(s=>s.idx)),attrs:ui.attrs||'keys',stubs:ui.stubs!==false,sys:ui.sys!==false,ext:!!ui.ext,rel:ui.rel!==false,dir:ui.dir||'LR',zoom:0,fit:'screen',q:'',src:false,n:0,pos:{},merge:ui.merge!==false,dock:ui.dock||'right',sw:ui.sw||440,sh:ui.sh||260,smax:false,follow:ui.follow!==false,auto:{},prim:new Set(),lbl:ui.lbl||'hover',nn:ui.nn!==false,hide:new Set(ui.hide||[]),relOpen:new Set(),areas:new Set(),acol:!!ui.acol,core:new Set((ui.core||[]).map(x=>String(x).toLowerCase()))};
   // start small: the custom tables or every table only when that is a readable number, otherwise nothing and a prompt
   {const ents=S.sheets.filter(s=>s.kind==='entity'), cust=ents.filter(s=>s.custom); S.erd.sel=new Set((cust.length&&cust.length<=ERD_EASY?cust:ents.length<=ERD_EASY?ents:[]).map(s=>s.idx))}
   return S.erd;
 }
+// a relationship hidden from the diagram: 'l:<table>|<lookup field>|<target>' for a lookup, 'n:<relationship name>' for N:N
+const erdRk=(sh,row,tg)=>'l:'+(sh.logical+'|'+getVal(sh,row,'Logical Name')+'|'+tg).toLowerCase();
 function erdTargets(E,sh,row){
   const out=[];
   lookupTargetsOf(sh,row).forEach(tg=>{
     if(E.sys&&SYS_TABLES.has(tg)) return;
+    if(E.hide.size){const k=erdRk(sh,row,tg); if(E.hide.has(k)){if(E.hidSeen) E.hidSeen.add(k); return}}
     const i=S.byLogical[tg]; const tsh=i!=null?S.sheets[i]:null;
     if(tsh){ if(!E.sel.has(tsh.idx)&&!E.stubs) return }
     else if(!(E.stubs&&E.ext)) return;
@@ -2786,7 +2795,7 @@ function erdTargets(E,sh,row){
 }
 function buildErd(){
   const E=erdInit(); const stats={tables:0,stubs:0,rels:0,attrs:0};
-  const nodes=new Map(); const rels=[];
+  const nodes=new Map(); const rels=[]; E.hidSeen=new Set();
   const node=(key,sh,label)=>{let n=nodes.get(key);if(!n){n={id:mid(key),label:label||key,sh,sel:false};nodes.set(key,n)}return n};
   const sels=S.sheets.filter(s=>s.kind==='entity'&&E.sel.has(s.idx));
   sels.forEach(s=>{node(s.logical,s,s.label).sel=true});
@@ -2807,7 +2816,7 @@ function buildErd(){
   const nnSeen=new Set();
   sels.forEach(s=>s.rows.forEach(row=>{ // N:N rows recorded in the workbook
     if(!isNNRow(s,row)) return; const nm=getVal(s,row,'Logical Name').trim(), tg=lookupTargetsOf(s,row)[0]; if(!nm||!tg||nnSeen.has(nm.toLowerCase())) return;
-    if(E.sys&&SYS_TABLES.has(tg)) return; const i=S.byLogical[tg], tsh=i!=null?S.sheets[i]:null;
+    if(E.sys&&SYS_TABLES.has(tg)) return; if(E.hide.has('n:'+nm.toLowerCase())){E.hidSeen.add('n:'+nm.toLowerCase()); return} const i=S.byLogical[tg], tsh=i!=null?S.sheets[i]:null;
     if(tsh){if(!E.sel.has(tsh.idx)&&!E.stubs) return} else if(!(E.stubs&&E.ext)) return;
     nnSeen.add(nm.toLowerCase()); const o=node(tg,tsh,tsh?tsh.label:tg); rels.push({p:mid(s.logical),c:o.id,lbl:mq(getVal(s,row,'Display Name')||nm),req:false,nn:true});
   }));
@@ -2816,6 +2825,7 @@ function buildErd(){
     sels.forEach(s=>{const de=S.dv.ents[s.logical]; if(!de) return;
       de.nn.forEach(r=>{
         if(seenNN.has(String(r.schema).toLowerCase())||(E.sys&&SYS_TABLES.has(r.other))) return;
+        if(E.hide.has('n:'+String(r.schema).toLowerCase())){E.hidSeen.add('n:'+String(r.schema).toLowerCase()); return}
         const i=S.byLogical[r.other], tsh=i!=null?S.sheets[i]:null;
         if(tsh){if(!E.sel.has(tsh.idx)&&!E.stubs) return} else if(!(E.stubs&&E.ext)) return;
         seenNN.add(String(r.schema).toLowerCase()); const o=node(r.other,tsh,tsh?tsh.label:r.other);
@@ -2850,7 +2860,7 @@ function buildErd(){
     // colour by area: border colour from the table's area, thick for custom tables; tables outside the workbook stay plain
     const byCls={}; [...nodes.values()].forEach(n=>{let c='ootb'; if(n.sh){const i=areaList().findIndex(x=>x[0]===areaOf(n.sh)); c='ar'+i+(n.sel&&n.sh.custom?'c':'o')} (byCls[c]=byCls[c]||[]).push(n.id)});
     L.push('  classDef ootb stroke:#667085,stroke-width:1px');
-    Object.keys(byCls).filter(c=>c!=='ootb').forEach(c=>{const col=AREA_COLS[+c.slice(2,-1)%AREA_COLS.length]; L.push('  classDef '+c+' stroke:'+col+',stroke-width:'+(c.endsWith('c')?'3px':'1.5px'))});
+    Object.keys(byCls).filter(c=>c!=='ootb').forEach(c=>{const col=AREA_COLS[+c.slice(2,-1)%AREA_COLS.length]; L.push('  classDef '+c+' stroke:'+col+',stroke-width:'+(c.endsWith('c')?'3px':'2px'))});
     Object.entries(byCls).forEach(([c,ids])=>L.push('  class '+ids.join(',')+' '+c));
   } else {
     L.push('  classDef cust stroke:#BB1C73,stroke-width:3px');
@@ -2858,18 +2868,18 @@ function buildErd(){
     if(cust.length) L.push('  class '+cust.join(',')+' cust');
     if(oo.length) L.push('  class '+oo.join(',')+' ootb');
   }
-  E.model={nodes:[...nodes.values()],rels};
+  stats.hidRels=E.hidSeen.size; E.model={nodes:[...nodes.values()],rels};
   return {src:L.join('\n'),stats};
 }
 let erdTimer=null;
 function erdRefresh(now){clearTimeout(erdTimer);erdTimer=setTimeout(drawErd,now?0:250)}
 async function drawErd(){
   const cv=$('#erdcv'); if(!cv) return; const E=erdInit();
-  const {src,stats}=buildErd(); E.srcText=src;
+  const {src,stats}=buildErd(); E.srcText=src; erdUpdHid(stats.hidRels);
   {const lg=$('#erdlegend'); if(lg){ const unkKey=stats.unk?' &nbsp; <span style="display:inline-block;width:22px;border-top:2px solid #98A2B3;vertical-align:3px"></span> Relationship type not recorded – review':''; if(E.acol&&hasAreas()) lg.innerHTML='<span style="margin-right:6px">Areas:</span>'+areaList().map(([a])=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="display:inline-block;width:14px;height:10px;border:3px solid ${areaColour(a)};border-radius:2px"></span>${esc(a)}</span>`).join('')+'<span>Thick border: custom table</span>'+unkKey;
     else lg.innerHTML='<span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced'+unkKey}}
   const ta=$('#erdsrc'); if(ta&&ta!==document.activeElement) ta.value=src;
-  $('#erdinfo').textContent=stats.tables+' tables'+(stats.stubs?' + '+stats.stubs+' referenced':'')+' · '+stats.rels+' relationships'+(E.attrs!=='none'?' · '+stats.attrs+' attributes':'')+(stats.hidden?' · '+stats.hidden+' unrelated hidden':'')+(stats.unk?' · '+stats.unk+' of '+stats.rels+' relationships have no recorded type (plain lines)':'');
+  $('#erdinfo').textContent=stats.tables+' tables'+(stats.stubs?' + '+stats.stubs+' referenced':'')+' · '+stats.rels+' relationships'+(E.attrs!=='none'?' · '+stats.attrs+' attributes':'')+(stats.hidRels?' · '+stats.hidRels+' hidden by you':'')+(stats.hidden?' · '+stats.hidden+' unrelated hidden':'')+(stats.unk?' · '+stats.unk+' of '+stats.rels+' relationships have no recorded type (plain lines)':'');
   if(!E.sel.size){const n=S.sheets.filter(s=>s.kind==='entity').length; cv.innerHTML=`<div class="msg" style="max-width:520px"><b>Pick the tables to draw.</b><br>Tick tables on the left, filter them (for example by prefix), or click ★ next to a table to build the diagram around it.${n>ERD_EASY?` With ${n} tables in this workbook, drawing them all at once is slow and hard to read; a few dozen at a time works best.`:''}</div>`;E.svg='';return}
   if(typeof mermaid==='undefined'){cv.innerHTML='<div class="err">The Mermaid library did not load. The source is below and can be pasted into any Mermaid viewer.</div>';return}
   const my=++E.n;
@@ -3052,7 +3062,7 @@ function erdWire(){
   const src=(E.srcText||'')+'|core:'+[...E.core].sort().join(','); let h=5381; for(let i=0;i<src.length;i++) h=((h<<5)+h+src.charCodeAt(i))|0;
   const pkey='p'+(h>>>0).toString(36), all=store.get('dme.erdpos')||{};
   const persist=()=>{all[pkey]=E.pos; const ks=Object.keys(all); if(ks.length>12) delete all[ks[0]]; store.set('dme.erdpos',all)};
-  E.pos=all[pkey]||{};
+  E.pos=all[pkey]||(E.keepPos?{...E.keepPos}:{}); E.keepPos=null;
   const list=Object.values(nodes);
   if(!list.every(n=>E.pos[n.name])){ erdAutoLayout(list,edges.filter(e=>e.a!==e.b).map(e=>[e.a,e.b])); list.forEach(n=>move(n,n.cx,n.cy)); list.forEach(n=>{E.pos[n.name]=[n.cx,n.cy]}); persist() }
   else list.forEach(n=>move(n,E.pos[n.name][0],E.pos[n.name][1]));
@@ -3160,7 +3170,7 @@ function erdDrawio(base){
 }
 function erdNamesBtn(){const E=erdInit(),b=document.querySelector('[data-ea="names"]'); if(b) b.textContent='Names: '+({hover:'on hover',all:'always',none:'hidden'}[E.lbl]||'on hover'); document.querySelectorAll('[data-ek="lbl"]').forEach(x=>x.classList.toggle('on',x.dataset.ev===E.lbl))}
 function renderErdPage(){
-  const E=erdInit(); const main=$('#main');
+  const E=erdInit(); E.relIdx=null; const main=$('#main');
   const groups={}; S.sheets.filter(s=>s.kind==='entity').forEach(s=>{const g=s.area||'Other tables';(groups[g]=groups[g]||[]).push(s)});
   const ord=Object.keys(groups).sort((a,b)=>(a==='Other tables')-(b==='Other tables')||a.localeCompare(b));
   const f=E.q.toLowerCase();
@@ -3180,7 +3190,7 @@ function renderErdPage(){
     <label><input type="checkbox" id="erdmerge" ${E.merge?'checked':''}> Merge lines between the same two tables</label>
     <label><input type="checkbox" id="erdsys" ${E.sys?'checked':''}> Hide user, team and business unit</label>
     ${S.dv?`<label><input type="checkbox" id="erdnn" ${E.nn?'checked':''}> Show N:N relationships from Dataverse</label>`:''}</div>
-    <div class="dim" id="erdcore" style="margin:2px 0 6px"></div><div class="quick"><button data-eq="custom">Custom only</button><button data-eq="all">All</button><button data-eq="none">None</button></div>
+    <div class="dim" id="erdcore" style="margin:2px 0 6px"></div><div class="dim" id="erdhid" style="margin:0 0 6px"></div><div class="quick"><button data-eq="custom">Custom only</button><button data-eq="all">All</button><button data-eq="none">None</button></div>
     <div class="quick" style="margin-top:8px">${hasAreas()?`<button data-areabtn="erd" class="${E.areas.size?'on':''}" style="${E.areas.size?'border-color:var(--accent);background:var(--accent-bg)':''}">Area: ${esc(areaLabel(E.areas))} ▾</button><label style="font-size:12.5px"><input type="checkbox" id="erdacol" ${E.acol?'checked':''}> Colour by area</label>`:`<span class="dim" style="font-size:12.5px">Fill in <b>Area</b> in the Table Dictionary to pick tables by area.</span>`}</div>
     <div class="quick" style="margin-top:4px"><button data-eq="shown" title="Tick every table currently shown by the filter below">Select shown</button><button data-eq="unshown" title="Untick every table currently shown by the filter below">Clear shown</button></div>
     <div style="margin-top:8px"><input type="search" id="erdq" placeholder="Filter by name or logical name, e.g. rhs_" value="${esc(E.q)}"></div></div>
@@ -3197,6 +3207,7 @@ function renderErdPage(){
   const root=main.querySelector('.erdv');
   root.addEventListener('change',e=>{
     const t=e.target;
+    if(t.dataset.relk){t.checked?E.hide.delete(t.dataset.relk):E.hide.add(t.dataset.relk); erdHidChanged(); return}
     if(t.dataset.es){erdPick(+t.dataset.es,t.checked); const lst=$('#erdlst'),keep=lst.scrollTop; renderErdList(); lst.scrollTop=keep; erdRefresh()}
     else if(t.id==='erdfollow'){E.follow=t.checked;erdSave()}
     else if(t.id==='erdstubs'){E.stubs=t.checked;erdSave();erdRefresh()}
@@ -3210,6 +3221,8 @@ function renderErdPage(){
   root.addEventListener('input',e=>{if(e.target.id==='erdq'){E.q=e.target.value;const lst=$('#erdlst');const keep=lst.scrollTop;renderErdList();lst.scrollTop=keep}});
   root.addEventListener('click',e=>{
     const b=e.target.closest('button'); if(!b) return;
+    if(b.dataset.relopen){e.preventDefault(); const i=+b.dataset.relopen; E.relOpen.has(i)?E.relOpen.delete(i):E.relOpen.add(i); const lst=$('#erdlst'),keep=lst.scrollTop; renderErdList(); lst.scrollTop=keep; return}
+    if(b.dataset.relall){e.preventDefault(); const s=S.sheets[+b.dataset.relall]; erdRelsOf(s).forEach(r=>b.dataset.on==='1'?E.hide.delete(r.k):E.hide.add(r.k)); erdHidChanged(); return}
     if(b.dataset.core){e.preventDefault();const s=S.sheets.find(x=>x.idx===+b.dataset.core); if(!s) return; const k=mid(s.logical).toLowerCase();
       if(E.core.has(k)) E.core.delete(k); else {E.core.add(k);E.sel.add(s.idx)}
       erdSave(); const lst=$('#erdlst'),keep=lst.scrollTop; renderErdList(); lst.scrollTop=keep; erdUpdCore(); erdRefresh(true); return}
@@ -3228,6 +3241,7 @@ function renderErdPage(){
     else if(b.dataset.ez!==undefined){if(+b.dataset.ez===0) E.fit='view'; erdZoom(+b.dataset.ez)}
     else if(b.dataset.ea) erdAction(b.dataset.ea,b);
   });
+  root.addEventListener('click',e=>{if(e.target.closest('[data-hidclear]')){e.preventDefault();E.hide.clear();erdHidChanged();return}});
   root.addEventListener('click',e=>{if(e.target.closest('[data-coreclear]')){e.preventDefault();E.core.clear();erdSave();renderErdList();erdUpdCore();erdRefresh(true)}});
   erdUpdCore(); erdNamesBtn();
   // the canvas fills the screen: re-fit when the window or panel size changes, drag empty space to pan, mouse wheel to zoom at the pointer
@@ -3259,7 +3273,36 @@ function erdUpdCore(){const E=erdInit(),el=$('#erdcore'); if(!el) return;
   const names=S.sheets.filter(s=>s.kind==='entity'&&E.core.has(mid(s.logical).toLowerCase())).map(s=>s.label);
   el.innerHTML=names.length?'Core: <b>'+names.map(esc).join(', ')+'</b> <a href="#" data-coreclear style="margin-left:6px">clear</a>':'Click ★ on a table to make it a core table. The diagram is then arranged around it.'}
 function erdMatch(s,f){ if(!f) return true; return f.split(/[\s,;]+/).filter(Boolean).some(w=>(s.label+' '+s.logical+' '+s.schema).toLowerCase().includes(w)) }
-function erdLbl(s,E){return `<label><input type="checkbox" data-es="${s.idx}" ${E.sel.has(s.idx)?'checked':''}> <span class="tn">${esc(s.label)}<small class="lg">${esc(s.logical)}</small></span><small>${s.custom?'custom':'ootb'}</small><button type="button" class="corebtn ${E.core.has(mid(s.logical).toLowerCase())?'on':''}" data-core="${s.idx}" title="Make this a core table: the diagram is arranged around the core tables">★</button></label>`}
+function erdLbl(s,E){return `<label><input type="checkbox" data-es="${s.idx}" ${E.sel.has(s.idx)?'checked':''}> <span class="tn">${esc(s.label)}<small class="lg">${esc(s.logical)}</small></span><small>${s.custom?'custom':'ootb'}</small><button type="button" class="corebtn ${E.core.has(mid(s.logical).toLowerCase())?'on':''}" data-core="${s.idx}" title="Make this a core table: the diagram is arranged around the core tables">★</button>${erdRelBtn(s,E)}</label>${E.relOpen.has(s.idx)?erdRelPanel(s,E):''}`}
+/* the relationships of one table, both ways: its own lookups, lookups to it from other tables, and N:N */
+function erdRelIndex(){
+  const E=erdInit(), idx=new Map(), lk=/lookup|owner|customer/i;
+  const add=(lg,r)=>{lg=String(lg).toLowerCase(); let a=idx.get(lg); if(!a) idx.set(lg,a=[]); if(!a.some(x=>x.k===r.k)) a.push(r)};
+  const lbl=lg=>{const i=S.byLogical[lg]; return i!=null?S.sheets[i].label:lg};
+  S.sheets.filter(s=>s.kind==='entity').forEach(s=>s.rows.forEach(row=>{
+    const ln=getVal(s,row,'Logical Name'); if(!ln) return; const dn=getVal(s,row,'Display Name')||ln;
+    if(isNNRow(s,row)){const tg=lookupTargetsOf(s,row)[0]; if(!tg) return; const k='n:'+ln.toLowerCase(); add(s.logical,{k,txt:dn,other:lbl(tg),dir:'nn'}); add(tg,{k,txt:dn,other:s.label,dir:'nn'}); return}
+    if(!lk.test(getVal(s,row,'Attribute Type'))) return;
+    lookupTargetsOf(s,row).forEach(tg=>{
+      if(E.sys&&SYS_TABLES.has(tg)) return; const k=erdRk(s,row,tg);
+      add(s.logical,{k,txt:dn,other:lbl(tg),dir:'out'}); if(tg.toLowerCase()!==s.logical.toLowerCase()) add(tg,{k,txt:dn,other:s.label,dir:'in'});
+    });
+  }));
+  if(S.dv&&E.nn) Object.entries(S.dv.ents).forEach(([lg,de])=>(de.nn||[]).forEach(r=>add(lg,{k:'n:'+String(r.schema).toLowerCase(),txt:r.schema,other:lbl(r.other),dir:'nn'})));
+  return idx;
+}
+function erdRelsOf(sh){const E=erdInit(); if(!E.relIdx) E.relIdx=erdRelIndex(); return E.relIdx.get(sh.logical.toLowerCase())||[]}
+function erdRelBtn(s,E){
+  const rs=erdRelsOf(s); if(!rs.length) return ''; const h=rs.filter(r=>E.hide.has(r.k)).length;
+  return `<button type="button" class="relbtn ${E.relOpen.has(s.idx)?'on':''} ${h?'hid':''}" data-relopen="${s.idx}" title="Choose which of this table's relationships the diagram shows">${h?h+' of '+rs.length+' hidden':rs.length+' rel'} ▾</button>`}
+function erdRelPanel(s,E){
+  const rs=erdRelsOf(s), arrow={out:'→',in:'←',nn:'↔'};
+  return `<div class="relpanel" data-relpanel="${s.idx}"><div class="dim">Untick a relationship to hide it from the diagram.</div>`+rs.map(r=>`<label title="${esc(r.k.slice(2))}"><input type="checkbox" data-relk="${esc(r.k)}" ${E.hide.has(r.k)?'':'checked'}> <span>${esc(r.txt)} <span class="dim">${arrow[r.dir]} ${esc(r.other)}${r.dir==='nn'?' (N:N)':''}</span></span></label>`).join('')+
+    `<div class="quick"><button type="button" data-relall="${s.idx}" data-on="1">Show all</button><button type="button" data-relall="${s.idx}" data-on="0">Hide all</button></div></div>`}
+function erdUpdHid(n){const E=erdInit(),el=$('#erdhid'); if(!el) return;
+  el.innerHTML=E.hide.size?`${n!=null?n:E.hide.size} hidden relationship${(n!=null?n:E.hide.size)===1?'':'s'} in this diagram <a href="#" data-hidclear style="margin-left:6px">show all</a>`:''}
+// after changing which relationships are hidden: keep the tables where they are, redraw, and refresh the list
+function erdHidChanged(){const E=erdInit(); E.keepPos=E.pos; erdSave(); const lst=$('#erdlst'),keep=lst?lst.scrollTop:0; if(lst){renderErdList(); lst.scrollTop=keep} erdRefresh(true)}
 /* selecting a table also selects the tables it relates to (and unselecting removes the ones it brought in) */
 function erdAdj(){
   if(S.adj) return S.adj;
@@ -3281,13 +3324,13 @@ function erdPick(idx,on){
   if(!E.prim) E.prim=new Set(); on?E.prim.add(idx):E.prim.delete(idx);
 }
 function renderErdList(){
-  const E=erdInit(); const f=E.q.toLowerCase();
+  const E=erdInit(); E.relIdx=null; const f=E.q.toLowerCase();
   const groups={}; S.sheets.filter(s=>s.kind==='entity').forEach(s=>{const g=s.area||'Other tables';(groups[g]=groups[g]||[]).push(s)});
   const ord=Object.keys(groups).sort((a,b)=>(a==='Other tables')-(b==='Other tables')||a.localeCompare(b));
   $('#erdlst').innerHTML=ord.filter(g=>!E.areas.size||E.areas.has(g)).map(g=>{const items=groups[g].filter(s=>erdMatch(s,f));
     return items.length?`<h4>${esc(g)}</h4>`+items.map(s=>erdLbl(s,E)).join(''):''}).join('');
 }
-function erdSave(){const E=erdInit();S.ui.erd={acol:E.acol,nn:E.nn,attrs:E.attrs,stubs:E.stubs,sys:E.sys,ext:E.ext,rel:E.rel,dir:E.dir,merge:E.merge,dock:E.dock,sw:E.sw,sh:E.sh,lbl:E.lbl,follow:E.follow,core:[...E.core]};store.set('dme.ui',S.ui)}
+function erdSave(){const E=erdInit();S.ui.erd={acol:E.acol,nn:E.nn,attrs:E.attrs,stubs:E.stubs,sys:E.sys,ext:E.ext,rel:E.rel,dir:E.dir,merge:E.merge,dock:E.dock,sw:E.sw,sh:E.sh,lbl:E.lbl,follow:E.follow,core:[...E.core],hide:[...E.hide]};store.set('dme.ui',S.ui)}
 function erdAction(a,btn){
   const E=erdInit(); const base=S.fileName.replace(/\.[^.]+$/,'')+' - ERD';
   if(a==='names'){E.lbl=E.lbl==='hover'?'all':E.lbl==='all'?'none':'hover'; erdSave(); erdNamesBtn(); if(E.applyVis) E.applyVis(); return}

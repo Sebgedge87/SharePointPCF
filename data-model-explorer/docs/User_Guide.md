@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 1.9.2 · 22 October 2026"
+subtitle: "Version 1.9.3 · 23 October 2026"
 ---
 
 ## Introduction
@@ -16,7 +16,7 @@ It is for anyone who owns or reviews a data model kept in the FormusPro template
 | Compare | Load a newer version of the workbook, see every difference, and keep your edits |
 | Build | Generate an unmanaged Dataverse solution, then import it with `import.ps1` |
 
-This guide describes version 1.9.2. The latest file is in the SharePointPCF repository under `data-model-explorer`.
+This guide describes version 1.9.3. The latest file is in the SharePointPCF repository under `data-model-explorer`.
 
 ## Opening (uploading) a workbook
 
@@ -114,6 +114,11 @@ The **ERD** draws the tables you pick, joined by their lookups and N:N relations
 2. Click ★ next to a table to make it a **core table**: the diagram is laid out around it, and with **Selecting a table also selects the tables it relates to** on, its neighbours come too.
 3. Choose what each box shows (**Names only**, **Keys + lookups** or **All fields**), the **Direction** (left to right or top to bottom), and when relationship names show.
 4. Drag tables to tidy the layout; **Auto layout** starts again. Layouts are remembered per selection.
+5. To leave out particular relationships, click the count next to a table (for example **3 rel ▾**). It lists the table's own lookups (→), the lookups to it from other tables (←) and its N:N relationships (↔). Untick any to hide them from the diagram and its exports; **Hide all** and **Show all** work for the whole table. The button then reads, for example, **1 of 3 hidden**, and **show all** above the list brings every hidden relationship back. The tables stay where they are, and the choice is remembered in this browser.
+
+![Hiding a table's relationships](images/18-erd-hide.png)
+
+**1** The table's relationships · **2** Untick to hide · **3** Show all
 
 The diagram opens at the size of your screen, so a large model is readable straight away even where part of it runs past the panel: drag the background or scroll to move around, use the mouse wheel to zoom, or click **Fit** to see it all in the panel.
 

@@ -1,3 +1,14 @@
+# 1.9.3
+
+- **Hide relationships per table in the ERD.** Each table in the ERD list shows how many relationships it has; click it
+  to list them (its own lookups →, lookups to it from other tables ←, and N:N ↔) and untick any to hide it from the
+  diagram and every export (draw.io, SVG, PNG, Mermaid). **Hide all** / **Show all** work per table, and **show all**
+  under the core-table line brings every hidden one back. Tables stay where they are when a line is hidden, a table
+  brought in only by a hidden lookup drops out, and the choice is remembered in the browser.
+- The ERD's left panel scrolls as a whole on shorter screens, so the table list is never squeezed out of sight.
+- Fixed: with **Colour by area** on, the diagram failed to draw whenever it included a table you had not selected
+  (Mermaid does not accept the 1.5px line width used for those tables).
+
 # 1.9.2
 
 - The ERD opens at the size of your screen (its resolution), not squeezed into the panel, so a large model is
