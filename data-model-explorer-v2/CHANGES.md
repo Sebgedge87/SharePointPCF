@@ -1,3 +1,8 @@
+# 2.0.4
+
+- **How it works** is laid out as a centred page, with a contents list linking to each section; the five steps sit on one row.
+- Tick boxes in side panels are plain tick boxes (no stray border).
+
 # 2.0.3
 
 - User guide for 2.0 in `docs/` (Markdown and Word), with marked screenshots: the eye on each relationship row, the

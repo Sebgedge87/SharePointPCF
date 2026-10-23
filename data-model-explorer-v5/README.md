@@ -4,7 +4,7 @@ Version 4.0, plus an **XrmToolBox tool**. Kept in its own folder: 1.9.3 (`../dat
 (`../data-model-explorer-v2`), 3.0 (`../data-model-explorer-live`) and 4.0 (`../data-model-explorer-v4`) are unchanged.
 
 The page (`Data_Model_Explorer.html`) is the same as 4.0 and can still be opened as a file or uploaded to an environment
-as a web resource (`FORMUS_DataModelExplorer_5_0_0_0.zip`; see the 4.0 README). The guide is
+as a web resource (`FORMUS_DataModelExplorer_5_0_1_0.zip`; see the 4.0 README). The guide is
 [`docs/User_Guide.md`](docs/User_Guide.md) (also `docs/User_Guide.docx`).
 
 ## The XrmToolBox tool

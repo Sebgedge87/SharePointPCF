@@ -1,3 +1,8 @@
+# 1.9.4
+
+- **How it works** is laid out as a centred page, with a contents list linking to each section; the five steps sit on one row.
+- Tick boxes in side panels are plain tick boxes (no stray border).
+
 # 1.9.3
 
 - **Hide relationships per table in the ERD.** Each table in the ERD list shows how many relationships it has; click it

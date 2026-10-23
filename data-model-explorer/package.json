@@ -1,6 +1,6 @@
 {
   "name": "data-model-explorer",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "private": true,
   "description": "Offline, single-file viewer and editor for Dataverse data-model workbooks",
   "scripts": {

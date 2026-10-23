@@ -14,15 +14,15 @@ const box = async (p, sel, ox = 0, oy = 0) => { const b = await p.locator(sel).f
     const p = await ctx.newPage(); await p.goto(PAGE); await p.waitForTimeout(2500); return { env, p }; };
   // 20: the Environment panel, choosing a solution to load
   let { env, p } = await open(false);
-  await p.selectOption('#livesol1', env.sol.solutionid); await p.waitForTimeout(200);
+  await p.click(`[data-sp="1"] [data-sid="${env.sol.solutionid}"]`); await p.waitForTimeout(200);
   const pr = await p.locator('#dvpanel').boundingBox();
-  boxes['20-environment'] = [await box(p, '#livesol1', pr.x, pr.y), await box(p, '[data-live="load"]', pr.x, pr.y), await box(p, '#livesol2', pr.x, pr.y), await box(p, '#livemanaged', pr.x, pr.y)];
+  boxes['20-environment'] = [await box(p, '[data-sp="1"]', pr.x, pr.y), await box(p, '[data-live="load"]', pr.x, pr.y), await box(p, '[data-sp="2"]', pr.x, pr.y), await box(p, '#livemanaged', pr.x, pr.y)];
   await p.screenshot({ path: path.join(out, '20-environment.png'), clip: { x: pr.x, y: pr.y, width: pr.width, height: Math.min(pr.height, 700) } });
   // 21: managed environment check results
   ({ env, p } = await open(true));
   await p.setInputFiles('#file', path.join(root, 'samples/Import_Test_Model.xlsx')); await p.waitForTimeout(2500); await p.keyboard.press('Escape');
   if (!await p.isVisible('#dvpanel.open')) await p.click('#btnDv');
-  await p.waitForSelector('#livesol2 option:nth-child(2)', { state: 'attached' }); await p.selectOption('#livesol2', env.sol.solutionid); await p.check('#livemanaged'); await p.click('[data-live="check"]');
+  await p.waitForSelector('[data-sp="2"] [data-sid]'); await p.fill('[data-sp="2"] .spq', 'FORMUS'); await p.click(`[data-sp="2"] [data-sid="${env.sol.solutionid}"]`); await p.check('#livemanaged'); await p.click('[data-live="check"]');
   await p.waitForSelector('#dvpanel [data-ov="issues:dv"]', { timeout: 30000 }); await p.waitForTimeout(300);
   const pr2 = await p.locator('#dvpanel').boundingBox();
   boxes['21-environment-check'] = [await box(p, '#dvpanel .stats', pr2.x, pr2.y), await box(p, '#dvpanel [data-ov="issues:dv"]', pr2.x, pr2.y)];

@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 5.0.0 · 23 October 2026"
+subtitle: "Version 5.0.1 · 23 October 2026"
 ---
 
 ## Introduction
@@ -301,7 +301,7 @@ Uploaded to an environment as a web resource, the page reads the environment's t
 
 ### Putting it in an environment
 
-1. Get the solution zip: `FORMUS_DataModelExplorer_5_0_0_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
+1. Get the solution zip: `FORMUS_DataModelExplorer_5_0_1_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
 2. Import it into the environment (Power Apps → Solutions → Import, or `pac solution import`). It holds one HTML web resource of about 2.4 MB, under the 5 MB default limit.
 3. Open `https://<your-org>.crm.dynamics.com/WebResources/<prefix>_/dme/DataModelExplorer.html`, or add that web resource to an app's navigation.
 
@@ -309,12 +309,12 @@ The page opens on **This environment**, and the header's **Environment** button 
 
 ![This environment](images/20-environment.png)
 
-**1** Pick a solution · **2** Load as model · **3** The solution to check against · **4** Managed environment
+**1** Find and pick a solution · **2** Load it as the model · **3** The solution to check against · **4** Managed environment
 
 ### Loading a solution as the data model
 
-1. Pick the solution, for example `FORMUS import test`.
-2. Click **Load as model**. The page reads the solution's tables and, for each one, its columns, types, required levels, choice options, number and text settings, lookups with their cascade, and N:N relationships. Alternate keys are read too and shown on each table page under From Dataverse.
+1. Find the solution in the list and click it, for example `FORMUS import test`. Type in the search box to find it by name or unique name. Your unmanaged solutions are listed first; managed ones are folded under **Managed** and open when you click it or search.
+2. Click **Load … as the model** (the button names the solution). The page reads the solution's tables and, for each one, its columns, types, required levels, choice options, number and text settings, lookups with their cascade, and N:N relationships. Alternate keys are read too and shown on each table page under From Dataverse.
 3. The model opens like a workbook, in the template layout, so everything works on it: Checks, the ERD, search and the exports. **Save & share → New version in template format** saves it as a workbook to keep or send.
 
 A table added to the solution whole brings all its columns; a standard table such as Contact, added only for the columns you made on it, brings just those columns (plus its key and name). Helper columns Dataverse makes for others (such as the name behind a lookup) are left out.

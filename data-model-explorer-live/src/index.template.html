@@ -167,27 +167,45 @@ mark{background:#F7D4E7;color:#7B134D;border-radius:2px;padding:0 1px}
 .fld .v:hover{border-color:var(--line);background:var(--panel2)}
 .fld .v.edited{background:var(--edit-bg);border-color:var(--edit)}
 .fld textarea,.fld input{width:100%;border:1px solid var(--accent);border-radius:7px;padding:6px 9px;background:var(--panel);outline:none;min-height:34px;box-shadow:0 0 0 3px var(--accent-bg)}
+.fld input[type=checkbox],.fld input[type=radio]{width:auto;min-height:0;height:auto;padding:0;border:0;box-shadow:none;accent-color:var(--accent)}
+.fld .solpick .spq{min-height:34px;border:0;border-bottom:1px solid var(--line2);border-radius:0;box-shadow:none;background:var(--panel2)}
 .vsec{margin-bottom:16px}.vsec h4{margin:0 0 6px;font-size:13px}.vline{padding:5px 0;border-bottom:1px solid var(--line2);word-break:break-word}.vline .d{margin-top:4px;display:grid;gap:4px}.vline .o{background:var(--slate-bg);color:var(--muted);padding:2px 7px;border-radius:5px;white-space:pre-wrap;text-decoration:line-through;text-decoration-color:rgba(123,19,77,.5)}.vline .nw{background:var(--accent-bg);color:var(--accent);padding:2px 7px;border-radius:5px;white-space:pre-wrap}
 td.upd{background:var(--accent-bg)!important;box-shadow:inset 3px 0 0 var(--accent)}
 .navitem .ed.vd{background:var(--accent)}
-.readme{max-width:1040px;padding:22px 26px 60px;overflow:auto;flex:1}
-.readme h1{margin:0 0 4px;font-size:26px;color:var(--accent)}
-.readme .lead{color:var(--muted);font-size:14.5px;max-width:780px;margin:0 0 20px}
-.readme h2{font-size:16px;margin:26px 0 8px;color:var(--accent);display:flex;align-items:center;gap:8px}
+.solpick{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.solpick .spq{width:100%;height:34px;border:0;border-bottom:1px solid var(--line2);padding:0 10px;outline:none;background:var(--panel2)}
+.solpick .splist{max-height:260px;overflow:auto;padding:4px}
+.solpick .sprow{display:flex;flex-direction:column;align-items:flex-start;width:100%;border:0;background:none;text-align:left;padding:6px 10px;border-radius:7px;cursor:pointer;gap:1px}
+.solpick .sprow:hover{background:var(--panel2)}
+.solpick .sprow.on{background:var(--accent);color:#fff}.solpick .sprow.on span{color:#dbe7f1}
+.solpick .sprow b{font-weight:600;font-size:13px}.solpick .sprow span{font:11.5px ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+.solpick .spgh{display:block;width:100%;text-align:left;border:0;background:none;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);padding:8px 10px 4px}
+.solpick .spgrp{cursor:pointer}.solpick .spgrp:hover{color:var(--accent)}
+.solpick .spnone{padding:4px 10px 8px;color:var(--muted);font-size:12.5px}
+.readme{flex:1;overflow:auto;padding:28px 24px 72px;background:var(--panel2)}
+.readme .rwrap{max-width:940px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:34px 44px 44px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.readme h1{margin:0 0 6px;font-size:28px;color:var(--accent)}
+.readme .lead{color:var(--muted);font-size:15px;margin:0 0 20px;line-height:1.55}
+.readme .toc{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;padding:12px 0 2px;border-top:1px solid var(--line2)}
+.readme .toc a{font-size:12.5px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--accent);text-decoration:none;background:var(--panel)}
+.readme .toc a:hover{border-color:var(--accent);background:var(--accent-bg)}
+.readme h2{font-size:17px;margin:34px 0 10px;padding-top:18px;border-top:1px solid var(--line2);color:var(--accent);display:flex;align-items:center;gap:8px;scroll-margin-top:12px}
+.readme p{line-height:1.6}
+@media (max-width:860px){.readme{padding:0}.readme .rwrap{border:0;border-radius:0;padding:20px 16px 40px}}
 .readme h2 .n{background:var(--pink);color:#fff;border-radius:999px;width:22px;height:22px;display:inline-grid;place-items:center;font-size:12px}
-.readme p,.readme li{max-width:800px}
 .readme ul,.readme ol{padding-left:20px;margin:6px 0}
 .readme li{margin:3px 0}
 .rcard{border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:10px 0;background:var(--panel)}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:10px 0}
 .rgrid .rcard{margin:0}
 .rcard h3{margin:0 0 6px;font-size:13.5px;color:var(--accent)}
-.flow{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin:12px 0}
-.flow .step{flex:1;min-width:150px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
+.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr auto 1fr;gap:6px;align-items:stretch;margin:12px 0 18px}
+@media (max-width:1100px){.flow{display:flex;flex-wrap:wrap;gap:8px}}
+.flow .step{flex:1;min-width:0;font-size:13px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
 .flow .step b{display:block;color:var(--accent);margin-bottom:2px}
 .flow .arrow{align-self:center;color:var(--pink);font-weight:700}
 .readme kbd{font:11.5px ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 6px;background:var(--panel)}
-.readme table{border-collapse:collapse;margin:8px 0;width:100%;max-width:800px}
+.readme table{border-collapse:collapse;margin:8px 0;width:100%}
 .readme td,.readme th{border-bottom:1px solid var(--line2);padding:6px 10px;text-align:left;vertical-align:top}
 .readme th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .note2{border-left:3px solid var(--pink);background:var(--violet-bg);color:var(--edit);padding:8px 12px;border-radius:0 8px 8px 0;margin:10px 0;max-width:800px}
@@ -1939,8 +1957,8 @@ function revertAll(){
 /* ---------- navigation ---------- */
 function renderReadme(){
   const main=$('#main');
-  const sec=(n,title,body)=>`<h2><span class="n">${n}</span>${title}</h2>${body}`;
-  main.innerHTML=`<div class="readme">
+  const sec=(n,title,body)=>`<h2 id="rd-${n}"><span class="n">${n}</span>${title}</h2>${body}`;
+  main.innerHTML=`<div class="readme"><article class="rwrap">
   <h1>How it works</h1>
   <p class="lead">This page turns a multi-tab Excel data model document into something you can search, filter, check and edit, writes it back out in the same layout, and builds it in Dataverse as a solution, so tables, fields and relationships don't have to be created by hand. Everything runs inside this one file in your browser. Nothing is uploaded anywhere.</p>
 
@@ -1951,6 +1969,8 @@ function renderReadme(){
     <div class="step"><b>4. Export</b>Data is written into the template, so formatting matches.</div><div class="arrow">→</div>
     <div class="step"><b>5. Build</b>Export → Dataverse solution creates the tables, fields and relationships, imported with one script.</div>
   </div>
+
+  <nav class="toc" aria-label="Contents"></nav>
 
   ${sec(1,'Reading the workbook',`
   <p>When the file opens, each tab is read and classified:</p>
@@ -2073,7 +2093,10 @@ function renderReadme(){
     <li>If the template export fails for any reason, the tool falls back to the plain-values export and tells you.</li>
   </ul>
   <div class="note2"><b>Tip:</b> the badge on <b>More ▾</b> (and on Template inside it) shows how many tables differ from the template. It is a quick check that a new workbook really is in the expected layout before you export.</div>`)}
-  </div>`;
+  </article></div>`;
+  // contents, from the section headings
+  main.querySelector('.toc').innerHTML=[...main.querySelectorAll('.rwrap h2[id]')].map(h=>`<a href="#" data-rjump="${h.id.slice(3)}">${h.id.slice(3)}. ${esc(h.lastChild.textContent.trim())}</a>`).join('');
+  main.querySelector('.toc').addEventListener('click',e=>{const a=e.target.closest('[data-rjump]'); if(!a) return; e.preventDefault(); const h=main.querySelector('#rd-'+a.dataset.rjump); if(h) h.scrollIntoView({behavior:'smooth',block:'start'})});
 }
 
 /* ---------- data-model checks ---------- */
@@ -2595,18 +2618,17 @@ async function liveCheck(){
 }
 function renderLive(){
   const d=$('#dvpanel'); if(!LV.sols&&!LV.busy&&!LV.err) liveStart();
-  const opts=(sel,first)=>(first?`<option value="">${esc(first)}</option>`:'<option value="">Choose a solution…</option>')+(LV.sols||[]).map(s=>`<option value="${esc(s.solutionid)}" ${sel===s.solutionid?'selected':''}>${esc(s.friendlyname)} · ${esc(s.version||'')}${s.ismanaged?' · managed':''}</option>`).join('');
   const dis=LV.busy||!LV.sols?'disabled':'';
   let h=`<header><div style="flex:1;min-width:0"><h3>This environment</h3><div class="mono dim">${esc(location.host)}${LV.user?' · '+esc(LV.user):''}</div></div><button class="btn ghost" data-dvclose>✕</button></header><div class="body">`;
   if(LV.err) h+=`<div class="err" style="white-space:pre-wrap;color:var(--edit);background:var(--edit-bg);border-radius:10px;padding:10px;margin-bottom:12px">${esc(LV.err)}</div>`;
   if(!LV.sols) h+=`<p class="dim">${LV.busy?'Reading the solutions in this environment…':'The solutions could not be read.'}</p>`;
   h+=`<div class="fld"><div class="k">Load a solution as the data model</div>
     <p class="dim" style="margin:2px 0 8px">Builds the model from what is in the environment: the solution's tables, columns, choices, lookups and N:N, in the template layout. Save it with Export to keep it as a workbook.</p>
-    <select id="livesol1" ${dis} style="width:100%;height:32px;border:1px solid var(--line);border-radius:8px;padding:0 8px">${opts(LV.sol1)}</select>
-    <div style="margin-top:8px"><button class="btn primary" data-live="load" ${dis}>Load as model</button></div></div>`;
+    ${solPick(1,dis)}
+    <div style="margin-top:8px"><button class="btn primary" data-live="load" ${dis||!LV.sol1?'disabled':''}>${LV.sol1?'Load '+esc(solName(LV.sol1))+' as the model':'Load as model'}</button></div></div>`;
   h+=`<div class="fld"><div class="k">Check this workbook against the environment</div>
     <p class="dim" style="margin:2px 0 8px">${isStarter()?'Open the data-model workbook first.':'Compares <b>'+esc(S.fileName)+'</b> with what is really there: undocumented tables, fields and N:N, fields not built yet, and differences in types, required levels and relationships.'}</p>
-    <select id="livesol2" ${dis} style="width:100%;height:32px;border:1px solid var(--line);border-radius:8px;padding:0 8px">${opts(LV.sol2,'Default solution: the tables in this workbook')}</select>
+    ${solPick(2,dis)}
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="livemanaged" style="width:auto;height:auto;flex:none;margin-top:3px" ${LV.managed?'checked':''} ${dis}><span>Managed environment (test or production): also find anything created or changed directly here, as unmanaged. <span class="dim">Slower: one check per custom field.</span></span></label>
     <div style="margin-top:8px"><button class="btn primary" data-live="check" ${dis||isStarter()?'disabled':''}>Check</button></div></div>`;
   h+=`<div id="liveprog" class="dim" style="min-height:20px">${esc(LV.msg)}</div>`;
@@ -2620,8 +2642,34 @@ function renderLive(){
   }
   h+=`<p class="dim" style="margin-top:14px">Everything is read as you (${esc(LV.user||'the signed-in user')}), and nothing is changed in the environment.</p></div>`;
   d.innerHTML=h; d.classList.add('open');
-  const s1=$('#livesol1'), s2=$('#livesol2'), mg=$('#livemanaged');
-  if(s1) s1.onchange=()=>{LV.sol1=s1.value}; if(s2) s2.onchange=()=>{LV.sol2=s2.value}; if(mg) mg.onchange=()=>{LV.managed=mg.checked};
+  const mg=$('#livemanaged'); if(mg) mg.onchange=()=>{LV.managed=mg.checked};
+  d.querySelectorAll('.solpick').forEach(p=>{
+    const w=p.dataset.sp, list=p.querySelector('.splist');
+    p.querySelector('.spq').oninput=e=>{LV['q'+w]=e.target.value; list.innerHTML=solRows(w)};
+    list.onclick=e=>{
+      const g=e.target.closest('[data-spgrp]'); if(g){LV['mg'+w]=!LV['mg'+w]; list.innerHTML=solRows(w); return}
+      const r=e.target.closest('[data-sid]'); if(!r) return;
+      LV['sol'+w]=r.dataset.sid; list.innerHTML=solRows(w);
+      if(w==='1'){const b=d.querySelector('[data-live="load"]'); b.disabled=!LV.sol1; b.textContent=LV.sol1?'Load '+solName(LV.sol1)+' as the model':'Load as model'}
+    };
+    const on=list.querySelector('.sprow.on'); if(on) list.scrollTop=on.offsetTop-list.offsetTop-60;
+  });
+}
+// A searchable solution list: your unmanaged solutions first, managed ones folded underneath (opened by searching or clicking)
+function solName(id){const s=(LV.sols||[]).find(x=>x.solutionid===id); return s?s.friendlyname:''}
+function solPick(w,dis){
+  return `<div class="solpick" data-sp="${w}"><input type="search" class="spq" placeholder="Search solutions by name or unique name" value="${esc(LV['q'+w]||'')}" ${dis}><div class="splist" role="listbox">${solRows(String(w))}</div></div>`;
+}
+function solRows(w){
+  const q=(LV['q'+w]||'').trim().toLowerCase(), sel=LV['sol'+w]||'', all=LV.sols||[];
+  const hit=s=>!q||q.split(/\s+/).every(t=>(s.friendlyname+' '+s.uniquename).toLowerCase().includes(t));
+  const row=s=>`<button type="button" class="sprow ${s.solutionid===sel?'on':''}" data-sid="${esc(s.solutionid)}" role="option" aria-selected="${s.solutionid===sel}"><b>${esc(s.friendlyname)}</b><span>${esc(s.uniquename)} · ${esc(s.version||'')}</span></button>`;
+  const um=all.filter(s=>!s.ismanaged&&hit(s)), mm=all.filter(s=>s.ismanaged&&hit(s));
+  const open=LV['mg'+w]||!!q||mm.some(s=>s.solutionid===sel);
+  let h=w==='2'&&!q?`<button type="button" class="sprow ${sel===''?'on':''}" data-sid="" role="option"><b>Default solution: the tables in this workbook</b><span>Wherever they came from</span></button>`:'';
+  h+=`<div class="spgh">Unmanaged · ${um.length}</div>`+(um.length?um.map(row).join(''):'<div class="spnone">None'+(q?' match':'')+'</div>');
+  if(mm.length) h+=`<button type="button" class="spgh spgrp" data-spgrp>${open?'▾':'▸'} Managed · ${mm.length}</button>`+(open?mm.map(row).join(''):'');
+  return h;
 }
 
 /* ---------- overview (landing page) ---------- */

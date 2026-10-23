@@ -1,3 +1,12 @@
+# 5.0.1
+
+- **How it works** is laid out as a centred page, with a contents list linking to each section; the five steps sit on one row.
+- Tick boxes in side panels are plain tick boxes (no stray border).
+- **This environment:** the solution lists are searchable. Your unmanaged solutions come first; managed ones are folded under a
+  count and open when you search or click them. Load is greyed out until a solution is picked, then names it.
+- **How it works** uses the 4.0 button names (Workbook ▾, Check ▾, Save & share, Build solution) and describes the new ERD panel.
+- The XrmToolBox tool is rebuilt with this page (`xrmtoolbox/release`, 5.0.1).
+
 # 5.0.0
 
 Built on 4.0.0 (see [../data-model-explorer-v4/CHANGES.md](../data-model-explorer-v4/CHANGES.md) for earlier versions).

@@ -70,7 +70,10 @@ function answer(env, url) {
   const strip = e => { const { _d, _nn, ...rest } = e; void _d; void _nn; return rest; };
   if (p === 'WhoAmI') return json({ UserId: guid('u') });
   if (p.startsWith('systemusers(')) return json({ fullname: 'Test Consultant' });
-  if (p === 'solutions') return json({ value: [env.sol, { solutionid: guid('s:def'), uniquename: 'Default', friendlyname: 'Default Solution', version: '1.0', ismanaged: false }] });
+  if (p === 'solutions') return json({ value: [env.sol, { solutionid: guid('s:def'), uniquename: 'Default', friendlyname: 'Default Solution', version: '1.0', ismanaged: false },
+    { solutionid: guid('s:sales'), uniquename: 'contoso_Sales', friendlyname: 'Contoso sales', version: '2.1.0.0', ismanaged: false },
+    { solutionid: guid('s:portal'), uniquename: 'msdynce_PortalIdentity', friendlyname: 'Dynamics 365 Portals - Identity', version: '9.3.2409.1', ismanaged: true },
+    { solutionid: guid('s:fs'), uniquename: 'msdyn_FieldService', friendlyname: 'Field Service', version: '8.8.1.0', ismanaged: true }] });
   if (p === 'solutioncomponents') return json({ value: q.includes(env.sol.solutionid) ? env.comps : [] });
   if (p === 'msdyn_componentlayers') { const id = /msdyn_componentid eq '([^']+)'/.exec(q)[1]; return json({ value: env.layers[id] || [] }); }
   let m = /^EntityDefinitions\(([0-9a-f-]{36})\)$/.exec(p);
