@@ -297,14 +297,7 @@ body.ro [data-fedit]{cursor:default}
 #erdcv svg .lab{display:none} #erdcv svg.lbl-all .lab,#erdcv svg.lbl-hover .lab.hot{display:inline}
 #erdcv svg.focus .rl:not(.hot),#erdcv svg.focus .erdarr:not(.hot){opacity:.12} #erdcv svg.focus .lab:not(.hot){opacity:.15} #erdcv svg .rl.hot{stroke-width:2.4}
 .erdv .eyebtn{cursor:pointer} .erdv .eyebtn:hover rect,.erdv .eyebtn:focus rect{fill:#E3ECF4;fill-opacity:1} .erdv .eyebtn:focus{outline:none}
-.erdpop{position:fixed;z-index:60;width:340px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(10,40,70,.18);font-size:13px;display:flex;flex-direction:column}
-.erdpop .ep-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line2)} .erdpop .ep-h .dim{margin-left:auto;font-size:12px}
-.erdpop .ep-x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:13px;padding:2px 4px}
-.erdpop .ep-list{max-height:320px;overflow:auto;padding:4px}
-.erdpop .ep-row{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:8px;cursor:pointer;color:var(--text);font:inherit}
-.erdpop .ep-row:hover,.erdpop .ep-row:focus{background:var(--panel2);outline:none} .erdpop .ep-row svg{flex:none;margin-top:2px}
-.erdpop .ep-row.off .ep-t{color:var(--muted);text-decoration:line-through;text-decoration-color:#d0a070}
-.erdpop .ep-f{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line2)} .erdpop .ep-f .btn{padding:3px 10px;font-size:12px}
+.erdv .erow.hid{opacity:.4}
 .erdv .cv{flex:1;overflow:auto;background:#fff;padding:12px;position:relative;display:flex;cursor:grab;min-height:0}
 .erdv .cv svg{display:block;flex:none}
 .erdv .cv .msg{padding:30px;color:var(--muted)}
@@ -2898,9 +2891,12 @@ function buildErd(){
       const ln=getVal(sh,row,'Logical Name'); if(!ln) return;
       const at=getVal(sh,row,'Attribute Type'); const isL=/lookup|owner|customer/i.test(at);
       const isPK=ln.toLowerCase()===pkOf(sh);
-      if(E.attrs==='keys'&&!isPK&&!(isL&&erdTargets(E,sh,row).length)) return;
+      const drawn=isL&&erdTargets(E,sh,row).length>0;
+      const rk=isL?lookupTargetsOf(sh,row).filter(tg=>!(E.sys&&SYS_TABLES.has(tg))).map(tg=>erdRk(sh,row,tg)):[], hid=rk.length>0&&rk.every(k=>E.hide.has(k));
+      if(E.attrs==='keys'&&!isPK&&!drawn&&!hid) return;
       const id=mid(ln); if(seen.has(id)) return; seen.add(id);
-      L.push('    '+mtype(at)+' '+id+(isPK?' PK':isL?' FK':'')+' "'+mq(getVal(sh,row,'Display Name'))+'"'); n.rows.push({k:isPK?'PK':isL?'FK':'',name:id,type:mtype(at),label:getVal(sh,row,'Display Name')}); stats.attrs++;
+      if(!hid){L.push('    '+mtype(at)+' '+id+(isPK?' PK':isL?' FK':'')+' "'+mq(getVal(sh,row,'Display Name'))+'"'); stats.attrs++}
+      n.rows.push({k:isPK?'PK':isL?'FK':'',name:id,type:mtype(at),label:getVal(sh,row,'Display Name'),rk:(drawn||hid)?rk:null,hid});
     });
     L.push('  }');
   });
@@ -2948,38 +2944,50 @@ function erdStroke(E,n){
   if(E.acol&&hasAreas()){ if(!n.sh) return ['#667085',1]; const i=areaList().findIndex(x=>x[0]===areaOf(n.sh)); const c=n.sel&&n.sh.custom; return [AREA_COLS[Math.max(0,i)%AREA_COLS.length],c?3:2] }
   return n.sel&&n.sh&&n.sh.custom?['#BB1C73',3]:['#0A4873',1];
 }
+// an eye that shows or hides the relationship(s) in `keys`; crossed out when they are hidden
+function erdEye(x,y,keys,hid,what){
+  const c=hid?'#B54708':'#5f7a90';
+  return '<g class="eyebtn'+(hid?' off':'')+'" data-rk="'+erdX(keys.join(' '))+'" role="button" tabindex="0" aria-pressed="'+(!hid)+'" aria-label="'+erdX((hid?'Show ':'Hide ')+what)+'" transform="translate('+x+','+y+')"><title>'+erdX((hid?'Hidden: click to show ':'Click to hide ')+what)+'</title>'+
+    '<rect x="-12" y="-10" width="24" height="20" rx="6" fill="#FFFFFF" fill-opacity=".01"/><path d="M-8,0C-5,-5.5 5,-5.5 8,0C5,5.5 -5,5.5 -8,0Z" fill="none" stroke="'+c+'" stroke-width="1.6"/><circle r="2.4" fill="'+c+'"/>'+
+    (hid?'<path d="M-8,-6.5L8,6.5" stroke="'+c+'" stroke-width="1.8"/>':'')+'</g>';
+}
 function erdBox(E,n,i){
-  const HF='bold 15px '+ERD_FONT, RF='13px '+ERD_FONT, rows=n.rows||[], P=10;
+  const HF='bold 15px '+ERD_FONT, RF='13px '+ERD_FONT, P=10;
   const [stroke,sw]=erdStroke(E,n);
-  // the eye: this table's relationships, to show or hide (only for tables in the workbook that have any)
-  const rs=n.sh?erdRelsOf(n.sh):[], nh=rs.filter(r=>E.hide.has(r.k)).length, eye=rs.length>0;
-  let w=Math.max(120,erdTW(n.label,HF)+36+(eye?(nh?92:64):0)), cols=null;
+  let rows=n.rows||[];
+  // N:N relationships have no field row of their own: they get a row in the box, so they have an eye too
+  if(rows.length&&n.sh){
+    const nn=erdRelsOf(n.sh).filter(r=>r.dir==='nn'&&(E.hide.has(r.k)||(r.ol&&E.nodeIds&&E.nodeIds.has(mid(r.ol)))));
+    rows=rows.concat(nn.map(r=>({k:'N:N',name:r.txt,type:'',label:'↔ '+r.other,rk:[r.k],hid:E.hide.has(r.k)})));
+  }
+  const rowEyes=rows.some(r=>r.rk);
+  // Names only: one eye in the header, for all of this table's own relationships
+  const own=(!rows.length&&n.sh)?erdRelsOf(n.sh).filter(r=>r.dir!=='in').map(r=>r.k):[], headEye=own.length>0, headHid=headEye&&own.every(k=>E.hide.has(k));
+  let w=Math.max(120,erdTW(n.label,HF)+36+(headEye?56:0)), cols=null;
   if(rows.length){
     cols=[0,0,0,0]; rows.forEach(r=>{cols[0]=Math.max(cols[0],erdTW(r.type,RF));cols[1]=Math.max(cols[1],erdTW(r.name,RF));cols[2]=Math.max(cols[2],r.k?erdTW(r.k,'bold 12px '+ERD_FONT):0);cols[3]=Math.max(cols[3],erdTW(r.label||'',RF))});
-    const inner=cols.reduce((s,c)=>s+(c?c+2*P:0),0); w=Math.max(w,inner);
+    const inner=cols.reduce((s,c)=>s+(c?c+2*P:0),0)+(rowEyes?28:0); w=Math.max(w,inner);
   }
   const h=rows.length?ERD_HD+rows.length*ERD_RH:44, x0=-w/2, y0=-h/2;
   const o=['<g class="node" id="erd-entity-'+erdX(n.id)+'-'+i+'" data-k="'+i+'" transform="translate(0,0)">',
     '<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" rx="3" fill="#FFFFFF"/>'];
+  const eyes=[];
   if(rows.length){
     o.push('<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+ERD_HD+'" fill="#E3ECF4"/>');
     o.push('<text x="0" y="'+(y0+ERD_HD/2+5)+'" text-anchor="middle" font-family="'+erdX(ERD_FONT)+'" font-size="15" font-weight="bold" fill="#0A4873">'+erdX(n.label)+'</text>');
     rows.forEach((r,j)=>{
       const y=y0+ERD_HD+j*ERD_RH; if(j%2) o.push('<rect x="'+x0+'" y="'+y+'" width="'+w+'" height="'+ERD_RH+'" fill="#F4F7FA"/>');
-      let x=x0, ty=y+ERD_RH/2+4.5; const col=(t,c,extra)=>{ if(!c) return; o.push('<text x="'+(x+P)+'" y="'+ty+'" font-family="'+erdX(ERD_FONT)+'" font-size="'+(extra?12:13)+'"'+(extra?' font-weight="bold"':'')+' fill="'+(extra&&t==='FK'?'#BB1C73':'#0A4873')+'">'+erdX(t)+'</text>'); x+=c+2*P };
+      o.push('<g class="erow'+(r.hid?' hid':'')+'">');
+      let x=x0, ty=y+ERD_RH/2+4.5; const col=(t,c,extra)=>{ if(!c) return; o.push('<text x="'+(x+P)+'" y="'+ty+'" font-family="'+erdX(ERD_FONT)+'" font-size="'+(extra?12:13)+'"'+(extra?' font-weight="bold"':'')+' fill="'+(extra&&(t==='FK'||t==='N:N')?'#BB1C73':'#0A4873')+'">'+erdX(t)+'</text>'); x+=c+2*P };
       col(r.type,cols[0]); col(r.name,cols[1]); col(r.k||'',cols[2],1); col(r.label||'',cols[3]);
+      o.push('</g>');
+      if(r.rk) eyes.push(erdEye(x0+w-16,y+ERD_RH/2,r.rk,r.hid,'the relationship '+(r.label||r.name)+(r.k==='N:N'?'':' ('+r.name+')')));
     });
     o.push('<line x1="'+x0+'" y1="'+(y0+ERD_HD)+'" x2="'+(x0+w)+'" y2="'+(y0+ERD_HD)+'" stroke="'+stroke+'" stroke-width="1"/>');
-  } else o.push('<text x="0" y="5" text-anchor="middle" font-family="'+erdX(ERD_FONT)+'" font-size="15" font-weight="bold" fill="#0A4873">'+erdX(n.label)+'</text>');
+  } else o.push('<text x="'+(headEye?-14:0)+'" y="5" text-anchor="middle" font-family="'+erdX(ERD_FONT)+'" font-size="15" font-weight="bold" fill="#0A4873">'+erdX(n.label)+'</text>');
   o.push('<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" rx="3" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>');
-  if(eye){
-    const ey=rows.length?y0+ERD_HD/2:0, ex=x0+w-20, col=nh?'#B54708':'#5f7a90';
-    o.push('<g class="eyebtn'+(nh?' hid':'')+'" data-eye="'+n.sh.idx+'" role="button" tabindex="0" aria-label="'+erdX('Relationships of '+n.label+(nh?', '+nh+' hidden':''))+'" transform="translate('+ex+','+ey+')"><title>'+erdX(nh?nh+' of '+rs.length+' relationships hidden. Click to choose':'Show or hide this table\'s relationships ('+rs.length+')')+'</title>'+
-      '<rect x="'+(nh?-44:-14)+'" y="-12" width="'+(nh?58:28)+'" height="24" rx="12" fill="'+(nh?'#FEF0C7':'#FFFFFF')+'" fill-opacity="'+(nh?1:.01)+'"/>'+
-      '<path d="M-8,0C-5,-5.5 5,-5.5 8,0C5,5.5 -5,5.5 -8,0Z" fill="none" stroke="'+col+'" stroke-width="1.6"/><circle r="2.4" fill="'+col+'"/>'+
-      (nh?'<path d="M-8,-7L8,7" stroke="'+col+'" stroke-width="1.8"/><text x="-14" y="4.5" text-anchor="end" font-size="12" font-weight="bold" fill="'+col+'">'+nh+'</text>':'')+'</g>');
-  }
-  o.push('</g>');
+  if(headEye) eyes.push(erdEye(x0+w-20,0,own,headHid,"this table's own relationships (its lookups and N:N)"));
+  o.push(eyes.join('')+'</g>');
   return {html:o.join(''),w,h};
 }
 // line ends: crow's foot notation, a separate marker for each end so exported SVG works in any viewer
@@ -2990,7 +2998,7 @@ const ERD_DEFS='<defs>'+
   '<marker id="erdm-zone-s" viewBox="0 -10 22 20" refX="0" refY="0" markerWidth="22" markerHeight="20" markerUnits="userSpaceOnUse" orient="auto"><path d="M5,-8L5,8" fill="none" stroke="#0A4873" stroke-width="1.4"/><circle cx="13" cy="0" r="4" fill="#fff" stroke="#0A4873" stroke-width="1.4"/></marker>'+
   '</defs>';
 function erdRender(cv,E){
-  const M=E.model, nodes=M.nodes.map((n,i)=>{const b=erdBox(E,n,i); return {m:n,i,html:b.html,w:b.w,h:b.h,key:n.id.toLowerCase(),name:n.id.toLowerCase(),ox:0,oy:0,cx:0,cy:0,core:E.core.has(n.id.toLowerCase())}});
+  const M=E.model; E.nodeIds=new Set(M.nodes.map(n=>n.id)); const nodes=M.nodes.map((n,i)=>{const b=erdBox(E,n,i); return {m:n,i,html:b.html,w:b.w,h:b.h,key:n.id.toLowerCase(),name:n.id.toLowerCase(),ox:0,oy:0,cx:0,cy:0,core:E.core.has(n.id.toLowerCase())}});
   const byId=new Map(nodes.map(n=>[n.m.id,n]));
   // one line per relationship, or one per pair of tables and direction when merging (names joined)
   const groups=new Map(); M.rels.forEach(r=>{const a=byId.get(r.p), b=byId.get(r.c); if(!a||!b) return; const k=(E.merge&&a!==b)?([a.i,b.i].sort((x,y)=>x-y).join('|')+'|'+a.i+(r.nn?'|nn':'')+(r.unk?'|unk':'')):'r'+groups.size; (groups.get(k)||groups.set(k,[]).get(k)).push(r)});
@@ -3085,40 +3093,10 @@ function erdWire(E,s,nodes,edges){
     const under=document.elementFromPoint(ev.clientX,ev.clientY); const un=nodeOf(under); vis(un===d.n?new Set([d.n]):null);
   };
   s.addEventListener('pointerup',end); s.addEventListener('pointercancel',end);
-  s.addEventListener('click',ev=>{const b=ev.target.closest&&ev.target.closest('.eyebtn'); if(b){ev.stopPropagation(); erdEyePop(+b.dataset.eye)}});
-  s.addEventListener('keydown',ev=>{const b=ev.target.closest&&ev.target.closest('.eyebtn'); if(b&&(ev.key==='Enter'||ev.key===' ')){ev.preventDefault(); erdEyePop(+b.dataset.eye)}});
-  // the list stays open while you show and hide relationships (the diagram is redrawn under it)
-  if(E.popFor!=null){ if(s.querySelector('.eyebtn[data-eye="'+E.popFor+'"]')) erdEyePop(E.popFor,true); else erdPopClose() }
-}
-const EYE_SVG=(on,c)=>'<svg width="20" height="14" viewBox="-10 -7 20 14" aria-hidden="true"><path d="M-8,0C-5,-5.5 5,-5.5 8,0C5,5.5 -5,5.5 -8,0Z" fill="none" stroke="'+c+'" stroke-width="1.6"/><circle r="2.4" fill="'+c+'"/>'+(on?'':'<path d="M-8,-6.5L8,6.5" stroke="'+c+'" stroke-width="1.8"/>')+'</svg>';
-function erdPopClose(){const E=erdInit(); E.popFor=null; const p=$('#erdpop'); if(p) p.remove(); document.removeEventListener('pointerdown',erdPopOut,true); document.removeEventListener('keydown',erdPopKey,true)}
-function erdPopKey(e){ if(e.key==='Escape'&&$('#erdpop')){e.preventDefault(); e.stopPropagation(); const i=erdInit().popFor; erdPopClose(); const b=document.querySelector('#erdcv svg .eyebtn[data-eye="'+i+'"]'); if(b&&b.focus) b.focus()} }
-function erdPopOut(e){ if(!e.target.closest('#erdpop')&&!e.target.closest('.eyebtn')) erdPopClose() }
-// the list of one table's relationships, by its eye: an eye per relationship to show or hide it
-function erdEyePop(idx,reopen){
-  const E=erdInit(), sh=S.sheets[idx], btn=document.querySelector('#erdcv svg .eyebtn[data-eye="'+idx+'"]'); if(!sh||!btn) return;
-  const old=$('#erdpop'); const keepScroll=old?old.querySelector('.ep-list').scrollTop:0;
-  if(old&&!reopen&&E.popFor===idx){erdPopClose(); return}
-  if(old) old.remove();
-  E.popFor=idx; const rs=erdRelsOf(sh), nh=rs.filter(r=>E.hide.has(r.k)).length, arrow={out:'→',in:'←',nn:'↔'}, dirT={out:'looks up',in:'is looked up by',nn:'many-to-many with'};
-  const el=document.createElement('div'); el.id='erdpop'; el.className='erdpop'; el.setAttribute('role','dialog'); el.setAttribute('aria-label','Relationships of '+sh.label);
-  el.innerHTML='<div class="ep-h"><b>'+esc(sh.label)+'</b><span class="dim">'+(nh?nh+' of '+rs.length+' hidden':rs.length+' relationship'+(rs.length===1?'':'s'))+'</span><button class="ep-x" data-epclose title="Close" aria-label="Close">✕</button></div>'+
-    '<div class="ep-list">'+rs.map(r=>{const on=!E.hide.has(r.k); return '<button class="ep-row'+(on?'':' off')+'" data-relk="'+esc(r.k)+'" aria-pressed="'+on+'" title="'+(on?'Shown: click to hide':'Hidden: click to show')+'">'+EYE_SVG(on,on?'#0A4873':'#B54708')+'<span class="ep-t">'+esc(r.txt)+' <span class="dim">'+arrow[r.dir]+' '+esc(r.other)+(r.dir==='nn'?' (N:N)':'')+'</span></span></button>'}).join('')+'</div>'+
-    '<div class="ep-f"><button class="btn" data-relall="1">Show all</button><button class="btn" data-relall="0">Hide all</button></div>';
-  document.body.appendChild(el);
-  const r=btn.getBoundingClientRect(), pw=el.offsetWidth, ph=el.offsetHeight;
-  let x=r.right-pw+8, y=r.bottom+6; x=Math.max(8,Math.min(innerWidth-pw-8,x)); if(y+ph>innerHeight-8) y=Math.max(8,r.top-ph-6);
-  el.style.left=x+'px'; el.style.top=y+'px'; el.querySelector('.ep-list').scrollTop=keepScroll;
-  el.addEventListener('click',e=>{
-    if(e.target.closest('[data-epclose]')){erdPopClose(); return}
-    const row=e.target.closest('[data-relk]'), all=e.target.closest('[data-relall]');
-    if(row){const k=row.dataset.relk; E.hide.has(k)?E.hide.delete(k):E.hide.add(k)}
-    else if(all) rs.forEach(q=>all.dataset.relall==='1'?E.hide.delete(q.k):E.hide.add(q.k));
-    else return;
-    erdHidChanged();
-  });
-  document.addEventListener('pointerdown',erdPopOut,true); document.addEventListener('keydown',erdPopKey,true);
-  if(!reopen) (el.querySelector('.ep-row')||el).focus();
+  const toggle=b=>{const ks=b.dataset.rk.split(' ').filter(Boolean), allHid=ks.every(k=>E.hide.has(k)); ks.forEach(k=>allHid?E.hide.delete(k):E.hide.add(k)); E.focusRk=b.dataset.rk; erdHidChanged()};
+  s.addEventListener('click',ev=>{const b=ev.target.closest&&ev.target.closest('.eyebtn'); if(b){ev.stopPropagation(); toggle(b)}});
+  s.addEventListener('keydown',ev=>{const b=ev.target.closest&&ev.target.closest('.eyebtn'); if(b&&(ev.key==='Enter'||ev.key===' ')){ev.preventDefault(); toggle(b)}});
+  if(E.focusRk){const b=[...s.querySelectorAll('.eyebtn')].find(x=>x.dataset.rk===E.focusRk); E.focusRk=null; if(b) b.focus({preventScroll:true})}
 }
 function erdAutoLayout(nodes,links){
   const N=nodes.length; if(N<2) return;
@@ -3266,7 +3244,7 @@ function erdDrawio(base){
   const x=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const HD=30, RH=22, T=[];
   M.nodes.forEach(n=>{
-    const rows=n.rows||[]; const lines=rows.map(r=>(r.k?r.k+'  ':'     ')+r.name+(r.label&&r.k==='FK'?'  ('+r.label+')':''));
+    const rows=(n.rows||[]).filter(r=>!r.hid); const lines=rows.map(r=>(r.k?r.k+'  ':'     ')+r.name+(r.label&&r.k==='FK'?'  ('+r.label+')':''));
     const chars=Math.max(n.label.length+4,...lines.map(l=>l.length)); T.push({n,rows,lines,w:Math.max(170,Math.min(380,Math.round(chars*7.2+24))),h:HD+Math.max(RH,rows.length*RH)+(rows.length?4:0)});
   });
   const byId={}; T.forEach(t=>byId[t.n.id.toLowerCase()]=t);
@@ -3370,7 +3348,6 @@ function renderErdPage(){
     else if(b.dataset.ea) erdAction(b.dataset.ea,b);
   });
   root.addEventListener('click',e=>{if(e.target.closest('[data-hidclear]')){e.preventDefault();E.hide.clear();erdHidChanged();return}});
-  erdPopClose();
   root.addEventListener('click',e=>{if(e.target.closest('[data-coreclear]')){e.preventDefault();E.core.clear();erdSave();renderErdList();erdUpdCore();erdRefresh(true)}});
   erdUpdCore(); erdNamesBtn();
   // the canvas fills the screen: re-fit when the window or panel size changes, drag empty space to pan, mouse wheel to zoom at the pointer
@@ -3410,19 +3387,19 @@ function erdRelIndex(){
   const lbl=lg=>{const i=S.byLogical[lg]; return i!=null?S.sheets[i].label:lg};
   S.sheets.filter(s=>s.kind==='entity').forEach(s=>s.rows.forEach(row=>{
     const ln=getVal(s,row,'Logical Name'); if(!ln) return; const dn=getVal(s,row,'Display Name')||ln;
-    if(isNNRow(s,row)){const tg=lookupTargetsOf(s,row)[0]; if(!tg) return; const k='n:'+ln.toLowerCase(); add(s.logical,{k,txt:dn,other:lbl(tg),dir:'nn'}); add(tg,{k,txt:dn,other:s.label,dir:'nn'}); return}
+    if(isNNRow(s,row)){const tg=lookupTargetsOf(s,row)[0]; if(!tg) return; const k='n:'+ln.toLowerCase(); add(s.logical,{k,txt:dn,other:lbl(tg),ol:tg,dir:'nn'}); add(tg,{k,txt:dn,other:s.label,ol:s.logical,dir:'nn'}); return}
     if(!lk.test(getVal(s,row,'Attribute Type'))) return;
     lookupTargetsOf(s,row).forEach(tg=>{
       if(E.sys&&SYS_TABLES.has(tg)) return; const k=erdRk(s,row,tg);
       add(s.logical,{k,txt:dn,other:lbl(tg),dir:'out'}); if(tg.toLowerCase()!==s.logical.toLowerCase()) add(tg,{k,txt:dn,other:s.label,dir:'in'});
     });
   }));
-  if(S.dv&&E.nn) Object.entries(S.dv.ents).forEach(([lg,de])=>(de.nn||[]).forEach(r=>add(lg,{k:'n:'+String(r.schema).toLowerCase(),txt:r.schema,other:lbl(r.other),dir:'nn'})));
+  if(S.dv&&E.nn) Object.entries(S.dv.ents).forEach(([lg,de])=>(de.nn||[]).forEach(r=>add(lg,{k:'n:'+String(r.schema).toLowerCase(),txt:r.schema,other:lbl(r.other),ol:r.other,dir:'nn'})));
   return idx;
 }
 function erdRelsOf(sh){const E=erdInit(); if(!E.relIdx) E.relIdx=erdRelIndex(); return E.relIdx.get(sh.logical.toLowerCase())||[]}
 function erdUpdHid(n){const E=erdInit(),el=$('#erdhid'); if(!el) return;
-  el.innerHTML=E.hide.size?`${n!=null?n:E.hide.size} hidden relationship${(n!=null?n:E.hide.size)===1?'':'s'} in this diagram <a href="#" data-hidclear style="margin-left:6px">show all</a>`:'Click the eye on a table to show or hide its relationships.'}
+  el.innerHTML=E.hide.size?`${n!=null?n:E.hide.size} hidden relationship${(n!=null?n:E.hide.size)===1?'':'s'} in this diagram <a href="#" data-hidclear style="margin-left:6px">show all</a>`:'Click the eye on a lookup or N:N row in the diagram to hide that relationship.'}
 // after changing which relationships are hidden: keep the tables where they are, redraw, and refresh the list
 function erdHidChanged(){const E=erdInit(); E.keepPos=E.pos; erdSave(); const lst=$('#erdlst'),keep=lst?lst.scrollTop:0; if(lst){renderErdList(); lst.scrollTop=keep} erdRefresh(true)}
 /* selecting a table also selects the tables it relates to (and unselecting removes the ones it brought in) */

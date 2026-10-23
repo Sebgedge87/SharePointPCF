@@ -1,3 +1,13 @@
+# 2.0.2
+
+- **An eye on each relationship row**, instead of one eye per table with a list. In the ERD's table boxes, every lookup
+  row has an eye at its end: click it to hide that relationship, click the crossed-out eye to show it again. A hidden
+  row stays in the box, faded, so it can always be brought back.
+- N:N relationships now appear as rows in the boxes of both tables (↔ the other table), with their own eye.
+- A lookup to a table is shown and hidden from the row in the table that holds the lookup.
+- With **Names only** there are no rows, so the table's header has one eye for its own relationships.
+- Hidden rows are left out of the draw.io export and the Mermaid source; the eyes are left out of SVG and PNG.
+
 # 2.0.1
 
 - **Show and hide relationships from the diagram itself.** Every table box has an eye in its header. Click it to list

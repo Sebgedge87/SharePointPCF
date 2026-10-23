@@ -114,26 +114,31 @@ function areaModel() {
   const dio = await (async () => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]); return fs.readFileSync(await d.path(), 'utf8'); })();
   ok(/strokeColor=#BB1C73/.test(dio) || /strokeColor=#1B7F5C/.test(dio) || /strokeColor=#0A4873/.test(dio), 'the draw.io file carries the area colours');
 
-  // hiding a table's relationships with the eye on its box: Case looks up Account, and Queue looks up Case
-  const eye = () => p.locator('#erdcv svg g.node[id*="entity-fp_s1-"] .eyebtn');
-  ok(await eye().count() === 1 && !(await p.locator('.erdv .lst [data-relopen]').count()), 'each table box in the diagram has an eye (the side list has no relationship buttons)');
-  await eye().click(); await p.waitForTimeout(200);
-  const relTxt = await p.innerText('#erdpop');
-  ok(/Link → Account/.test(relTxt) && /Link ← Queue/.test(relTxt) && /2 relationships/.test(relTxt), "the eye opens the table's relationships: its own lookups and the lookups to it");
+  // hiding relationships with the eye on each lookup row: Case looks up Account, and Queue looks up Case
+  const caseEye = () => p.locator('#erdcv svg g.node[id*="entity-fp_s1-"] .eyebtn');
+  ok(await caseEye().count() === 1 && await caseEye().getAttribute('data-rk') === 'l:fp_s1|fp_linkid|fp_a1', "the lookup row in Case's box has an eye for its relationship");
+  ok(await p.locator('#erdcv svg g.node[id*="entity-fp_s2-"] .eyebtn').count() === 1 && !(await p.locator('#erdpop').count()), 'Queue has one for its own lookup (to Case); there is no pop-up list');
   const nodePos = async () => { await p.waitForSelector('#erdcv svg g.node[id*="entity-fp_s1-"]', { timeout: 15000 }); return p.evaluate(() => { const all = JSON.parse(localStorage.getItem('dme.erdpos')), pos = all[Object.keys(all).pop()]; return JSON.stringify([pos.fp_s1, pos.fp_s2].map(a => a && a.map(Math.round))); }); };
   const before = await nodePos();
   ok(/fp_a1\[/.test(await p.inputValue('#erdsrc')), 'before hiding, Account is drawn as the table Case looks up');
-  await p.click('#erdpop [data-relk="l:fp_s1|fp_linkid|fp_a1"]'); await p.waitForTimeout(2500);
-  ok(!/fp_a1\[/.test(await p.inputValue('#erdsrc')) && /1 hidden by you/.test(await p.innerText('#erdinfo')), "clicking that relationship's eye removes the line (and the Account table it brought in)");
+  await caseEye().click(); await p.waitForTimeout(2500);
+  ok(!/fp_a1\[/.test(await p.inputValue('#erdsrc')) && /1 hidden by you/.test(await p.innerText('#erdinfo')), "clicking the row's eye removes that line (and the Account table it brought in)");
   ok(/fp_s2.*fp_s1|fp_s1.*fp_s2/.test((await p.inputValue('#erdsrc')).split('\n').filter(l => /:/.test(l) && /fp_s/.test(l)).join('\n')), 'the other relationship stays');
   { const after = await nodePos(); ok(after === before, 'the tables stay where they were' + (after === before ? '' : ' (' + before + ' → ' + after + ')')); }
-  ok(await p.isVisible('#erdpop') && await p.getAttribute('#erdpop [data-relk="l:fp_s1|fp_linkid|fp_a1"]', 'aria-pressed') === 'false' && /1 of 2 hidden/.test(await p.innerText('#erdpop')), 'the list stays open and shows that one is hidden');
-  ok(await eye().evaluate(g => g.classList.contains('hid') && /1/.test(g.textContent)) && /1 hidden relationship/.test(await p.innerText('#erdhid')), "the table's eye is crossed out with the count, and the side panel says so");
+  ok(await caseEye().evaluate(g => g.classList.contains('off') && g.getAttribute('aria-pressed') === 'false') && await p.locator('#erdcv svg g.node[id*="entity-fp_s1-"] .erow.hid').count() === 1, 'the row stays in the box, faded, with its eye crossed out');
+  ok(/1 hidden relationship/.test(await p.innerText('#erdhid')), 'the side panel says one is hidden');
   ok(await p.evaluate(() => Object.keys(localStorage).some(k => (localStorage.getItem(k) || '').includes('l:fp_s1|fp_linkid|fp_a1'))), 'hidden relationships are remembered');
-  await p.click('#erdpop [data-relall="0"]'); await p.waitForTimeout(2500);
-  ok(/0 relationships/.test(await p.innerText('#erdinfo')) && await p.locator('#erdcv svg g.node[id*="entity-fp_s1-"]').count() === 1 && /2 of 2 hidden/.test(await p.innerText('#erdpop')), 'Hide all hides every relationship, and the table stays on the diagram so it can be brought back');
-  await p.keyboard.press('Escape'); await p.waitForTimeout(150);
-  ok(!(await p.isVisible('#erdpop')), 'Escape closes the list');
+  await p.locator('#erdcv svg g.node[id*="entity-fp_s2-"] .eyebtn').click(); await p.waitForTimeout(2500);
+  ok(/0 relationships/.test(await p.innerText('#erdinfo')) && await p.locator('#erdcv svg g.node[id*="entity-fp_s1-"]').count() === 1, 'hiding the last one leaves both tables on the diagram, so they can be brought back');
+  await caseEye().click(); await p.waitForTimeout(2500);
+  ok(/fp_a1\[/.test(await p.inputValue('#erdsrc')) && /1 hidden by you/.test(await p.innerText('#erdinfo')), "clicking a crossed-out eye shows that relationship again");
+  await p.click('[data-ek="attrs"][data-ev="none"]'); await p.waitForTimeout(2500);
+  const head = p.locator('#erdcv svg g.node[id*="entity-fp_s2-"] .eyebtn');
+  ok(await head.count() === 1 && await head.evaluate(g => g.classList.contains('off')), "with Names only, the table's header has one eye for its own relationships");
+  await head.click(); await p.waitForTimeout(2500);
+  ok(!/hidden by you/.test(await p.innerText('#erdinfo')), 'and clicking it shows them again');
+  await p.click('[data-ek="attrs"][data-ev="keys"]'); await p.waitForTimeout(1500);
+  await caseEye().click(); await p.waitForTimeout(2000);
   await p.click('#erdhid [data-hidclear]'); await p.waitForTimeout(2500);
   ok(/fp_a1\[/.test(await p.inputValue('#erdsrc')) && !/hidden by you/.test(await p.innerText('#erdinfo')) && !/hidden relationship/.test(await p.innerText('#erdhid')), 'show all brings every relationship back');
 

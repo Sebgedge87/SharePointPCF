@@ -5,7 +5,7 @@ untouched. It does everything 1.9.3 does, plus:
 
 - **A much faster ERD.** The diagram is drawn by the page itself instead of by the Mermaid library. 300 tables and
   900 relationships draw in about 2.5 seconds instead of 78. Dragging and hovering stay quick on big diagrams.
-- **Show and hide relationships from the diagram:** an eye on each table box lists its relationships, each with its own eye.
+- **Show and hide relationships from the diagram:** every lookup and N:N row in a table box has an eye; click it to hide or show that relationship.
 - **Read-only copies** to give to a client or a support team (see below).
 - **A smaller file.** 2.2 MB instead of 5.7 MB, so it opens faster.
 
@@ -68,7 +68,7 @@ Same layout as 1.9.3: the page is `src/index.template.html`, and `build.py` inli
 ```
 npm install
 npm run build        # dist/Data_Model_Explorer.html
-npm test             # 284 browser tests, including tests/erd.js and tests/readonly.js
+npm test             # 286 browser tests, including tests/erd.js and tests/readonly.js
 ```
 
 Mermaid is no longer a dependency. **Copy Mermaid** and **.mmd** still give the Mermaid source of the diagram, which is
