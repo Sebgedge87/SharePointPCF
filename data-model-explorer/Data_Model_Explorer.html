@@ -167,27 +167,34 @@ mark{background:#F7D4E7;color:#7B134D;border-radius:2px;padding:0 1px}
 .fld .v:hover{border-color:var(--line);background:var(--panel2)}
 .fld .v.edited{background:var(--edit-bg);border-color:var(--edit)}
 .fld textarea,.fld input{width:100%;border:1px solid var(--accent);border-radius:7px;padding:6px 9px;background:var(--panel);outline:none;min-height:34px;box-shadow:0 0 0 3px var(--accent-bg)}
+.fld input[type=checkbox],.fld input[type=radio]{width:auto;min-height:0;height:auto;padding:0;border:0;box-shadow:none;accent-color:var(--accent)}
 .vsec{margin-bottom:16px}.vsec h4{margin:0 0 6px;font-size:13px}.vline{padding:5px 0;border-bottom:1px solid var(--line2);word-break:break-word}.vline .d{margin-top:4px;display:grid;gap:4px}.vline .o{background:var(--slate-bg);color:var(--muted);padding:2px 7px;border-radius:5px;white-space:pre-wrap;text-decoration:line-through;text-decoration-color:rgba(123,19,77,.5)}.vline .nw{background:var(--accent-bg);color:var(--accent);padding:2px 7px;border-radius:5px;white-space:pre-wrap}
 td.upd{background:var(--accent-bg)!important;box-shadow:inset 3px 0 0 var(--accent)}
 .navitem .ed.vd{background:var(--accent)}
-.readme{max-width:1040px;padding:22px 26px 60px;overflow:auto;flex:1}
-.readme h1{margin:0 0 4px;font-size:26px;color:var(--accent)}
-.readme .lead{color:var(--muted);font-size:14.5px;max-width:780px;margin:0 0 20px}
-.readme h2{font-size:16px;margin:26px 0 8px;color:var(--accent);display:flex;align-items:center;gap:8px}
+.readme{flex:1;overflow:auto;padding:28px 24px 72px;background:var(--panel2)}
+.readme .rwrap{max-width:940px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:34px 44px 44px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.readme h1{margin:0 0 6px;font-size:28px;color:var(--accent)}
+.readme .lead{color:var(--muted);font-size:15px;margin:0 0 20px;line-height:1.55}
+.readme .toc{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;padding:12px 0 2px;border-top:1px solid var(--line2)}
+.readme .toc a{font-size:12.5px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--accent);text-decoration:none;background:var(--panel)}
+.readme .toc a:hover{border-color:var(--accent);background:var(--accent-bg)}
+.readme h2{font-size:17px;margin:34px 0 10px;padding-top:18px;border-top:1px solid var(--line2);color:var(--accent);display:flex;align-items:center;gap:8px;scroll-margin-top:12px}
+.readme p{line-height:1.6}
+@media (max-width:860px){.readme{padding:0}.readme .rwrap{border:0;border-radius:0;padding:20px 16px 40px}}
 .readme h2 .n{background:var(--pink);color:#fff;border-radius:999px;width:22px;height:22px;display:inline-grid;place-items:center;font-size:12px}
-.readme p,.readme li{max-width:800px}
 .readme ul,.readme ol{padding-left:20px;margin:6px 0}
 .readme li{margin:3px 0}
 .rcard{border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:10px 0;background:var(--panel)}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:10px 0}
 .rgrid .rcard{margin:0}
 .rcard h3{margin:0 0 6px;font-size:13.5px;color:var(--accent)}
-.flow{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin:12px 0}
-.flow .step{flex:1;min-width:150px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
+.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr auto 1fr;gap:6px;align-items:stretch;margin:12px 0 18px}
+@media (max-width:1100px){.flow{display:flex;flex-wrap:wrap;gap:8px}}
+.flow .step{flex:1;min-width:0;font-size:13px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
 .flow .step b{display:block;color:var(--accent);margin-bottom:2px}
 .flow .arrow{align-self:center;color:var(--pink);font-weight:700}
 .readme kbd{font:11.5px ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 6px;background:var(--panel)}
-.readme table{border-collapse:collapse;margin:8px 0;width:100%;max-width:800px}
+.readme table{border-collapse:collapse;margin:8px 0;width:100%}
 .readme td,.readme th{border-bottom:1px solid var(--line2);padding:6px 10px;text-align:left;vertical-align:top}
 .readme th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .note2{border-left:3px solid var(--pink);background:var(--violet-bg);color:var(--edit);padding:8px 12px;border-radius:0 8px 8px 0;margin:10px 0;max-width:800px}
@@ -5609,8 +5616,8 @@ function revertAll(){
 /* ---------- navigation ---------- */
 function renderReadme(){
   const main=$('#main');
-  const sec=(n,title,body)=>`<h2><span class="n">${n}</span>${title}</h2>${body}`;
-  main.innerHTML=`<div class="readme">
+  const sec=(n,title,body)=>`<h2 id="rd-${n}"><span class="n">${n}</span>${title}</h2>${body}`;
+  main.innerHTML=`<div class="readme"><article class="rwrap">
   <h1>How it works</h1>
   <p class="lead">This page turns a multi-tab Excel data model document into something you can search, filter, check and edit, writes it back out in the same layout, and builds it in Dataverse as a solution, so tables, fields and relationships don't have to be created by hand. Everything runs inside this one file in your browser. Nothing is uploaded anywhere.</p>
 
@@ -5621,6 +5628,8 @@ function renderReadme(){
     <div class="step"><b>4. Export</b>Data is written into the template, so formatting matches.</div><div class="arrow">→</div>
     <div class="step"><b>5. Build</b>Export → Dataverse solution creates the tables, fields and relationships, imported with one script.</div>
   </div>
+
+  <nav class="toc" aria-label="Contents"></nav>
 
   ${sec(1,'Reading the workbook',`
   <p>When the file opens, each tab is read and classified:</p>
@@ -5743,7 +5752,10 @@ function renderReadme(){
     <li>If the template export fails for any reason, the tool falls back to the plain-values export and tells you.</li>
   </ul>
   <div class="note2"><b>Tip:</b> the badge on <b>More ▾</b> (and on Template inside it) shows how many tables differ from the template. It is a quick check that a new workbook really is in the expected layout before you export.</div>`)}
-  </div>`;
+  </article></div>`;
+  // contents, from the section headings
+  main.querySelector('.toc').innerHTML=[...main.querySelectorAll('.rwrap h2[id]')].map(h=>`<a href="#" data-rjump="${h.id.slice(3)}">${h.id.slice(3)}. ${esc(h.lastChild.textContent.trim())}</a>`).join('');
+  main.querySelector('.toc').addEventListener('click',e=>{const a=e.target.closest('[data-rjump]'); if(!a) return; e.preventDefault(); const h=main.querySelector('#rd-'+a.dataset.rjump); if(h) h.scrollIntoView({behavior:'smooth',block:'start'})});
 }
 
 /* ---------- data-model checks ---------- */
