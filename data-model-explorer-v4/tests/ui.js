@@ -64,7 +64,7 @@ function areaModel() {
   // ERD: nothing drawn by default on a large model; asked before drawing more than 80
   await p.click('#nav .navitem[data-view="__erd"]'); await p.waitForTimeout(800);
   ok(/Pick the tables to draw/.test(await p.innerText('#erdcv')) && await p.locator('#erdcv svg').count() === 0, 'a 90-table model opens the ERD with a prompt, not a 90-table diagram');
-  ok(/Fill in Area in the Table Dictionary/.test(await p.innerText('.erdv .ctl')) && !(await p.locator('[data-areabtn="erd"]').count()), 'with no areas, the ERD explains how to get the area filter');
+  ok(/Fill in Area in the Table Dictionary/.test(await p.textContent('.erdv .ctl')) && !(await p.locator('[data-areabtn="erd"]').count()), 'with no areas, the ERD explains how to get the area filter');
   await p.click('[data-eq=all]'); await p.waitForSelector('.dlgbox', { timeout: 3000 }).catch(() => {});
   ok(/Draw 90 tables\?/.test(await p.innerText('.dlgbox').catch(() => '')), 'choosing All on 90 tables asks first');
   await p.click('.dlgbox [data-d="0"]'); await p.waitForTimeout(300);
@@ -117,10 +117,10 @@ function areaModel() {
   ok(JSON.stringify(await p.$$eval('.erdv .lst h4', h => h.map(x => x.textContent))) === '["Service"]', 'choosing Service narrows the ERD list to Service');
   ok(/^2 tables/.test(await p.innerText('#erdinfo')) && await p.locator('#erdcv svg g.node').count() >= 2, 'and draws the two Service tables (plus what they look up)');
   ok(/Area: Service/.test(await p.innerText('[data-areabtn="erd"]')), 'the Area button shows the choice');
-  await p.check('#erdacol'); await p.waitForTimeout(2500);
+  await p.evaluate(() => { document.querySelector('#erdopts').open = true }); await p.check('#erdacol'); await p.waitForTimeout(2500);
   ok(/classDef ar\d+c stroke:/.test(await p.inputValue('#erdsrc')) && /Service/.test(await p.innerText('#erdlegend')), 'Colour by area colours each table by its area, with a legend');
   ok(await p.locator('#erdcv svg g.node').count() >= 3 && !(await p.locator('#erdcv .err').count()), 'and the coloured diagram draws (Mermaid rejects decimal line widths)');
-  const dio = await (async () => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]); return fs.readFileSync(await d.path(), 'utf8'); })();
+  const dio = await (async () => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="expmenu"]').then(() => p.click('.tb [data-ea="drawio"]'))]); return fs.readFileSync(await d.path(), 'utf8'); })();
   ok(/strokeColor=#BB1C73/.test(dio) || /strokeColor=#1B7F5C/.test(dio) || /strokeColor=#0A4873/.test(dio), 'the draw.io file carries the area colours');
 
   // hiding relationships with the eye on each lookup row: Case looks up Account, and Queue looks up Case

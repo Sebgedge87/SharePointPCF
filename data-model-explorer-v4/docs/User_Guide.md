@@ -22,6 +22,7 @@ This guide describes version 4.0.0, in the SharePointPCF repository under `data-
 
 **New in 4.0**
 
+- A tidier ERD panel: tables first, display settings folded under **Layout and options**, and the exports in one **Export ▾** menu (The ERD).
 - A simpler header, in the order you work: the workbook, your changes, **Check**, **Save & share** and **Build solution** (The header).
 - Read-only copies can download the workbook as an Excel file, formatting and edits included (Sharing a read-only copy).
 - An empty page offers **Open workbook…** and **Download blank template** side by side.
@@ -153,9 +154,11 @@ Use the **Errors**, **Warnings** and **Info** buttons (with their counts) to sho
 
 The **ERD** draws the tables you pick, joined by their lookups and N:N relationships, so the diagram always matches the workbook. The page draws it itself, so even a few hundred tables take only a few seconds.
 
-1. Pick tables in the list on the left: tick them one by one, filter by name or area and use **Select shown**, or use **Custom only**, **All** and **None**.
+The side panel has the tables at the top and the display settings at the bottom.
+
+1. Pick tables under **Tables** (it says how many are ticked): tick them one by one, use **Custom only**, **All**, **None** or **Area ▾**, or type in the filter box and use **Tick all shown** (it appears while you filter).
 2. Click ★ next to a table to make it a **core table**: the diagram is laid out around it, and with **Selecting a table also selects the tables it relates to** on, its neighbours come too.
-3. Choose what each box shows (**Names only**, **Keys + lookups** or **All fields**), the **Direction** and when relationship names show. **Left to right** turns a layout that comes out tall on its side, to fit a wide screen; **Top to bottom** gives a tall layout. Changing it lays the diagram out again.
+3. Under **Show**, choose what each box shows: **Names only**, **Keys + lookups** or **All fields**. **Layout and options** (closed until you open it; the line under it sums up what is set) has the **Direction**, when relationship names show, which tables are drawn, and colour by area. **Left to right** turns a layout that comes out tall on its side, to fit a wide screen; **Top to bottom** gives a tall layout. Changing it lays the diagram out again.
 4. Drag tables to tidy the layout; **Auto layout** starts again. Layouts are remembered per selection.
 5. To leave out a relationship, click the eye at the end of its row in the table box. Every lookup row has one, and N:N relationships have their own rows (↔ the other table) on both tables. The line disappears; the row stays in the box, faded, with its eye crossed out, so clicking it again brings the line back. A lookup to a table is hidden from the row in the table that holds the lookup. With **Names only** there are no rows, so the table's header has one eye for all of its own relationships. **show all** in the side panel brings every hidden relationship back. The tables stay where they are, and the choice is remembered in this browser.
 
@@ -167,13 +170,13 @@ The diagram opens at the size of your screen, so a large model is readable strai
 
 ![The ERD](images/05-erd.png)
 
-**1** All tables · **2** Keys + lookups · **3** Export to draw.io
+**1** Filter tables · **2** All tables · **3** Keys + lookups · **4** Layout and options · **5** Export ▾ · **6** draw.io
 
 **Reading the lines.** Lines use crow's-foot ends: a fork for "many", bars for "one", a circle for "zero". A line shows its ends only where the relationship type is recorded in the workbook. A small arrow in the middle points to the table being looked up. A relationship whose type isn't recorded is drawn as a plain grey line and listed in Checks for review; N:N relationships are dashed. Custom tables have a pink border; standard tables and tables referenced but not in the workbook have a plain one.
 
-**Options.** Show tables that selected tables look up to; hide tables with no relationships; also show tables that are not in the workbook; merge lines between the same two tables; hide user, team and business unit.
+**Options** (under Layout and options). Ticking a table also ticks the tables it relates to; show tables the ticked tables look up to; include tables not in the workbook; hide tables with no relationships; hide user, team and business unit; merge lines between the same two tables; colour by area.
 
-**Exports.** **draw.io** (an editable diagram), **SVG**, **PNG**, **.mmd** and **Copy Mermaid** (the Mermaid source). Exports show what you see: the tables you picked, your layout, and only the relationships you have not hidden. The eyes are left out. A whole large model is hard to read, so a few dozen tables at a time usually works best.
+**Exports.** **Export ▾** above the diagram: **draw.io** (an editable diagram), **SVG**, **PNG**, **Mermaid (.mmd)**, **Copy Mermaid** and **Show Mermaid source**. Exports show what you see: the tables you picked, your layout, and only the relationships you have not hidden. The eyes are left out. A whole large model is hard to read, so a few dozen tables at a time usually works best.
 
 ## Browsing and searching tables
 

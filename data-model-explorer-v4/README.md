@@ -20,6 +20,9 @@ A **read-only copy** now has **Save & share → Download the workbook (.xlsx)**:
 edits written in and its formatting kept. An empty page opens on **Start here**, with Open workbook… and Download blank
 template side by side.
 
+The **ERD** side panel shows the tables first and folds the layout options away under *Layout and options*; its exports
+are in one *Export ▾* menu.
+
 Everything else (the ERD, checks, the solution builder, and reading a Dynamics 365 environment when uploaded as a web
 resource) works as in 3.0. The full guide, with screenshots, is [`docs/User_Guide.md`](docs/User_Guide.md) (also
 `docs/User_Guide.docx`).
@@ -45,6 +48,6 @@ Then open `https://<your-org>.crm.dynamics.com/WebResources/formus_/dme/DataMode
 ```
 npm install
 npm run build          # dist/Data_Model_Explorer.html
-npm test               # 327 browser tests, including the page as a web resource on a stand-in environment
+npm test               # 335 browser tests, including the page as a web resource on a stand-in environment
 npm run webresource    # the solution zip, from dist/
 ```

@@ -13,6 +13,12 @@ Built on 3.0.0 (see [../data-model-explorer-live/CHANGES.md](../data-model-explo
 - The save state reads *kept in browser* (or *not saved: export now*); on narrower screens it becomes a coloured dot.
   The header fits at 1120 px wide; on a phone everything is in the ⋯ menu.
 
+**ERD**
+- The side panel lists the tables first (with how many are ticked), then **Show**, with the rest folded under
+  **Layout and options**; the line under it sums up what is set, and it stays open or closed as you left it.
+- **Tick all shown** / **Untick all shown** appear only while filtering.
+- The exports (draw.io, SVG, PNG, Mermaid) are in one **Export ▾** menu above the diagram.
+
 **Read-only copies**
 - **Save & share → Download the workbook (.xlsx)**: the workbook the copy was made from, edits written in, formatting
   kept.
@@ -21,5 +27,5 @@ Built on 3.0.0 (see [../data-model-explorer-live/CHANGES.md](../data-model-explo
 - An empty page opens on **Start here**: Open workbook…, Download blank template, and inside an environment This
   environment….
 - Disabled buttons look disabled.
-- Tests: 327. Guide updated, with a new section "The header" and new screenshots.
+- Tests: 335. Guide updated, with a new section "The header" and new screenshots.
 - `FORMUS_DataModelExplorer_4_0_0_0.zip`: the web resource solution for 4.0.

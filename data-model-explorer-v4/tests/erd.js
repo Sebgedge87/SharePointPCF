@@ -44,7 +44,7 @@ function model(N, file) {
   const hov = await p.evaluate(() => ({ hot: document.querySelectorAll('#erdcv svg path.rl.hot').length, focus: document.querySelector('#erdcv svg').classList.contains('focus') }));
   ok(hov.focus && hov.hot > 0 && await shownLabs() === hov.hot, 'hovering a table highlights its lines and names, and dims the rest');
   await p.mouse.move(5, 5); await p.waitForTimeout(150);
-  await p.click('[data-ek="lbl"][data-ev="all"]'); await p.waitForTimeout(400);
+  await p.evaluate(() => { document.querySelector('#erdopts').open = true }); await p.click('[data-ek="lbl"][data-ev="all"]'); await p.waitForTimeout(400);
   ok(await shownLabs() === lines.paths, 'Names: always shows every relationship name');
 
   // dragging a table moves only its own lines, and the position is kept
@@ -56,7 +56,7 @@ function model(N, file) {
   ok(changed > 0 && changed < 12, `dragging a table re-routes only its own lines (${changed} of ${after.length})`);
 
   // exports
-  const dl = async sel => { const [d] = await Promise.all([p.waitForEvent('download'), p.click(sel)]); return fs.readFileSync(await d.path(), 'utf8'); };
+  const dl = async sel => { const [d] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="expmenu"]').then(() => p.click(sel))]); return fs.readFileSync(await d.path(), 'utf8'); };
   await p.click('[data-ez="0"]'); await p.waitForTimeout(300);
   const svg = await dl('.tb [data-ea="svg"]');
   ok(/<marker id="erdm-many-e"/.test(svg) && /class="node"/.test(svg) && /<g class="lab"/.test(svg), 'the SVG export carries the boxes, line ends and (with Names: always) the names');
@@ -72,6 +72,21 @@ function model(N, file) {
   await p.click('[data-ek="dir"][data-ev="LR"]'); await p.waitForTimeout(3000);
   const lr = await aspect();
   ok(tb <= 1.2 && lr >= 0.85, `Direction shapes the layout (top to bottom ${tb.toFixed(2)}, left to right ${lr.toFixed(2)} wide per tall)`);
+
+  // the side panel: tables first, the rest folded away with a summary of what is set
+  ok(/^\d+ of 20 ticked$/.test(await p.innerText('#erdcount')), 'the panel says how many tables are ticked');
+  ok(/Left to right · names always/.test(await p.innerText('#erdoptsum')), 'the options heading sums up what is set');
+  ok(!await p.isVisible('#erdshown'), '"Tick all shown" only appears while filtering');
+  await p.click('#nav .navitem[data-view="__overview"]'); await p.waitForTimeout(300); await p.click('#nav .navitem[data-view="__erd"]'); await p.waitForTimeout(1500);
+  ok(await p.$eval('#erdopts', d => d.open), 'the options stay open when you come back');
+  await p.click('#erdopts summary'); await p.waitForTimeout(200);
+  await p.click('#nav .navitem[data-view="__overview"]'); await p.waitForTimeout(300); await p.click('#nav .navitem[data-view="__erd"]'); await p.waitForTimeout(1500);
+  ok(!await p.$eval('#erdopts', d => d.open), 'and stay closed once closed');
+  ok(!await p.isVisible('#erdmenu'), 'exports are in one menu, closed to start');
+  await p.click('.tb [data-ea="expmenu"]');
+  ok(JSON.stringify(await p.$$eval('#erdmenu [data-ea]', b => b.map(x => x.dataset.ea))) === '["drawio","svg","png","mmd","copy","src"]', 'Export ▾ has draw.io, SVG, PNG and the Mermaid options');
+  await p.click('#erdcount'); await p.waitForTimeout(150);
+  ok(!await p.isVisible('#erdmenu'), 'clicking elsewhere closes it');
 
   // a large model draws in seconds, not minutes
   await p.setInputFiles('#file', model(300, 'erd300.xlsx')); await p.waitForTimeout(800);

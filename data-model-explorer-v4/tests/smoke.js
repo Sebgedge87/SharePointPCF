@@ -38,7 +38,7 @@ function fakeExport() {
   await p.click('#nav .navitem:has-text("ERD")'); await p.waitForTimeout(2500);
   await p.click('[data-eq=all]'); await p.waitForTimeout(2500);
   ok(await p.locator('#erdcv svg g.node').count() > 0, 'ERD draws');
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="drawio"]')]);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.tb [data-ea="expmenu"]').then(() => p.click('.tb [data-ea="drawio"]'))]);
   const xml = fs.readFileSync(await dl.path(), 'utf8');
   ok(/<mxfile/.test(xml) && /startArrow=none;endArrow=none/.test(xml) && !/ERzeroToMany/.test(xml), 'draw.io export is valid mxGraph XML, with relationships of unrecorded type as plain lines');
 
