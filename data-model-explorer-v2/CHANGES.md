@@ -1,3 +1,9 @@
+# 2.0.3
+
+- User guide for 2.0 in `docs/` (Markdown and Word), with marked screenshots: the eye on each relationship row, the
+  read-only copy, the Export menu, and a new section, "Sharing a read-only copy".
+- A read-only copy's Overview no longer shows a "your edits" count.
+
 # 2.0.2
 
 - **An eye on each relationship row**, instead of one eye per table with a list. In the ERD's table boxes, every lookup

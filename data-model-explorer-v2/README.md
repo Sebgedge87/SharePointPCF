@@ -9,9 +9,9 @@ untouched. It does everything 1.9.3 does, plus:
 - **Read-only copies** to give to a client or a support team (see below).
 - **A smaller file.** 2.2 MB instead of 5.7 MB, so it opens faster.
 
-Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge. The
-[1.9.3 user guide](../data-model-explorer/docs/User_Guide.md) applies; the differences are listed in
-[CHANGES.md](CHANGES.md).
+Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge. The user
+guide for 2.0, with marked screenshots, is [`docs/User_Guide.md`](docs/User_Guide.md) (also as Word:
+`docs/User_Guide.docx`); the changes from 1.9.3 are in [CHANGES.md](CHANGES.md).
 
 ## Read-only copies
 

@@ -2396,7 +2396,7 @@ function renderOverview(){
   ${S.restored?`<div class="note2 ovnote"><span>Reopened <b>${esc(S.fileName)}</b>, kept in this browser from last time.${others?` ${others} other workbook${others===1?' is':'s are'} kept here too.`:''} <a href="#" data-wb="__menu">Switch workbook</a> · <a href="#" data-wb="__open">Open another</a></span><button class="x" data-ovx title="Dismiss">×</button></div>`:''}
   <div class="ovtiles">${tile(ents.length,'tables · '+custom+' custom, '+(ents.length-custom)+' standard')}${tile(fields.toLocaleString(),'fields')}${tile(lookups,'lookups')}${tile(pairs.size,'related table pairs','go:__erd')}
     ${tile(unresolved,'unresolved lookups',lk.length?'issues:rule:lookup-*':'',unresolved?'warn':'',lkInfo?lkInfo.toLocaleString()+' to standard tables (info)':'')}${tile(c.error,'errors',c.error?'issues:error':'',c.error?'err':'')}${tile(c.warn,'warnings',c.warn?'issues:warn':'',c.warn?'warn':'')}
-    ${tile(S.edits.size,'your edits',S.edits.size?'changes':'')}${S.diff?tile(S.diff.total,'changes since '+esc(S.diff.pl),'versions'):''}</div><div class="ovgrid">`;
+    ${RO?'':tile(S.edits.size,'your edits',S.edits.size?'changes':'')}${S.diff?tile(S.diff.total,'changes since '+esc(S.diff.pl),'versions'):''}</div><div class="ovgrid">`;
   // documentation completeness
   const bar=(label,a,b)=>{const p=pct(a,b);return `<div class="ovrow"><span>${label}</span><span class="dim">${a.toLocaleString()} of ${b.toLocaleString()} · ${p}%</span></div><div class="bar ${p<50?'lo':''}"><i style="width:${p}%"></i></div>`};
   const tDesc=ents.filter(s=>s.mo['description']).length;

@@ -34,7 +34,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
   ok(await q.isVisible('.rochip') && /read-only/.test(await q.title()), 'the copy says it is read-only');
   ok(/Import_Test_Model/.test(await q.innerText('#main')), 'it opens straight onto the workbook inside it');
   for (const [sel, what] of [['#btnOpen', 'Load version'], ['#btnWb', 'the workbook selector'], ['#btnChanges', 'Changes'], ['#saveState', 'Saved']]) ok(!await q.isVisible(sel), what + ' is not shown');
-  ok(!/Build a Dataverse solution/.test(await q.innerText('#main')), 'the Overview has no solution builder');
+  ok(!/Build a Dataverse solution/.test(await q.innerText('#main')) && !/your edits/.test(await q.innerText('#main')), 'the Overview has no solution builder and no edits count');
   if (!await q.locator('#nav .navitem:has-text("Test Task")').count()) await q.click('#nav [data-grp="Import test"]');
   await q.click('#nav .navitem:has-text("Test Task")'); await q.waitForTimeout(500);
   const c2 = q.locator('#gridwrap tbody tr:has(td[data-col="Logical Name"] .mono:text-is("formus_priority")) td[data-col="Description"]');
