@@ -296,12 +296,15 @@ body.ro #btnOpen,body.ro #btnWb,body.ro #btnFiles,body.ro #btnTmpl,body.ro #btnC
 body.ro [data-fedit]{cursor:default}
 #erdcv svg .lab{display:none} #erdcv svg.lbl-all .lab,#erdcv svg.lbl-hover .lab.hot{display:inline}
 #erdcv svg.focus .rl:not(.hot),#erdcv svg.focus .erdarr:not(.hot){opacity:.12} #erdcv svg.focus .lab:not(.hot){opacity:.15} #erdcv svg .rl.hot{stroke-width:2.4}
-.erdv .relbtn{margin-left:4px;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:6px;font-size:11px;padding:1px 6px;cursor:pointer;white-space:nowrap}
-.erdv .relbtn:hover,.erdv .relbtn.on{border-color:var(--accent);color:var(--accent)}
-.erdv .relbtn.hid{border-color:#E8A317;color:#93370D;background:#FEF0C7}
-.erdv .relpanel{margin:0 0 8px 26px;padding:6px 8px;border-left:2px solid var(--line);font-size:12.5px}
-.erdv .relpanel label{display:flex;align-items:flex-start;gap:6px;padding:2px 0}
-.erdv .relpanel .quick{margin-top:4px}
+.erdv .eyebtn{cursor:pointer} .erdv .eyebtn:hover rect,.erdv .eyebtn:focus rect{fill:#E3ECF4;fill-opacity:1} .erdv .eyebtn:focus{outline:none}
+.erdpop{position:fixed;z-index:60;width:340px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(10,40,70,.18);font-size:13px;display:flex;flex-direction:column}
+.erdpop .ep-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line2)} .erdpop .ep-h .dim{margin-left:auto;font-size:12px}
+.erdpop .ep-x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:13px;padding:2px 4px}
+.erdpop .ep-list{max-height:320px;overflow:auto;padding:4px}
+.erdpop .ep-row{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:8px;cursor:pointer;color:var(--text);font:inherit}
+.erdpop .ep-row:hover,.erdpop .ep-row:focus{background:var(--panel2);outline:none} .erdpop .ep-row svg{flex:none;margin-top:2px}
+.erdpop .ep-row.off .ep-t{color:var(--muted);text-decoration:line-through;text-decoration-color:#d0a070}
+.erdpop .ep-f{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line2)} .erdpop .ep-f .btn{padding:3px 10px;font-size:12px}
 .erdv .cv{flex:1;overflow:auto;background:#fff;padding:12px;position:relative;display:flex;cursor:grab;min-height:0}
 .erdv .cv svg{display:block;flex:none}
 .erdv .cv .msg{padding:30px;color:var(--muted)}
@@ -2833,7 +2836,7 @@ function erdTargets(E,sh,row){
   const out=[];
   lookupTargetsOf(sh,row).forEach(tg=>{
     if(E.sys&&SYS_TABLES.has(tg)) return;
-    if(E.hide.size){const k=erdRk(sh,row,tg); if(E.hide.has(k)){if(E.hidSeen) E.hidSeen.add(k); return}}
+    if(E.hide.size){const k=erdRk(sh,row,tg); if(E.hide.has(k)){if(E.hidSeen){E.hidSeen.add(k); E.hidNodes.add(mid(sh.logical)); E.hidNodes.add(mid(tg))} return}}
     const i=S.byLogical[tg]; const tsh=i!=null?S.sheets[i]:null;
     if(tsh){ if(!E.sel.has(tsh.idx)&&!E.stubs) return }
     else if(!(E.stubs&&E.ext)) return;
@@ -2843,7 +2846,7 @@ function erdTargets(E,sh,row){
 }
 function buildErd(){
   const E=erdInit(); const stats={tables:0,stubs:0,rels:0,attrs:0};
-  const nodes=new Map(); const rels=[]; E.hidSeen=new Set();
+  const nodes=new Map(); const rels=[]; E.hidSeen=new Set(); E.hidNodes=new Set();
   const node=(key,sh,label)=>{let n=nodes.get(key);if(!n){n={id:mid(key),label:label||key,sh,sel:false};nodes.set(key,n)}return n};
   const sels=S.sheets.filter(s=>s.kind==='entity'&&E.sel.has(s.idx));
   sels.forEach(s=>{node(s.logical,s,s.label).sel=true});
@@ -2864,7 +2867,7 @@ function buildErd(){
   const nnSeen=new Set();
   sels.forEach(s=>s.rows.forEach(row=>{ // N:N rows recorded in the workbook
     if(!isNNRow(s,row)) return; const nm=getVal(s,row,'Logical Name').trim(), tg=lookupTargetsOf(s,row)[0]; if(!nm||!tg||nnSeen.has(nm.toLowerCase())) return;
-    if(E.sys&&SYS_TABLES.has(tg)) return; if(E.hide.has('n:'+nm.toLowerCase())){E.hidSeen.add('n:'+nm.toLowerCase()); return} const i=S.byLogical[tg], tsh=i!=null?S.sheets[i]:null;
+    if(E.sys&&SYS_TABLES.has(tg)) return; if(E.hide.has('n:'+nm.toLowerCase())){E.hidSeen.add('n:'+nm.toLowerCase()); E.hidNodes.add(mid(s.logical)); E.hidNodes.add(mid(tg)); return} const i=S.byLogical[tg], tsh=i!=null?S.sheets[i]:null;
     if(tsh){if(!E.sel.has(tsh.idx)&&!E.stubs) return} else if(!(E.stubs&&E.ext)) return;
     nnSeen.add(nm.toLowerCase()); const o=node(tg,tsh,tsh?tsh.label:tg); rels.push({p:mid(s.logical),c:o.id,lbl:mq(getVal(s,row,'Display Name')||nm),req:false,nn:true});
   }));
@@ -2873,14 +2876,14 @@ function buildErd(){
     sels.forEach(s=>{const de=S.dv.ents[s.logical]; if(!de) return;
       de.nn.forEach(r=>{
         if(seenNN.has(String(r.schema).toLowerCase())||(E.sys&&SYS_TABLES.has(r.other))) return;
-        if(E.hide.has('n:'+String(r.schema).toLowerCase())){E.hidSeen.add('n:'+String(r.schema).toLowerCase()); return}
+        if(E.hide.has('n:'+String(r.schema).toLowerCase())){E.hidSeen.add('n:'+String(r.schema).toLowerCase()); E.hidNodes.add(mid(s.logical)); E.hidNodes.add(mid(r.other)); return}
         const i=S.byLogical[r.other], tsh=i!=null?S.sheets[i]:null;
         if(tsh){if(!E.sel.has(tsh.idx)&&!E.stubs) return} else if(!(E.stubs&&E.ext)) return;
         seenNN.add(String(r.schema).toLowerCase()); const o=node(r.other,tsh,tsh?tsh.label:r.other);
         rels.push({p:mid(s.logical),c:o.id,lbl:mq(r.schema),req:false,nn:true});
       })});
   }
-  const conn=new Set(); rels.forEach(r=>{conn.add(r.p);conn.add(r.c)});
+  const conn=new Set(E.hidNodes); rels.forEach(r=>{conn.add(r.p);conn.add(r.c)});
   if(E.rel) [...nodes.entries()].forEach(([k,n])=>{if(!conn.has(n.id)){nodes.delete(k);stats.hidden=(stats.hidden||0)+1}});
   const L=['erDiagram'];
   if(E.dir==='TB') L.push('  direction TB'); else L.push('  direction LR');
@@ -2923,7 +2926,7 @@ let erdTimer=null;
 function erdRefresh(now){clearTimeout(erdTimer);erdTimer=setTimeout(drawErd,now?0:250)}
 async function drawErd(){
   const cv=$('#erdcv'); if(!cv) return; const E=erdInit();
-  const {src,stats}=buildErd(); E.srcText=src; erdUpdHid(stats.hidRels);
+  E.relIdx=null; const {src,stats}=buildErd(); E.srcText=src; erdUpdHid(stats.hidRels);
   {const lg=$('#erdlegend'); if(lg){ const unkKey=stats.unk?' &nbsp; <span style="display:inline-block;width:22px;border-top:2px solid #98A2B3;vertical-align:3px"></span> Relationship type not recorded – review':''; if(E.acol&&hasAreas()) lg.innerHTML='<span style="margin-right:6px">Areas:</span>'+areaList().map(([a])=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="display:inline-block;width:14px;height:10px;border:3px solid ${areaColour(a)};border-radius:2px"></span>${esc(a)}</span>`).join('')+'<span>Thick border: custom table</span>'+unkKey;
     else lg.innerHTML='<span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced'+unkKey}}
   const ta=$('#erdsrc'); if(ta&&ta!==document.activeElement) ta.value=src;
@@ -2948,7 +2951,9 @@ function erdStroke(E,n){
 function erdBox(E,n,i){
   const HF='bold 15px '+ERD_FONT, RF='13px '+ERD_FONT, rows=n.rows||[], P=10;
   const [stroke,sw]=erdStroke(E,n);
-  let w=Math.max(120,erdTW(n.label,HF)+36), cols=null;
+  // the eye: this table's relationships, to show or hide (only for tables in the workbook that have any)
+  const rs=n.sh?erdRelsOf(n.sh):[], nh=rs.filter(r=>E.hide.has(r.k)).length, eye=rs.length>0;
+  let w=Math.max(120,erdTW(n.label,HF)+36+(eye?(nh?92:64):0)), cols=null;
   if(rows.length){
     cols=[0,0,0,0]; rows.forEach(r=>{cols[0]=Math.max(cols[0],erdTW(r.type,RF));cols[1]=Math.max(cols[1],erdTW(r.name,RF));cols[2]=Math.max(cols[2],r.k?erdTW(r.k,'bold 12px '+ERD_FONT):0);cols[3]=Math.max(cols[3],erdTW(r.label||'',RF))});
     const inner=cols.reduce((s,c)=>s+(c?c+2*P:0),0); w=Math.max(w,inner);
@@ -2966,7 +2971,15 @@ function erdBox(E,n,i){
     });
     o.push('<line x1="'+x0+'" y1="'+(y0+ERD_HD)+'" x2="'+(x0+w)+'" y2="'+(y0+ERD_HD)+'" stroke="'+stroke+'" stroke-width="1"/>');
   } else o.push('<text x="0" y="5" text-anchor="middle" font-family="'+erdX(ERD_FONT)+'" font-size="15" font-weight="bold" fill="#0A4873">'+erdX(n.label)+'</text>');
-  o.push('<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" rx="3" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/></g>');
+  o.push('<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" rx="3" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>');
+  if(eye){
+    const ey=rows.length?y0+ERD_HD/2:0, ex=x0+w-20, col=nh?'#B54708':'#5f7a90';
+    o.push('<g class="eyebtn'+(nh?' hid':'')+'" data-eye="'+n.sh.idx+'" role="button" tabindex="0" aria-label="'+erdX('Relationships of '+n.label+(nh?', '+nh+' hidden':''))+'" transform="translate('+ex+','+ey+')"><title>'+erdX(nh?nh+' of '+rs.length+' relationships hidden. Click to choose':'Show or hide this table\'s relationships ('+rs.length+')')+'</title>'+
+      '<rect x="'+(nh?-44:-14)+'" y="-12" width="'+(nh?58:28)+'" height="24" rx="12" fill="'+(nh?'#FEF0C7':'#FFFFFF')+'" fill-opacity="'+(nh?1:.01)+'"/>'+
+      '<path d="M-8,0C-5,-5.5 5,-5.5 8,0C5,5.5 -5,5.5 -8,0Z" fill="none" stroke="'+col+'" stroke-width="1.6"/><circle r="2.4" fill="'+col+'"/>'+
+      (nh?'<path d="M-8,-7L8,7" stroke="'+col+'" stroke-width="1.8"/><text x="-14" y="4.5" text-anchor="end" font-size="12" font-weight="bold" fill="'+col+'">'+nh+'</text>':'')+'</g>');
+  }
+  o.push('</g>');
   return {html:o.join(''),w,h};
 }
 // line ends: crow's foot notation, a separate marker for each end so exported SVG works in any viewer
@@ -3052,7 +3065,7 @@ function erdWire(E,s,nodes,edges){
   const scale=()=>{const m=s.getScreenCTM(); return m?m.a:1};
   const nodeOf=t=>{const g=t&&t.closest&&t.closest('g.node'); return g?nodes[+g.dataset.k]:null};
   s.addEventListener('pointerdown',ev=>{
-    if(ev.button!==0) return; const n=nodeOf(ev.target);
+    if(ev.button!==0) return; if(ev.target.closest&&ev.target.closest('.eyebtn')) return; const n=nodeOf(ev.target);
     drag=n?{n,x:ev.clientX,y:ev.clientY,cx:n.cx,cy:n.cy,sc:scale()}:{pan:1,x:ev.clientX,y:ev.clientY,sl:cv.scrollLeft,st:cv.scrollTop};
     if(n){n.g.parentNode.appendChild(n.g);n.g.style.cursor='grabbing'} else cv.style.cursor='grabbing';
     try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault();
@@ -3072,6 +3085,40 @@ function erdWire(E,s,nodes,edges){
     const under=document.elementFromPoint(ev.clientX,ev.clientY); const un=nodeOf(under); vis(un===d.n?new Set([d.n]):null);
   };
   s.addEventListener('pointerup',end); s.addEventListener('pointercancel',end);
+  s.addEventListener('click',ev=>{const b=ev.target.closest&&ev.target.closest('.eyebtn'); if(b){ev.stopPropagation(); erdEyePop(+b.dataset.eye)}});
+  s.addEventListener('keydown',ev=>{const b=ev.target.closest&&ev.target.closest('.eyebtn'); if(b&&(ev.key==='Enter'||ev.key===' ')){ev.preventDefault(); erdEyePop(+b.dataset.eye)}});
+  // the list stays open while you show and hide relationships (the diagram is redrawn under it)
+  if(E.popFor!=null){ if(s.querySelector('.eyebtn[data-eye="'+E.popFor+'"]')) erdEyePop(E.popFor,true); else erdPopClose() }
+}
+const EYE_SVG=(on,c)=>'<svg width="20" height="14" viewBox="-10 -7 20 14" aria-hidden="true"><path d="M-8,0C-5,-5.5 5,-5.5 8,0C5,5.5 -5,5.5 -8,0Z" fill="none" stroke="'+c+'" stroke-width="1.6"/><circle r="2.4" fill="'+c+'"/>'+(on?'':'<path d="M-8,-6.5L8,6.5" stroke="'+c+'" stroke-width="1.8"/>')+'</svg>';
+function erdPopClose(){const E=erdInit(); E.popFor=null; const p=$('#erdpop'); if(p) p.remove(); document.removeEventListener('pointerdown',erdPopOut,true); document.removeEventListener('keydown',erdPopKey,true)}
+function erdPopKey(e){ if(e.key==='Escape'&&$('#erdpop')){e.preventDefault(); e.stopPropagation(); const i=erdInit().popFor; erdPopClose(); const b=document.querySelector('#erdcv svg .eyebtn[data-eye="'+i+'"]'); if(b&&b.focus) b.focus()} }
+function erdPopOut(e){ if(!e.target.closest('#erdpop')&&!e.target.closest('.eyebtn')) erdPopClose() }
+// the list of one table's relationships, by its eye: an eye per relationship to show or hide it
+function erdEyePop(idx,reopen){
+  const E=erdInit(), sh=S.sheets[idx], btn=document.querySelector('#erdcv svg .eyebtn[data-eye="'+idx+'"]'); if(!sh||!btn) return;
+  const old=$('#erdpop'); const keepScroll=old?old.querySelector('.ep-list').scrollTop:0;
+  if(old&&!reopen&&E.popFor===idx){erdPopClose(); return}
+  if(old) old.remove();
+  E.popFor=idx; const rs=erdRelsOf(sh), nh=rs.filter(r=>E.hide.has(r.k)).length, arrow={out:'→',in:'←',nn:'↔'}, dirT={out:'looks up',in:'is looked up by',nn:'many-to-many with'};
+  const el=document.createElement('div'); el.id='erdpop'; el.className='erdpop'; el.setAttribute('role','dialog'); el.setAttribute('aria-label','Relationships of '+sh.label);
+  el.innerHTML='<div class="ep-h"><b>'+esc(sh.label)+'</b><span class="dim">'+(nh?nh+' of '+rs.length+' hidden':rs.length+' relationship'+(rs.length===1?'':'s'))+'</span><button class="ep-x" data-epclose title="Close" aria-label="Close">✕</button></div>'+
+    '<div class="ep-list">'+rs.map(r=>{const on=!E.hide.has(r.k); return '<button class="ep-row'+(on?'':' off')+'" data-relk="'+esc(r.k)+'" aria-pressed="'+on+'" title="'+(on?'Shown: click to hide':'Hidden: click to show')+'">'+EYE_SVG(on,on?'#0A4873':'#B54708')+'<span class="ep-t">'+esc(r.txt)+' <span class="dim">'+arrow[r.dir]+' '+esc(r.other)+(r.dir==='nn'?' (N:N)':'')+'</span></span></button>'}).join('')+'</div>'+
+    '<div class="ep-f"><button class="btn" data-relall="1">Show all</button><button class="btn" data-relall="0">Hide all</button></div>';
+  document.body.appendChild(el);
+  const r=btn.getBoundingClientRect(), pw=el.offsetWidth, ph=el.offsetHeight;
+  let x=r.right-pw+8, y=r.bottom+6; x=Math.max(8,Math.min(innerWidth-pw-8,x)); if(y+ph>innerHeight-8) y=Math.max(8,r.top-ph-6);
+  el.style.left=x+'px'; el.style.top=y+'px'; el.querySelector('.ep-list').scrollTop=keepScroll;
+  el.addEventListener('click',e=>{
+    if(e.target.closest('[data-epclose]')){erdPopClose(); return}
+    const row=e.target.closest('[data-relk]'), all=e.target.closest('[data-relall]');
+    if(row){const k=row.dataset.relk; E.hide.has(k)?E.hide.delete(k):E.hide.add(k)}
+    else if(all) rs.forEach(q=>all.dataset.relall==='1'?E.hide.delete(q.k):E.hide.add(q.k));
+    else return;
+    erdHidChanged();
+  });
+  document.addEventListener('pointerdown',erdPopOut,true); document.addEventListener('keydown',erdPopKey,true);
+  if(!reopen) (el.querySelector('.ep-row')||el).focus();
 }
 function erdAutoLayout(nodes,links){
   const N=nodes.length; if(N<2) return;
@@ -3211,7 +3258,7 @@ function erdViewSvg(){
   const w=x1-x0, h=y1-y0, c=s.cloneNode(true); c.setAttribute('viewBox',x0+' '+y0+' '+w+' '+h); c.setAttribute('width',w); c.setAttribute('height',h); c.removeAttribute('style');
   c.querySelectorAll('[style]').forEach(x=>{x.style.opacity='';x.style.cursor=''});
   // names on the lines are exported only when they are set to show always; nothing is left dimmed or highlighted
-  c.setAttribute('class','erdsvg'); c.querySelectorAll('.hot').forEach(x=>x.classList.remove('hot')); if(erdInit().lbl!=='all') c.querySelectorAll('g.lab').forEach(x=>x.remove());
+  c.setAttribute('class','erdsvg'); c.querySelectorAll('.hot').forEach(x=>x.classList.remove('hot')); if(erdInit().lbl!=='all') c.querySelectorAll('g.lab').forEach(x=>x.remove()); c.querySelectorAll('.eyebtn').forEach(x=>x.remove());
   return {svg:new XMLSerializer().serializeToString(c),w,h};
 }
 function erdDrawio(base){
@@ -3291,7 +3338,6 @@ function renderErdPage(){
   const root=main.querySelector('.erdv');
   root.addEventListener('change',e=>{
     const t=e.target;
-    if(t.dataset.relk){t.checked?E.hide.delete(t.dataset.relk):E.hide.add(t.dataset.relk); erdHidChanged(); return}
     if(t.dataset.es){erdPick(+t.dataset.es,t.checked); const lst=$('#erdlst'),keep=lst.scrollTop; renderErdList(); lst.scrollTop=keep; erdRefresh()}
     else if(t.id==='erdfollow'){E.follow=t.checked;erdSave()}
     else if(t.id==='erdstubs'){E.stubs=t.checked;erdSave();erdRefresh()}
@@ -3305,8 +3351,6 @@ function renderErdPage(){
   root.addEventListener('input',e=>{if(e.target.id==='erdq'){E.q=e.target.value;const lst=$('#erdlst');const keep=lst.scrollTop;renderErdList();lst.scrollTop=keep}});
   root.addEventListener('click',e=>{
     const b=e.target.closest('button'); if(!b) return;
-    if(b.dataset.relopen){e.preventDefault(); const i=+b.dataset.relopen; E.relOpen.has(i)?E.relOpen.delete(i):E.relOpen.add(i); const lst=$('#erdlst'),keep=lst.scrollTop; renderErdList(); lst.scrollTop=keep; return}
-    if(b.dataset.relall){e.preventDefault(); const s=S.sheets[+b.dataset.relall]; erdRelsOf(s).forEach(r=>b.dataset.on==='1'?E.hide.delete(r.k):E.hide.add(r.k)); erdHidChanged(); return}
     if(b.dataset.core){e.preventDefault();const s=S.sheets.find(x=>x.idx===+b.dataset.core); if(!s) return; const k=mid(s.logical).toLowerCase();
       if(E.core.has(k)) E.core.delete(k); else {E.core.add(k);E.sel.add(s.idx)}
       erdSave(); const lst=$('#erdlst'),keep=lst.scrollTop; renderErdList(); lst.scrollTop=keep; erdUpdCore(); erdRefresh(true); return}
@@ -3326,6 +3370,7 @@ function renderErdPage(){
     else if(b.dataset.ea) erdAction(b.dataset.ea,b);
   });
   root.addEventListener('click',e=>{if(e.target.closest('[data-hidclear]')){e.preventDefault();E.hide.clear();erdHidChanged();return}});
+  erdPopClose();
   root.addEventListener('click',e=>{if(e.target.closest('[data-coreclear]')){e.preventDefault();E.core.clear();erdSave();renderErdList();erdUpdCore();erdRefresh(true)}});
   erdUpdCore(); erdNamesBtn();
   // the canvas fills the screen: re-fit when the window or panel size changes, drag empty space to pan, mouse wheel to zoom at the pointer
@@ -3357,7 +3402,7 @@ function erdUpdCore(){const E=erdInit(),el=$('#erdcore'); if(!el) return;
   const names=S.sheets.filter(s=>s.kind==='entity'&&E.core.has(mid(s.logical).toLowerCase())).map(s=>s.label);
   el.innerHTML=names.length?'Core: <b>'+names.map(esc).join(', ')+'</b> <a href="#" data-coreclear style="margin-left:6px">clear</a>':'Click ★ on a table to make it a core table. The diagram is then arranged around it.'}
 function erdMatch(s,f){ if(!f) return true; return f.split(/[\s,;]+/).filter(Boolean).some(w=>(s.label+' '+s.logical+' '+s.schema).toLowerCase().includes(w)) }
-function erdLbl(s,E){return `<label><input type="checkbox" data-es="${s.idx}" ${E.sel.has(s.idx)?'checked':''}> <span class="tn">${esc(s.label)}<small class="lg">${esc(s.logical)}</small></span><small>${s.custom?'custom':'ootb'}</small><button type="button" class="corebtn ${E.core.has(mid(s.logical).toLowerCase())?'on':''}" data-core="${s.idx}" title="Make this a core table: the diagram is arranged around the core tables">★</button>${erdRelBtn(s,E)}</label>${E.relOpen.has(s.idx)?erdRelPanel(s,E):''}`}
+function erdLbl(s,E){return `<label><input type="checkbox" data-es="${s.idx}" ${E.sel.has(s.idx)?'checked':''}> <span class="tn">${esc(s.label)}<small class="lg">${esc(s.logical)}</small></span><small>${s.custom?'custom':'ootb'}</small><button type="button" class="corebtn ${E.core.has(mid(s.logical).toLowerCase())?'on':''}" data-core="${s.idx}" title="Make this a core table: the diagram is arranged around the core tables">★</button></label>`}
 /* the relationships of one table, both ways: its own lookups, lookups to it from other tables, and N:N */
 function erdRelIndex(){
   const E=erdInit(), idx=new Map(), lk=/lookup|owner|customer/i;
@@ -3376,15 +3421,8 @@ function erdRelIndex(){
   return idx;
 }
 function erdRelsOf(sh){const E=erdInit(); if(!E.relIdx) E.relIdx=erdRelIndex(); return E.relIdx.get(sh.logical.toLowerCase())||[]}
-function erdRelBtn(s,E){
-  const rs=erdRelsOf(s); if(!rs.length) return ''; const h=rs.filter(r=>E.hide.has(r.k)).length;
-  return `<button type="button" class="relbtn ${E.relOpen.has(s.idx)?'on':''} ${h?'hid':''}" data-relopen="${s.idx}" title="Choose which of this table's relationships the diagram shows">${h?h+' of '+rs.length+' hidden':rs.length+' rel'} ▾</button>`}
-function erdRelPanel(s,E){
-  const rs=erdRelsOf(s), arrow={out:'→',in:'←',nn:'↔'};
-  return `<div class="relpanel" data-relpanel="${s.idx}"><div class="dim">Untick a relationship to hide it from the diagram.</div>`+rs.map(r=>`<label title="${esc(r.k.slice(2))}"><input type="checkbox" data-relk="${esc(r.k)}" ${E.hide.has(r.k)?'':'checked'}> <span>${esc(r.txt)} <span class="dim">${arrow[r.dir]} ${esc(r.other)}${r.dir==='nn'?' (N:N)':''}</span></span></label>`).join('')+
-    `<div class="quick"><button type="button" data-relall="${s.idx}" data-on="1">Show all</button><button type="button" data-relall="${s.idx}" data-on="0">Hide all</button></div></div>`}
 function erdUpdHid(n){const E=erdInit(),el=$('#erdhid'); if(!el) return;
-  el.innerHTML=E.hide.size?`${n!=null?n:E.hide.size} hidden relationship${(n!=null?n:E.hide.size)===1?'':'s'} in this diagram <a href="#" data-hidclear style="margin-left:6px">show all</a>`:''}
+  el.innerHTML=E.hide.size?`${n!=null?n:E.hide.size} hidden relationship${(n!=null?n:E.hide.size)===1?'':'s'} in this diagram <a href="#" data-hidclear style="margin-left:6px">show all</a>`:'Click the eye on a table to show or hide its relationships.'}
 // after changing which relationships are hidden: keep the tables where they are, redraw, and refresh the list
 function erdHidChanged(){const E=erdInit(); E.keepPos=E.pos; erdSave(); const lst=$('#erdlst'),keep=lst?lst.scrollTop:0; if(lst){renderErdList(); lst.scrollTop=keep} erdRefresh(true)}
 /* selecting a table also selects the tables it relates to (and unselecting removes the ones it brought in) */

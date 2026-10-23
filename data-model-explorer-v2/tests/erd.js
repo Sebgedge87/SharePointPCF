@@ -61,6 +61,7 @@ function model(N, file) {
   const svg = await dl('.tb [data-ea="svg"]');
   ok(/<marker id="erdm-many-e"/.test(svg) && /class="node"/.test(svg) && /<g class="lab"/.test(svg), 'the SVG export carries the boxes, line ends and (with Names: always) the names');
   ok(!/class="[^"]*\bfocus\b/.test(svg) && !/\bhot\b/.test(svg), 'nothing is left dimmed or highlighted in the export');
+  ok(!/eyebtn/.test(svg), 'the eye icons are left out of the export');
   const dio = await dl('.tb [data-ea="drawio"]');
   ok((dio.match(/vertex="1" parent="1"/g) || []).length === 20 && /edge="1"/.test(dio), 'draw.io export still has every table and its relationships');
 

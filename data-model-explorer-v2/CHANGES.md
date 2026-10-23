@@ -1,3 +1,13 @@
+# 2.0.1
+
+- **Show and hide relationships from the diagram itself.** Every table box has an eye in its header. Click it to list
+  that table's relationships (its own lookups →, lookups to it ←, N:N ↔), each with an eye to show or hide it, plus
+  **Show all** and **Hide all**. The list stays open while you click, and Escape or a click elsewhere closes it.
+- A table with hidden relationships shows a crossed-out eye and how many are hidden. A table whose relationships are
+  all hidden stays on the diagram, so it can be brought back.
+- The relationship buttons in the side list are gone; the side panel still says how many are hidden, with **show all**.
+- The eyes are left out of SVG and PNG exports.
+
 # 2.0.0
 
 Built on 1.9.3 (see [../data-model-explorer/CHANGES.md](../data-model-explorer/CHANGES.md) for earlier versions).
