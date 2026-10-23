@@ -6,7 +6,7 @@ solution that creates the tables, fields and relationships for you.
 
 ## Just want to use it?
 
-The full user guide, with marked screenshots, is in [`docs/User_Guide.md`](docs/User_Guide.md) (also as Word: `docs/User_Guide.docx`). A 13-slide overview deck is in `docs/Data_Model_Explorer_Overview.pptx`. A narrated 2:16 walkthrough video with a step-by-step sidebar is in `docs/Walkthrough.mp4` (voice: Kokoro text-to-speech, "Lewis"; scripts in `tools/`, narration text in `tools/narration/narration.json`).
+The full user guide, with marked screenshots, is in [`docs/User_Guide.md`](docs/User_Guide.md) (also as Word: `docs/User_Guide.docx`). A 13-slide overview deck is in `docs/Data_Model_Explorer_Overview.pptx`. A 37-slide feature deck, going through every feature with marked screenshots and speaker notes, is in `docs/Data_Model_Explorer_Features.pptx` (built on the FormusPro template by `tools/deck-features.py`). A narrated 2:16 walkthrough video with a step-by-step sidebar is in `docs/Walkthrough.mp4` (voice: Kokoro text-to-speech, "Lewis"; scripts in `tools/`, narration text in `tools/narration/narration.json`).
 
 Download **`Data_Model_Explorer.html`** from this folder and double-click it to open it in Chrome or Edge.
 Nothing to install, and it works offline. Nothing is uploaded anywhere.
