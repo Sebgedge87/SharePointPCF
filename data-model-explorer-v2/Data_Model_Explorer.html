@@ -252,6 +252,10 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 .solf{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
 .solf input,.solf select{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 9px;font-size:13.5px;color:var(--text);background:var(--bg,#fff)}
 .solf small{color:var(--faint);font-size:12px;min-height:14px}
+.solscope{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}.solscope>span{grid-column:1/-1;font-size:12px;color:var(--muted);font-weight:600}
+.solscope label{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer}
+.solscope label:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}.solscope input{margin:3px 0 0;accent-color:var(--accent)}.solscope small{grid-column:2;color:var(--muted);font-size:12px}
+@media (max-width:640px){.solscope{grid-template-columns:1fr}}
 .solsum{margin-top:14px;padding:10px 12px;background:var(--panel2);border-radius:10px;font-size:13px}.solsum ul{margin:4px 0 6px;padding-left:18px}
 .solsum:empty{display:none} .solerr{color:#B42318;font-size:13px;margin-top:8px}
 .savestate{font-size:11.5px;padding:2px 9px;border-radius:999px;white-space:nowrap;cursor:default}
@@ -2580,7 +2584,7 @@ function solDefaults(){
   ents.forEach(sh=>sh.rows.forEach(r=>{if(!getVal(sh,r,'Logical Name').trim().toLowerCase().startsWith(prefix+'_')||!/choice|picklist/i.test(getVal(sh,r,'Attribute Type'))) return;
     (getVal(sh,r,'Additional data').match(/^\s*\d{9,}\s*:/gm)||[]).forEach(x=>{const p=Math.floor(parseInt(x,10)/10000); opt.set(p,(opt.get(p)||0)+1)})}));
   const op=[...opt.entries()].sort((a,b)=>b[1]-a[1])[0], P=prefix.toUpperCase();
-  return {solName:P+'_DataModel',solDisplay:P+' data model',version:'1.0.0.0',pubName:prefix,pubDisplay:P,prefix,optPrefix:op?op[0]:10000};
+  return {solName:P+'_DataModel',solDisplay:P+' data model',version:'1.0.0.0',pubName:prefix,pubDisplay:P,prefix,optPrefix:op?op[0]:10000,scope:'all'};
 }
 const solSettings=()=>Object.assign(solDefaults(),store.get(solKey())||{});
 function solValidate(c){
@@ -2631,9 +2635,9 @@ function fieldSpec(sh,row){
 }
 // decide what goes in the solution. Nothing here touches the workbook.
 function buildPlan(cfg){
-  const P=cfg.prefix.toLowerCase(), mine=ln=>ln.startsWith(P+'_');
+  const P=cfg.prefix.toLowerCase(), mine=ln=>ln.startsWith(P+'_'), tablesOnly=cfg.scope==='tables';
   const ents=S.sheets.filter(s=>s.kind==='entity'&&s.logical);
-  const plan={cfg,newTables:[],shells:[],rels:[],nn:[],report:[],counts:{auto:0}};
+  const plan={cfg,tablesOnly,newTables:[],shells:[],rels:[],nn:[],report:[],counts:{auto:0,left:0}};
   const rep=(tbl,item,what,action,why)=>plan.report.push({tbl,item,what,action,why:why||''});
   const used=new Set(), relName=base=>{base=base.replace(/[^A-Za-z0-9_]/g,'_'); let n=base.slice(0,100),i=1; while(used.has(n.toLowerCase())) n=base.slice(0,95)+'_'+(++i); used.add(n.toLowerCase()); return n};
   // names already chosen in the workbook are reserved first, so generated names never clash with them
@@ -2657,6 +2661,7 @@ function buildPlan(cfg){
     const T={sh,isNew,schema:sh.schema||sh.logical,fields:[]};
     sh.rows.forEach(row=>{
       const ln=getVal(sh,row,'Logical Name').trim().toLowerCase(); if(!ln||!mine(ln)) return;   // not yours: Dataverse's or Microsoft's own
+      if(tablesOnly&&!(isNew&&ln===pnameOf(sh))){if(!(isNew&&ln===pkOf(sh))){plan.counts.left++; rep(sh.label,ln,isNNRow(sh,row)?'N:N relationship':'Field','Left out','tables-only build')} return}
       if(isNNRow(sh,row)){plan.nn.push({sh,row,name:getVal(sh,row,'Logical Name').trim()}); return}
       if(isNew&&ln===pkOf(sh)) return;                                                           // the primary key is generated with the table
       const sp=fieldSpec(sh,row);
@@ -2835,16 +2840,16 @@ async function generateSolution(cfg){
   const innerBytes=await inner.generateAsync({type:'uint8array',compression:'DEFLATE'});
   const outer=new JSZip(); outer.file(innerName,innerBytes); outer.file('import.ps1',importScript(innerName,cfg).replace(/\r?\n/g,'\r\n'));
   outer.file('build-report.csv',csv([['Table','Item','What','Action','Detail']].concat(plan.report.map(r=>[r.tbl,r.item,r.what,r.action,r.why]))));
-  const mb=await manualWorkbook(); if(mb) outer.file('calculated-and-rollup-fields.xlsx',mb);
+  const mb=plan.tablesOnly?null:await manualWorkbook(); if(mb) outer.file('calculated-and-rollup-fields.xlsx',mb);
   const notIn=plan.report.filter(r=>r.action==='Not included').length, hand=plan.report.filter(r=>r.action==='Build by hand').length;
   outer.file('README.txt',[cfg.solDisplay+' ('+cfg.solName+' '+cfg.version+'), generated '+new Date().toLocaleString()+' from '+S.fileName,'',
     'Contents','  '+innerName+'  the unmanaged solution to import','  import.ps1  signs in with pac and imports it (installs pac if needed)','  build-report.csv  everything included, not included, or to build by hand, and why',(mb?'  calculated-and-rollup-fields.xlsx  fields to create by hand after the import':''),'',
-    'What is in the solution','  '+plan.newTables.length+' new tables, '+plan.shells.length+' existing tables gaining fields, '+plan.fieldCount+' fields, '+plan.rels.length+' one-to-many and '+plan.nn.length+' many-to-many relationships.','  '+plan.counts.auto+' fields are created by Dataverse itself and are not listed. '+notIn+' items are not included and '+hand+' are to build by hand (see build-report.csv).','',
+    'What is in the solution',(plan.tablesOnly?'  Tables only: each new table with its primary name column. '+plan.counts.left+' fields and relationships were left out (see build-report.csv).':null),'  '+plan.newTables.length+' new tables, '+plan.shells.length+' existing tables gaining fields, '+plan.fieldCount+' fields, '+plan.rels.length+' one-to-many and '+plan.nn.length+' many-to-many relationships.','  '+plan.counts.auto+' fields are created by Dataverse itself and are not listed. '+notIn+' items are not included and '+hand+' are to build by hand (see build-report.csv).','',
     'Publisher: '+cfg.pubDisplay+' ('+cfg.pubName+'), prefix '+cfg.prefix+', choice value prefix '+cfg.optPrefix+'. If the environment already has this publisher, its unique name must match.','',
-    'To import:  .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com','Import into a development environment first. Then export the solution from there as managed for test and production.'].filter(l=>l!==undefined).join('\r\n'));
+    'To import:  .\\import.ps1 -EnvironmentUrl https://yourorg.crm11.dynamics.com','Import into a development environment first. Then export the solution from there as managed for test and production.'].filter(l=>l!==undefined&&l!==null).join('\r\n'));
   const out=await outer.generateAsync({type:'blob',compression:'DEFLATE'});
   download(cfg.solName+'_'+ver+' build.zip',out);
-  toast('Solution built: '+plan.newTables.length+' new tables, '+plan.fieldCount+' fields, '+(plan.rels.length+plan.nn.length)+' relationships'+(notIn?' · '+notIn+' not included (see the report)':''));
+  toast(plan.tablesOnly?'Solution built: '+plan.newTables.length+' new tables, each with its primary name column'+(notIn?' · '+notIn+' not included (see the report)':''):'Solution built: '+plan.newTables.length+' new tables, '+plan.fieldCount+' fields, '+(plan.rels.length+plan.nn.length)+' relationships'+(notIn?' · '+notIn+' not included (see the report)':''));
   return plan;
 }
 // the dialog: publisher and solution settings, a summary of what will be built, then Generate
@@ -2852,18 +2857,22 @@ function solDialog(){
   const c=solSettings(), m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Build a Dataverse solution');
   const f=(k,label,hint)=>`<label class="solf"><span>${label}</span><input data-k="${k}" value="${esc(c[k])}"><small>${hint||''}</small></label>`;
   m.innerHTML=`<div class="convbox solbox"><h3>Build a Dataverse solution</h3><p class="dim" style="margin:4px 0 12px">Creates an unmanaged solution with your new tables, the fields you add to existing tables, and their relationships, plus a PowerShell script that imports it with pac.</p>
+    <div class="solscope" role="radiogroup" aria-label="What to build"><span>What to build</span>
+      <label><input type="radio" name="solscope" value="all" ${c.scope!=='tables'?'checked':''}><b>Tables, fields and relationships</b><small>Everything in the workbook with your prefix</small></label>
+      <label><input type="radio" name="solscope" value="tables" ${c.scope==='tables'?'checked':''}><b>Tables only</b><small>Each new table with its primary name column; add the rest later</small></label></div>
     <div class="solgrid">${f('solName','Solution unique name')}${f('solDisplay','Solution display name')}${f('version','Version','for example 1.0.0.0')}${f('pubName','Publisher unique name','must match the publisher if it already exists')}${f('pubDisplay','Publisher display name')}${f('prefix','Prefix','tables and fields starting with this are built')}${f('optPrefix','Choice value prefix','numbering for new choice options')}</div>
     <div class="solsum" id="solsum"></div><div class="solerr" id="solerr"></div>
     <div class="convbtns"><button class="btn ghost" data-sol="ps1" title="Just the PowerShell script, for importing a solution zip you already have" style="margin-right:auto">Import script only</button><button class="btn" data-sol="cancel">Cancel</button> <button class="btn primary" data-sol="go">Generate</button></div></div>`;
   document.body.appendChild(m);
-  const read=()=>{const o={}; m.querySelectorAll('[data-k]').forEach(i=>o[i.dataset.k]=i.value.trim()); o.prefix=o.prefix.toLowerCase(); return o};
+  const read=()=>{const o={}; m.querySelectorAll('[data-k]').forEach(i=>o[i.dataset.k]=i.value.trim()); o.prefix=o.prefix.toLowerCase(); o.scope=(m.querySelector('[name="solscope"]:checked')||{}).value==='tables'?'tables':'all'; return o};
   const summary=()=>{const o=read(), errs=solValidate(o); m.querySelector('#solerr').innerHTML=errs.map(e=>`<div>${esc(e)}</div>`).join('');
     if(errs.length){m.querySelector('#solsum').innerHTML='';return}
     const p=buildPlan(o), n=a=>p.report.filter(r=>r.action===a), notIn=n('Not included'), hand=n('Build by hand');
-    m.querySelector('#solsum').innerHTML=`<b>Will be built</b><ul><li>${p.newTables.length} new table${p.newTables.length===1?'':'s'}</li><li>${p.shells.length} existing table${p.shells.length===1?'':'s'} gaining your fields</li><li>${p.fieldCount} field${p.fieldCount===1?'':'s'}, ${p.rels.length} one-to-many and ${p.nn.length} many-to-many relationship${p.nn.length===1?'':'s'}</li></ul>`+
+    m.querySelector('#solsum').innerHTML=p.tablesOnly?`<b>Will be built</b><ul><li>${p.newTables.length} new table${p.newTables.length===1?'':'s'}, each with its primary name column</li><li>${p.counts.left} field${p.counts.left===1?'':'s'} and relationship${p.counts.left===1?'':'s'} left out (listed in build-report.csv)</li></ul>`+
+      (notIn.length?`<div style="color:var(--pink)"><b>${notIn.length} not included:</b> ${notIn.slice(0,4).map(r=>esc(r.tbl+' · '+r.item+': '+r.why)).join('; ')}${notIn.length>4?'; …':''}. Full list in build-report.csv.</div>`:''):`<b>Will be built</b><ul><li>${p.newTables.length} new table${p.newTables.length===1?'':'s'}</li><li>${p.shells.length} existing table${p.shells.length===1?'':'s'} gaining your fields</li><li>${p.fieldCount} field${p.fieldCount===1?'':'s'}, ${p.rels.length} one-to-many and ${p.nn.length} many-to-many relationship${p.nn.length===1?'':'s'}</li></ul>`+
       (hand.length?`<div><b>${hand.length}</b> to build by hand (calculated and rollup fields), listed in the download.</div>`:'')+
       (notIn.length?`<div style="color:var(--pink)"><b>${notIn.length} not included:</b> ${notIn.slice(0,4).map(r=>esc(r.tbl+' · '+r.item+': '+r.why)).join('; ')}${notIn.length>4?'; …':''}. Full list in build-report.csv.</div>`:'')};
-  let t; m.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(summary,250)}); summary();
+  let t; m.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(summary,250)}); m.addEventListener('change',e=>{if(e.target.name==='solscope') summary()}); summary();
   const close=()=>{document.removeEventListener('keydown',key,true);m.remove()}, key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}};
   document.addEventListener('keydown',key,true);
   m.addEventListener('click',async e=>{const b=e.target.closest('[data-sol]'); if(!b){if(e.target===m)close();return}

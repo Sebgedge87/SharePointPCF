@@ -301,7 +301,7 @@ Uploaded to an environment as a web resource, the page reads the environment's t
 
 ### Putting it in an environment
 
-1. Get the solution zip: `FORMUS_DataModelExplorer_5_0_1_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
+1. Get the solution zip: `FORMUS_DataModelExplorer_5_0_2_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
 2. Import it into the environment (Power Apps → Solutions → Import, or `pac solution import`). It holds one HTML web resource of about 2.4 MB, under the 5 MB default limit.
 3. Open `https://<your-org>.crm.dynamics.com/WebResources/<prefix>_/dme/DataModelExplorer.html`, or add that web resource to an app's navigation.
 

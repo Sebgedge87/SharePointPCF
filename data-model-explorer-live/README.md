@@ -22,7 +22,7 @@ Everything is read as the signed-in user; nothing is written to the environment.
 
 ## Putting it in an environment
 
-`FORMUS_DataModelExplorer_3_0_1_0.zip` in this folder is an unmanaged solution holding the page as one HTML web
+`FORMUS_DataModelExplorer_3_0_2_0.zip` in this folder is an unmanaged solution holding the page as one HTML web
 resource, `formus_/dme/DataModelExplorer.html` (2.4 MB; the default web resource limit is 5 MB). It uses publisher
 unique name `FORMUS`, prefix `formus` and choice value prefix `75047`. **The publisher unique name must match the one
 in the environment exactly**, or Dataverse creates a second publisher; to use another, make the zip again:
