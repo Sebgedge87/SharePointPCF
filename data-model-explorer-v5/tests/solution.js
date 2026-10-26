@@ -147,7 +147,29 @@ function model() {
   fs.writeFileSync(path.join(out, 'import_solo.ps1'), solo);
   ok(XLSX.utils.sheet_to_json(XLSX.read(await outer.file('calculated-and-rollup-fields.xlsx').async('nodebuffer')).Sheets['All fields']).some(r => r['Logical Name'] === 'fp_total'), 'the hand-build list is included');
 
-  // optional: Microsoft's SolutionPackager must be able to unpack and re-pack the solution
+  // tables only: each new table with its primary name column, nothing else
+  await p.click('#btnExport'); await p.click('.menu [data-x="solution"]'); await p.waitForSelector('.solbox');
+  ok(await p.isChecked('.solbox [name="solscope"][value="all"]'), 'the dialog starts on tables, fields and relationships');
+  await p.check('.solbox [name="solscope"][value="tables"]'); await p.waitForTimeout(500);
+  const tsum = await p.innerText('#solsum');
+  ok(/2 new tables, each with its primary name column/.test(tsum) && /left out/.test(tsum) && /No Name/.test(tsum) && !/existing table/.test(tsum), 'choosing Tables only changes the summary');
+  const [tdl] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('.solbox [data-sol="go"]')]);
+  const touter = await JSZip.loadAsync(fs.readFileSync(await tdl.path()));
+  const tinnerBytes = await touter.file('FP_DataModel_1_0_0_0.zip').async('nodebuffer'); fs.writeFileSync(path.join(out, 'FP_TablesOnly.zip'), tinnerBytes);
+  const tinner = await JSZip.loadAsync(tinnerBytes);
+  const tsol = await tinner.file('solution.xml').async('string'), tcus = await tinner.file('customizations.xml').async('string');
+  const tev = (tcus.match(/<Entity><Name [^>]*>fp_Event<\/Name>[\s\S]*?<\/Entity>/) || [''])[0];
+  const tattrs = (tev.match(/<attribute PhysicalName="[^"]*"><Type>[^<]*<\/Type><Name>([^<]*)<\/Name>/g) || []).map(x => x.replace(/.*<Name>/, '').replace('</Name>', ''));
+  ok(/schemaName="fp_event" behavior="0"/.test(tsol) && /schemaName="fp_venue" behavior="0"/.test(tsol) && !/schemaName="contact"/.test(tsol), 'tables only: the new tables are in the solution, Contact is not');
+  ok(tattrs.includes('fp_name') && !tattrs.some(a => /^fp_(email|capacity|status|venueid|customerid)$/.test(a)), 'tables only: Event has its primary name column and none of the other fields (' + tattrs.join(', ') + ')');
+  ok(!/<EntityRelationship Name=/.test(tcus) && /PrimaryName\|/.test(tev), 'tables only: no relationships, and the primary name column is marked');
+  const treport = await touter.file('build-report.csv').async('string');
+  ok(/fp_email,Field,Left out,tables-only build/.test(treport) && /fp_event_contact,N:N relationship,Left out/.test(treport) && /No Name,fp_noname,Table,Not included/.test(treport), 'the report lists what was left out, and still says why No Name is not included');
+  ok(!touter.file('calculated-and-rollup-fields.xlsx') && /Tables only/.test(await touter.file('README.txt').async('string')), 'tables only: no hand-build list, and the README says it is a tables-only build');
+  await p.click('#btnExport'); await p.click('.menu [data-x="solution"]'); await p.waitForSelector('.solbox');
+  ok(await p.isChecked('.solbox [name="solscope"][value="tables"]'), 'the choice is remembered for this workbook');
+  await p.click('.solbox [data-sol="cancel"]');
+
   if (process.env.PAC) {
     const run = args => { try { return { ok: true, out: execFileSync(process.env.PAC, args, { encoding: 'utf8', stdio: 'pipe', timeout: 300000 }) } } catch (e) { return { ok: false, out: (e.stdout || '') + (e.stderr || '') } } };
     const unp = path.join(out, 'unpacked'); fs.rmSync(unp, { recursive: true, force: true });
@@ -156,6 +178,10 @@ function model() {
     const repack = path.join(out, 'repacked.zip'); fs.rmSync(repack, { force: true });
     const k = run(['solution', 'pack', '--zipfile', repack, '--folder', unp, '--packagetype', 'Unmanaged']);
     ok(k.ok && fs.existsSync(repack), 'pac solution pack re-packs it' + (k.ok ? '' : ': ' + k.out.slice(-600)));
+    const tunp = path.join(out, 'unpacked-tables'); fs.rmSync(tunp, { recursive: true, force: true });
+    const tu = run(['solution', 'unpack', '--zipfile', path.join(out, 'FP_TablesOnly.zip'), '--folder', tunp, '--packagetype', 'Unmanaged']);
+    const tk = tu.ok && run(['solution', 'pack', '--zipfile', path.join(out, 'repacked-tables.zip'), '--folder', tunp, '--packagetype', 'Unmanaged']);
+    ok(tu.ok && tk.ok && fs.existsSync(path.join(tunp, 'Entities', 'fp_Event', 'Entity.xml')), 'pac unpacks and re-packs the tables-only solution too' + (tu.ok && tk.ok ? '' : ': ' + (tk ? tk.out : tu.out).slice(-600)));
   } else console.log('SKIP pac unpack/pack check (set PAC=/path/to/pac to run it)');
 
   ok(!errs.length, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

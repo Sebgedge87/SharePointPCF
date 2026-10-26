@@ -1,6 +1,6 @@
 {
   "name": "data-model-explorer",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "private": true,
   "description": "Offline, single-file viewer and editor for Dataverse data-model workbooks (3.0: also runs inside Dynamics 365 and reads the environment)",
   "scripts": {

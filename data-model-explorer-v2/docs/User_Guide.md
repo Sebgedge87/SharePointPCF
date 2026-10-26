@@ -321,13 +321,14 @@ If Dataverse rejects a link (usually a very long one), use the one-link-per-tabl
 
 **Export → Dataverse solution (.zip)…** (or **Build solution…** on the Overview) turns the workbook into an unmanaged solution, so nothing is created by hand in Power Apps. Clear the errors in Checks first.
 
-1. Fill in the dialog. The prefix and choice value prefix are suggested from the workbook.
-2. Read **Will be built**: new tables, existing tables gaining your fields, fields and relationships, plus what is to build by hand or not included and why.
-3. Click **Generate**. One zip downloads: `<SolutionName>_<version> build.zip`.
+1. Choose **What to build**: **Tables, fields and relationships** (everything with your prefix), or **Tables only**, which builds each new table with just its primary name column, for when you want the tables in place first and the fields later. The choice is remembered for the workbook.
+2. Fill in the rest of the dialog. The prefix and choice value prefix are suggested from the workbook.
+3. Read **Will be built**: new tables, existing tables gaining your fields, fields and relationships, plus what is to build by hand or not included and why.
+4. Click **Generate**. One zip downloads: `<SolutionName>_<version> build.zip`.
 
 ![The Build a Dataverse solution dialog](images/17-solution.png)
 
-**1** Publisher unique name · **2** Prefix · **3** Choice value prefix · **4** Will be built · **5** Generate
+**1** What to build · **2** Publisher unique name · **3** Prefix · **4** Choice value prefix · **5** Will be built · **6** Generate
 
 | Field | What to enter |
 | --- | --- |

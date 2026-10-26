@@ -1,3 +1,9 @@
+# 4.0.2
+
+- **Build a Dataverse solution: Tables only.** A new choice in the dialog, *What to build*: everything (tables, fields and
+  relationships, as before) or **Tables only**, which builds each new table with just its primary name column. Fields and
+  relationships are left out and listed in build-report.csv; no hand-build list. The choice is remembered per workbook.
+
 # 4.0.1
 
 - **How it works** is laid out as a centred page, with a contents list linking to each section; the five steps sit on one row.

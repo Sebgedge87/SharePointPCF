@@ -75,7 +75,7 @@ const SCALE = 1.25, boxes = {};
   await p.click('[data-dvclose]');
   await p.click('#btnBuild'); await p.waitForSelector('.solbox');
   await p.fill('.solbox [data-k="solName"]', 'FORMUS_ImportTest'); await p.fill('.solbox [data-k="solDisplay"]', 'FORMUS import test'); await p.fill('.solbox [data-k="optPrefix"]', '75047'); await p.waitForTimeout(600);
-  await snap('17-solution', ['.solbox [data-k="pubName"]', '.solbox [data-k="prefix"]', '.solbox [data-k="optPrefix"]', '#solsum', '.solbox [data-sol="go"]'], '.solbox');
+  await snap('17-solution', ['.solbox .solscope', '.solbox [data-k="pubName"]', '.solbox [data-k="prefix"]', '.solbox [data-k="optPrefix"]', '#solsum', '.solbox [data-sol="go"]'], '.solbox');
   fs.writeFileSync(path.join(out, 'boxes.json'), JSON.stringify(boxes, null, 1));
   console.log('shots', Object.keys(boxes).length, 'errors', errs);
   await b.close();
