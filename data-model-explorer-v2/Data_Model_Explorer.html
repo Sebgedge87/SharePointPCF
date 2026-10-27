@@ -477,6 +477,7 @@ const EMBEDDED_NAME = "Data_Model_Template.xlsx";
 (()=>{
 // read-only copy: for a client or support team. Everything can be viewed, searched, checked and diagrammed; nothing can be changed
 const RO=typeof DME_MODE!=='undefined'&&DME_MODE==='readonly';
+const DME_VERSION="2.0.7";   // from package.json, written in by build.py
 // the page's own source, taken before anything on it changes, so "Read-only copy" can write a copy of this same page
 const PAGE_SRC=RO?null:{head:document.head.outerHTML,body:document.body.innerHTML,lang:document.documentElement.getAttribute('lang')||'en'};
 if(RO){document.body.classList.add('ro'); document.title+=' (read-only)'}
@@ -1845,15 +1846,15 @@ async function buildOriginal(){
     const rs=Object.values(sh.metaR), ref=rs.length?Math.max(...rs):null;
     let r=sh.metaR[me.k.toLowerCase()], newRow=false;
     if(r==null){const used=freeUsed.get(sh)||[]; const free=(sh.metaFree||[]).filter(x=>!used.includes(x));
-      if(!free.length){ if(ref==null){missed.push({e,why:'the table details have no empty row to add "'+me.k+'" in'});return}
-        (needRow.get(sh)||needRow.set(sh,[]).get(sh)).push({me,e,ref}); return}
+      if(!free.length){(needRow.get(sh)||needRow.set(sh,[]).get(sh)).push({me,e,ref}); return}
       r=free[0]; used.push(r); freeUsed.set(sh,used); newRow=true}
     const L=bySheet[sh.name]=bySheet[sh.name]||[];
     if(newRow) L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+c0,v:me.k,sr:ref,sc:1+c0});
     L.push({e,row:r,col:2+c0,v:me.nw,sr:ref,sc:2+c0});
   });
   needRow.forEach((list,sh)=>{
-    const at=list[0].ref+1, L=bySheet[sh.name]=bySheet[sh.name]||[]; insertAt[sh.name]={at,K:list.length};
+    // below the last detail, or, with no details at all, above the hint and header rows
+    const at=list[0].ref!=null?list[0].ref+1:(Object.keys(sh.hints||{}).length&&sh.hdrRow>1?sh.hdrRow-1:sh.hdrRow), L=bySheet[sh.name]=bySheet[sh.name]||[]; insertAt[sh.name]={at,K:list.length};
     list.forEach(({me,e,ref},i)=>{const r=at+i;
       L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+(sh.c0||0),v:me.k,sr:ref,sc:1+(sh.c0||0),ins:true,lbl:true});
       L.push({e,row:r,col:2+(sh.c0||0),v:me.nw,sr:ref,sc:2+(sh.c0||0),ins:true})});
@@ -2005,7 +2006,8 @@ async function exportOriginal(){
 async function saveToOriginal(){
   const h=S.handle; if(!h) return toast('Open the file with "Load version…" in Chrome or Edge to link it first');
   if(!hasWrites()) return toast('No edits to save');
-  if(!await dlg({title:'Overwrite the original file?',body:'This replaces <b>'+esc(S.fileName)+'</b> on your computer with your '+S.edits.size+' edit'+(S.edits.size===1?'':'s')+'. Only the edited cells change.',ok:'Overwrite',danger:true})) return;
+  const n=changeTotal();
+  if(!await dlg({title:'Overwrite the original file?',body:'This replaces <b>'+esc(S.fileName)+'</b> on your computer with your '+n+' change'+(n===1?'':'s')+'. Only the changed cells (and any rows added for new table details) change.',ok:'Overwrite',danger:true})) return;
   try{
     let perm=await h.queryPermission({mode:'readwrite'}); if(perm!=='granted') perm=await h.requestPermission({mode:'readwrite'});
     if(perm!=='granted') return toast('Permission to write to the file was not given');
@@ -2013,18 +2015,39 @@ async function saveToOriginal(){
     if(curB!==S.curB64&&!await dlg({title:'The file changed on disk',body:'Another program saved this file since you opened it. Overwriting now will lose those changes.',ok:'Overwrite anyway',danger:true})) return;
     const r=await buildOriginal(); if(!r) return;
     if(r.missed.length) return reportMissed(r,'Saving');
-    const w=await h.createWritable(); await w.write(new Blob([r.bytes],{type:XLSX_MIME})); await w.close();
-    // confirm the file on disk is the one just built before letting go of the edits
-    const back=new Uint8Array(await (await h.getFile()).arrayBuffer());
-    const nb=u8ToB64(r.bytes), old=S.curB64;
-    if(u8ToB64(back)!==nb){toast('The file on disk does not match what was written. Your edits are kept.');return}
-    const rec=S.lib.find(x=>x.b64===old); if(rec){rec.b64=nb;rec.size=r.bytes.length;try{await idb.put(rec)}catch(e){}}
-    try{await idb.put({id:'__cur',name:S.fileName,b64:nb,proj:S.proj})}catch(e){}
-    // the saved edits are now part of the file. Edits still waiting for a decision (Needs your attention) are kept.
-    S.edits.clear(); S.metaEd.clear(); S.sheets.forEach(sh=>{sh.rows=sh.rows.filter(r=>!r.added)}); persist(); S.curB64=nb;
-    init(XLSX.read(r.bytes,XLSX_OPTS),S.fileName,{});
-    toast('Saved '+r.n+' edit'+(r.n===1?'':'s')+' to '+S.fileName);
+    await writeSaved(h,r);
+  }catch(err){
+    console.error(err);
+    // the linked file has gone (moved, renamed or deleted since it was opened), or the browser lost its link to it
+    if(err&&/NotFound|NotReadable|InvalidState/.test(err.name||'')&&window.showSaveFilePicker){
+      if(await dlg({title:'The original file could not be found',body:'<b>'+esc(S.fileName)+'</b> has been moved, renamed or deleted since it was opened, or the browser lost its link to it. Choose where to save the updated workbook, and the page links to that file from now on. Your edits are kept until it is saved.',ok:'Save as…'})) return saveAsNew();
+      return;
+    }
+    toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use "Download an updated copy" instead.')
+  }
+}
+// save the updated workbook to a file you choose, and link the page to it
+async function saveAsNew(){
+  try{
+    const r=await buildOriginal(); if(!r) return;
+    if(r.missed.length) return reportMissed(r,'Saving');
+    let h; try{h=await showSaveFilePicker({suggestedName:S.fileName,types:[{description:'Excel workbook',accept:{[XLSX_MIME]:['.xlsx']}}]})}catch(e){return}
+    await writeSaved(h,r);
   }catch(err){console.error(err);toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use "Download an updated copy" instead.')}
+}
+// write, read back, and only then let go of the edits that are now in the file
+async function writeSaved(h,r){
+  const w=await h.createWritable(); await w.write(new Blob([r.bytes],{type:XLSX_MIME})); await w.close();
+  const back=new Uint8Array(await (await h.getFile()).arrayBuffer());
+  const nb=u8ToB64(r.bytes), old=S.curB64;
+  if(u8ToB64(back)!==nb){toast('The file on disk does not match what was written. Your edits are kept.');return}
+  if(h!==S.handle){S.handle=h; const nm=h.name||S.fileName; if(nm!==S.fileName){S.fileName=nm}}
+  const rec=S.lib.find(x=>x.b64===old); if(rec){rec.b64=nb;rec.size=r.bytes.length;if(rec.name!==S.fileName)rec.name=S.fileName;rec.handle=h;try{await idb.put(rec)}catch(e){}}
+  try{await idb.put({id:'__cur',name:S.fileName,b64:nb,proj:S.proj,handle:h})}catch(e){}
+  // the saved edits are now part of the file. Edits still waiting for a decision (Needs your attention) are kept.
+  S.edits.clear(); S.metaEd.clear(); S.sheets.forEach(sh=>{sh.rows=sh.rows.filter(x=>!x.added)}); persist(); S.curB64=nb;
+  init(XLSX.read(r.bytes,XLSX_OPTS),S.fileName,{});
+  toast('Saved '+r.n+' change'+(r.n===1?'':'s')+' to '+S.fileName);
 }
 async function pickFile(){
   if(window.showOpenFilePicker){
@@ -2106,7 +2129,7 @@ function renderReadme(){
   const main=$('#main');
   const sec=(n,title,body)=>`<h2 id="rd-${n}"><span class="n">${n}</span>${title}</h2>${body}`;
   main.innerHTML=`<div class="readme"><article class="rwrap">
-  <h1>How it works</h1>
+  <h1>How it works <span class="dim" style="font-size:13px;font-weight:500">version ${esc(DME_VERSION)}</span></h1>
   <p class="lead">This page turns a multi-tab Excel data model document into something you can search, filter, check and edit, writes it back out in the same layout, and builds it in Dataverse as a solution, so tables, fields and relationships don't have to be created by hand. Everything runs inside this one file in your browser. Nothing is uploaded anywhere.</p>
 
   <div class="flow">
@@ -3894,7 +3917,7 @@ $('#btnMob').onclick=e=>{e.stopPropagation();mobMenu(e.currentTarget)};
 $('#btnWb').onclick=e=>{e.stopPropagation();wbMenu(e.currentTarget)};
 $('#btnTmpl').onclick=()=>{$('#tmplpanel').classList.contains('open')?$('#tmplpanel').classList.remove('open'):renderTemplate()};
 $('#tfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=ev=>{try{const u=new Uint8Array(ev.target.result);const b64=u8ToB64(u);if(!parseWorkbook(XLSX.read(u,XLSX_OPTS)).length)throw new Error('no usable sheets');loadTemplate(b64,f.name);const kept=store.set('dme.tmpl',{name:f.name,b64});conformance();updateCounts();applyAndRender();renderTemplate();toast('Template set to '+f.name+(kept?'':'. This browser could not remember it, so it goes back to the bundled one on reload.'))}catch(err){dlg({title:'Could not use that template',body:esc(err.message),ok:'OK',cancel:null,danger:true})}};r.readAsArrayBuffer(f)};
-$('#btnHelp').onclick=()=>go('__readme');
+$('#btnHelp').onclick=()=>go('__readme'); $('#btnHelp').title='How it works · version '+DME_VERSION;
 $('#btnBack').onclick=()=>{if(navDepth>0) history.back()};
 // hovering a drop-down, or any text cut short, shows it in full: a select shows its chosen option, an option its text,
 // and anything clipped (an ellipsis, or text wider than its box) its whole text. A title set on purpose is left alone.
