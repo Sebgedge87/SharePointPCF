@@ -4,7 +4,7 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>FormusPro.DataModelExplorer.XrmToolBox</AssemblyName>
     <RootNamespace>FormusPro.DataModelExplorer</RootNamespace>
-    <Version>5.0.2</Version>
+    <Version>5.0.3</Version>
     <Company>FormusPro</Company>
     <Product>Data Model Explorer</Product>
     <LangVersion>latest</LangVersion>

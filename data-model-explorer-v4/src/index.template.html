@@ -2175,7 +2175,7 @@ function renderReadme(){
   <p>Filter by severity, by kind of check, by area or with the search box, click a finding to go to the row, or export the list as CSV.</p>`)}
 
   ${sec(8,'Dataverse: checking and building',`
-  <p><b>Inside Dynamics 365 or XrmToolBox</b>, <b>Check ▾ → This environment</b> reads the environment directly: load a solution as the model, or check this workbook against it for undocumented, not built and unmanaged changes.</p>
+  <p><b>Inside Dynamics 365</b>, <b>Check ▾ → This environment</b> reads the environment directly: load a solution as the model, or check this workbook against it for undocumented, not built and unmanaged changes.</p>
   <p>Opened as a file, <b>Check ▾ → Compare with a solution…</b> (also on the Overview) compares the workbook with a solution exported from Power Apps (Solutions, select it, Export): add the .zip, or drop it onto the page. Only your own tables are expected in the solution, and a table included as a shell is compared only on the columns added to it.</p>
   <ul>
     <li>Fields that don't exist in Dataverse, or custom Dataverse fields that aren't documented.</li>
@@ -2625,7 +2625,7 @@ function refreshSpecial(all){
 }
 function renderDv(){
   if(LIVE) return renderLive();
-  // opened as a file: compare with an exported solution. Inside Dynamics 365 or XrmToolBox the panel reads the environment instead.
+  // opened as a file: compare with an exported solution. Inside Dynamics 365 the panel reads the environment instead.
   const d=$('#dvpanel'), st=S.dv?dvSummary():null;
   const src=!S.dv?'nothing added yet':S.dv.zip?(S.dv.sol.label||S.dv.sol.name)+' · '+new Date(S.dv.at).toLocaleString():(S.dv.org||'imported table definitions')+' · '+new Date(S.dv.at).toLocaleString();
   let h=`<header><div style="flex:1;min-width:0"><h3>Dataverse</h3><div class="mono dim" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(src)}</div></div><button class="btn ghost" data-dvclose>✕</button></header><div class="body">`;
@@ -2634,7 +2634,7 @@ function renderDv(){
     h+=dvStatsHTML()+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px"><button class="btn primary" data-ov="issues:dv">See the differences</button><button class="btn" data-dv="pick">${S.dv.zip?'Compare with another solution…':'Add a solution (.zip)…'}</button><button class="btn ghost" data-dv="remove">Remove</button></div>`;
   } else h+=`<div style="margin:6px 0 14px"><button class="btn primary" data-dv="pick">Add a solution (.zip)…</button> <span class="dim">or drop it onto the page</span></div>`;
   h+=`<div class="fld"><div class="k">Getting the solution</div><ol class="dim" style="margin:4px 0 0;padding-left:18px"><li>In Power Apps, open <b>Solutions</b>, select the solution and choose <b>Export</b> (managed or unmanaged).</li><li>Add the downloaded .zip here. Several can be added at once.</li></ol>
-    <p class="dim" style="margin:8px 0 0">Nothing is uploaded: the file is read in this browser and kept with this workbook. A solution built with <b>Build solution</b> works too. Opened inside Dynamics 365 or in XrmToolBox, this panel picks a solution straight from the environment instead.</p></div></div>`;
+    <p class="dim" style="margin:8px 0 0">Nothing is uploaded: the file is read in this browser and kept with this workbook. A solution built with <b>Build solution</b> works too. Opened inside Dynamics 365, this panel picks a solution straight from the environment instead.</p></div></div>`;
   d.innerHTML=h; d.classList.add('open');
 }
 // the counts at the top of the Dataverse panel, from the current Checks

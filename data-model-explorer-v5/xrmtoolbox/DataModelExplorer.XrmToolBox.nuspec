@@ -4,14 +4,14 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata>
     <id>FormusPro.DataModelExplorer</id>
-    <version>5.0.2</version>
+    <version>5.0.3</version>
     <title>Data Model Explorer</title>
     <authors>FormusPro</authors>
     <owners>FormusPro</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Open a Dataverse data-model workbook, check it, draw the ERD and build an unmanaged solution from it. Load a solution from the connected environment as the model, or check a workbook against the environment for undocumented and unmanaged changes. Reads the environment only.</description>
     <summary>View, check and build Dataverse data models, and compare them with the connected environment.</summary>
-    <releaseNotes>5.0.2: Build solution can build tables only (each with its primary name column).</releaseNotes>
+    <releaseNotes>5.0.3: compare with a solution file, publishers and prefixes, saving adds missing detail rows, back navigation.</releaseNotes>
     <tags>XrmToolBox Plugins DataModel ERD Solution Metadata</tags>
     <projectUrl>https://example.com/replace-me</projectUrl>
     <iconUrl>https://example.com/replace-me.png</iconUrl>

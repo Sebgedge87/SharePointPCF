@@ -33,7 +33,7 @@ const SCALE = 1.25, boxes = {};
   await p.goto('file://' + page_); await p.waitForTimeout(1500);
   await snap('01-open', ['#btnOpen']);
   await p.setInputFiles('#file', wbk); await p.waitForTimeout(1800); await p.keyboard.press('Escape'); await p.waitForTimeout(2600);
-  await snap('02-overview', ['#main [data-ov] >> nth=0', 'button:has-text("Open all checks")', 'button:has-text("Build solution")', 'button:has-text("Check against Dataverse")']);
+  await snap('02-overview', ['#main [data-ov] >> nth=0', 'button:has-text("Open all checks")', 'button:has-text("Build solution")', '#main [data-ov="dv"]']);
   await p.click('#btnWb'); await snap('03-workbooks', ['#btnWb', '.menu [data-wb="__files"]'], { x: 760, y: 0, width: 680, height: 380 }); await p.keyboard.press('Escape'); await p.mouse.click(700, 500);
   await nav('__issues'); await snap('04-checks', ['[data-isev="error"]', '[data-isev="warn"]', '[data-isev="info"]', '[data-act="iss-csv"]'], { x: 330, y: 70, width: 1110, height: 420 });
   await nav('__erd'); await p.click('[data-eq=all]'); await p.waitForTimeout(3500);
