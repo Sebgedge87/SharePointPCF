@@ -44,6 +44,7 @@ a{color:var(--accent);text-decoration:underline;text-decoration-color:rgba(10,72
 .brand .ttl{border-left:2px solid var(--pink);padding-left:12px;color:var(--accent);white-space:nowrap;min-width:0}
 .brand small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:-2px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .search{position:relative;flex:1;max-width:520px}
+.backbtn{flex:none}.backbtn:disabled{opacity:.35}
 .search input{width:100%;height:34px;border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:0 34px 0 34px;outline:none}
 .search input:focus{border-color:var(--accent);background:var(--panel);box-shadow:0 0 0 3px var(--accent-bg)}
 .search svg{position:absolute;left:10px;top:9px;color:var(--faint)}
@@ -256,6 +257,11 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
 .solscope label{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer}
 .solscope label:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}.solscope input{margin:3px 0 0;accent-color:var(--accent)}.solscope small{grid-column:2;color:var(--muted);font-size:12px}
 @media (max-width:640px){.solscope{grid-template-columns:1fr}}
+.pubhead,.pubrow{display:grid;grid-template-columns:90px 1.2fr 1fr 110px 34px;gap:6px;align-items:center}
+.pubhead{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px}.pubrow{margin-bottom:6px}
+.pubrow input{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 8px;width:100%;min-width:0;background:var(--panel)}
+.chipbtn{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:1px 9px;font:12px ui-monospace,Menlo,Consolas,monospace;cursor:pointer;margin:2px 0}.chipbtn span{color:var(--muted)}.chipbtn:hover{border-color:var(--accent)}
+@media (max-width:640px){.pubhead{display:none}.pubrow{grid-template-columns:1fr 1fr}.pubrow [data-pubdel]{justify-self:end}}
 .solsum{margin-top:14px;padding:10px 12px;background:var(--panel2);border-radius:10px;font-size:13px}.solsum ul{margin:4px 0 6px;padding-left:18px}
 .solsum:empty{display:none} .solerr{color:#B42318;font-size:13px;margin-top:8px}
 .savestate{font-size:11.5px;padding:2px 9px;border-radius:999px;white-space:nowrap;cursor:default}
@@ -267,7 +273,7 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
   .side{display:none}
   .brand small{display:none} .brand{min-width:0}
   .navtoggle{display:inline-flex}
-  #btnOpen,#btnVer,#btnMore,#btnChanges,#btnExport,.savestate{display:none!important}
+  #btnOpen,#btnVer,#btnMore,#btnChanges,#btnExport,#btnBack,.savestate{display:none!important}
   #btnMob{display:inline-flex}
   .brand{display:none!important}   /* no room for the logo: the search box needs it */
   .search{min-width:120px;flex:1 1 140px} .search kbd{display:none} .wbname{max-width:78px}
@@ -336,6 +342,7 @@ button.ovtile:hover{border-color:var(--accent);background:var(--panel2)} button.
       <img class="logo" alt="FormusPro" src="data:image/png;base64,__LOGO__">
       <div class="ttl">Data Model Explorer<small id="fileLabel"></small></div>
     </div>
+    <button class="btn iconbtn backbtn" id="btnBack" title="Back to the previous screen (Alt+←)" aria-label="Back" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
     <div class="search">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="q" type="search" placeholder="Search this view…" autocomplete="off">
@@ -675,6 +682,8 @@ function setMeta(sh,label,val,silent){
   if(val===o) S.metaEd.delete(mkey(sh,k)); else S.metaEd.set(mkey(sh,k),{sh,k:m[0],old:o,nw:val});
   if(!silent){persist();updateCounts();}
 }
+// a sub-grid on a form, documented in the field list: not a column, so it has no logical name and is not checked or built
+const isSubgridRow=(sh,row)=>/^sub[\s_-]*grids?$/i.test(getVal(sh,row,'Attribute Type').trim())||sh.colIdx['Type']!==undefined&&/^sub[\s_-]*grids?$/i.test(getVal(sh,row,'Type').trim());
 const isGuidType=t=>/^(uniqueidentifier|primarykey|guid)$/i.test(String(t||'').replace(/[^a-z]/gi,''));
 function setVal(sh,row,col,val,silent){
   const i=sh.colIdx[col]; if(i===undefined) return;
@@ -1289,7 +1298,7 @@ function startEdit(td,it,col){
   let done=false;
   const finish=(commit)=>{
     if(done) return; done=true;
-    if(commit&&(!isSel||touched)&&el.value!==cur&&el.value!=='__new__'){setVal(sh,row,col,el.value);}
+    if(commit&&(!isSel||touched)&&el.value!==cur&&el.value!=='__new__'){setVal(sh,row,col,el.value); askLookupTarget(sh,row,col,()=>{afterEdit()})}
     afterEdit();
   };
   const wire=(e,sel)=>{
@@ -1361,7 +1370,7 @@ function editInDetail(box,col){
     if(!cur) el.value='';
   } else el=mkText();
   v.innerHTML=''; v.appendChild(el); el.focus();
-  const fin=c=>{if(done)return;done=true;if(c&&(!isSel||touched)&&el.value!==cur&&el.value!=='__new__')setVal(sh,row,col,el.value);afterEdit();renderDetail()};
+  const fin=c=>{if(done)return;done=true;if(c&&(!isSel||touched)&&el.value!==cur&&el.value!=='__new__'){setVal(sh,row,col,el.value); askLookupTarget(sh,row,col,()=>{afterEdit();renderDetail()})}afterEdit();renderDetail()};
   const wire=e=>{
     e.addEventListener('keydown',ev=>{if(ev.key==='Escape'){ev.preventDefault();ev.stopPropagation();fin(false)}else if(ev.key==='Enter'&&(isSel||!ev.shiftKey)){ev.preventDefault();fin(true)}});
     e.addEventListener('blur',()=>{if(!swapping)fin(true)});
@@ -1392,7 +1401,7 @@ function addRowUI(sh){
 }
 const FIELD_TYPES=['String','Memo','Integer','Decimal','Double','Money','DateTime','Boolean','Picklist','MultiSelectPicklist','Lookup','Customer'];
 // the publisher prefix for a new field: the table's own when it is a custom table, otherwise the workbook's usual one
-function fieldPrefix(sh){const m=/^([a-z][a-z0-9]{1,7})_/.exec(sh.logical||''); if(m&&sh.custom&&!/^(ms|adx)/.test(m[1])) return m[1]; return solDefaults().prefix}
+function fieldPrefix(sh){const m=/^([a-z][a-z0-9]{1,7})_/.exec(sh.logical||''), own=ownPrefixes(); if(m&&sh.custom&&!isMsPrefix(m[1])&&(!myPubs().length||own.has(m[1]))) return m[1]; return solDefaults().prefix}
 function addFieldDialog(sh){
   const P=fieldPrefix(sh), strip=s=>String(s||'').toLowerCase().replace(/^[a-z0-9]{2,8}_/,'').replace(/[^a-z0-9]/g,'');
   const has=c=>sh.colIdx[c]!==undefined;
@@ -1458,6 +1467,31 @@ function addFieldDialog(sh){
   q('Display Name').focus();
 }
 
+// A field changed to Lookup with no table in "Targets:" yet: ask which table, then write "Targets: <table>" into Additional data
+// (and N:1 into an empty Relationship Type), as Add field does for a new lookup. Skipping leaves it for Checks to flag.
+function askLookupTarget(sh,row,col,done){
+  if(col!=='Attribute Type'||!/^lookup$/i.test(getVal(sh,row,col).trim())||sh.colIdx['Additional data']===undefined||lookupTargetsOf(sh,row).length) return;
+  const ln=getVal(sh,row,'Logical Name').trim(), name=getVal(sh,row,'Display Name').trim()||ln||'this field';
+  const tables=[...new Set([...S.sheets.filter(s=>s.kind==='entity'&&s.logical).map(s=>s.logical.toLowerCase()).sort(),'account','contact','systemuser','team','businessunit','transactioncurrency'])];
+  const m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Lookup table');
+  m.innerHTML=`<div class="convbox solbox" style="max-width:520px"><h3>Which table does ${esc(name)} look up to?</h3><p class="dim" style="margin:4px 0 12px">Adds <span class="mono">Targets:</span> and the table to Additional data${sh.colIdx['Relationship Type']!==undefined&&!getVal(sh,row,'Relationship Type').trim()?', and N:1 as the Relationship Type':''}.</p>
+    <label class="solf"><span>Related table (logical name)</span><input data-lt list="dme-lt" autocomplete="off" spellcheck="false" placeholder="for example account"><small></small></label><datalist id="dme-lt">${tables.map(t=>`<option value="${esc(t)}"></option>`).join('')}</datalist>
+    <div class="solerr" id="lterr"></div>
+    <div class="convbtns"><button class="btn" data-lta="skip">Skip</button> <button class="btn primary" data-lta="go">Add target</button></div></div>`;
+  document.body.appendChild(m);
+  const inp=m.querySelector('[data-lt]');
+  const close=()=>{document.removeEventListener('keydown',key,true);m.remove()};
+  const go=()=>{const tg=inp.value.trim().toLowerCase();
+    if(!/^[a-z][a-z0-9_]*$/.test(tg)){m.querySelector('#lterr').textContent='Pick a table, or type its logical name (lower-case letters, digits and underscores).';return}
+    const ad=getVal(sh,row,'Additional data').replace(/\s+$/,'');
+    setVal(sh,row,'Additional data',(ad?ad+'\n':'')+'Targets: '+tg,true);
+    if(sh.colIdx['Relationship Type']!==undefined&&!getVal(sh,row,'Relationship Type').trim()) setVal(sh,row,'Relationship Type','N:1',true);
+    persist(); updateCounts(); close(); if(done) done(); toast(name+' now looks up to '+tg)};
+  const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();go()}};
+  document.addEventListener('keydown',key,true);
+  m.addEventListener('click',e=>{const b=e.target.closest('[data-lta]'); if(!b){if(e.target===m)close();return} if(b.dataset.lta==='skip') close(); else go()});
+  setTimeout(()=>inp.focus(),0);
+}
 /* ---------- table details dialog ---------- */
 function detailsDialog(sh){
   const fields=sh.rows.map(r=>getVal(sh,r,'Logical Name').trim()).filter(Boolean);
@@ -1607,8 +1641,8 @@ function mobMenu(anchor){
 function moreMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu'; const tn=+$('#tmplCount').textContent||0;
-  el.innerHTML=`<button data-more="dv">Dataverse check<small>${S.dv?'Checked against '+esc(S.dv.org||'imported metadata'):'Compare with a Dataverse environment'}</small></button><button data-more="tmpl"><span>Template</span><small>${tn?tn+' table'+(tn===1?' differs':'s differ')+' from the template':'Layout used for reading and exporting'}</small></button><hr><button data-more="help">How it works</button>`;
-  el.addEventListener('click',e=>{const b=e.target.closest('[data-more]'); if(!b) return; closePops(); ({dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'})[b.dataset.more]&&$(({dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'})[b.dataset.more]).click()});
+  el.innerHTML=`<button data-more="dv">Dataverse check<small>${S.dv?'Checked against '+esc(S.dv.org||'imported metadata'):'Compare with a Dataverse environment'}</small></button><button data-more="pubs">Publishers and prefixes<small>${myPubs().length?myPubs().map(p=>esc(p.prefix)+'_').join(', '):'Your customisation prefixes, and Microsoft\'s'}</small></button><button data-more="tmpl"><span>Template</span><small>${tn?tn+' table'+(tn===1?' differs':'s differ')+' from the template':'Layout used for reading and exporting'}</small></button><hr><button data-more="help">How it works</button>`;
+  el.addEventListener('click',e=>{const b=e.target.closest('[data-more]'); if(!b) return; closePops(); if(b.dataset.more==='pubs') return pubsDialog(); ({dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'})[b.dataset.more]&&$(({dv:'#btnDv',tmpl:'#btnTmpl',help:'#btnHelp'})[b.dataset.more]).click()});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
 function exportMenu(anchor){
@@ -1699,19 +1733,27 @@ async function buildOriginal(){
     if(ci===undefined||rr==null||!sh.pos){missed.push({e,why:'the cell position is unknown'});return}
     (bySheet[sh.name]=bySheet[sh.name]||[]).push({e,row:rr+1+(sh.r0||0),col:sh.pos[ci],v:e.nw,sr:styleRow.get(e.row)});
   });
-  // table details: written beside their label; a detail the sheet lacks goes in an empty row above the field list
-  const freeUsed=new Map();
+  // table details: written beside their label; a detail the sheet lacks goes in an empty row above the field list,
+  // or, when there is none, in a row inserted just below the last detail (everything underneath moves down)
+  const freeUsed=new Map(), needRow=new Map(), insertAt={};
   S.metaEd.forEach(me=>{
     const sh=me.sh, c0=sh.c0||0, e={sh,row:{vals:[],orig:[],r:null,key:'__meta'},col:me.k,nw:me.nw,meta:true};
     if(!pathOf[sh.name]||!zip.file(pathOf[sh.name])){missed.push({e,why:'the sheet was not found in the file'});return}
     const rs=Object.values(sh.metaR), ref=rs.length?Math.max(...rs):null;
     let r=sh.metaR[me.k.toLowerCase()], newRow=false;
     if(r==null){const used=freeUsed.get(sh)||[]; const free=(sh.metaFree||[]).filter(x=>!used.includes(x));
-      if(!free.length){missed.push({e,why:'the table details have no empty row to add "'+me.k+'" in'});return}
+      if(!free.length){ if(ref==null){missed.push({e,why:'the table details have no empty row to add "'+me.k+'" in'});return}
+        (needRow.get(sh)||needRow.set(sh,[]).get(sh)).push({me,e,ref}); return}
       r=free[0]; used.push(r); freeUsed.set(sh,used); newRow=true}
     const L=bySheet[sh.name]=bySheet[sh.name]||[];
     if(newRow) L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+c0,v:me.k,sr:ref,sc:1+c0});
     L.push({e,row:r,col:2+c0,v:me.nw,sr:ref,sc:2+c0});
+  });
+  needRow.forEach((list,sh)=>{
+    const at=list[0].ref+1, L=bySheet[sh.name]=bySheet[sh.name]||[]; insertAt[sh.name]={at,K:list.length};
+    list.forEach(({me,e,ref},i)=>{const r=at+i;
+      L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+(sh.c0||0),v:me.k,sr:ref,sc:1+(sh.c0||0),ins:true,lbl:true});
+      L.push({e,row:r,col:2+(sh.c0||0),v:me.nw,sr:ref,sc:2+(sh.c0||0),ins:true})});
   });
   // a column added from the template gets its header (and hint) written with the first value saved in it,
   // styled like the sheet's last original column
@@ -1732,6 +1774,11 @@ async function buildOriginal(){
     // the patcher understands plain sheet XML as Excel writes it. Anything else (for example namespace-prefixed
     // <x:row> tags from some generators) is refused rather than risk writing a broken file.
     if(xml.indexOf('<sheetData')<0||xml.indexOf('</sheetData>')<0){bySheet[name].forEach(ed=>missed.push({e:ed.e,why:'the sheet uses an XML layout this tool cannot safely edit'}));continue}
+    if(insertAt[name]){const {at,K}=insertAt[name];
+      const why=await insertRowsBlocked(zip,wbx,pathOf,name,xml);
+      if(why){bySheet[name]=bySheet[name].filter(ed=>{if(ed.ins){if(!ed.lbl) missed.push({e:ed.e,why:'the table details have no empty row, and a row cannot be added because '+why}); return false} return true})}
+      else{xml=shiftRows(xml,at,K); bySheet[name].forEach(ed=>{if(!ed.ins){if(ed.row>=at) ed.row+=K} if(ed.sr&&ed.sr>=at) ed.sr+=K})}
+    }
     for(const ed of bySheet[name]){
       const addr=XLSX.utils.encode_cell({r:ed.row-1,c:ed.col-1});
       const rowRe=new RegExp('<row\\b[^>]*?\\br="'+ed.row+'"[^>]*?(\\/>|>)','');
@@ -1767,6 +1814,35 @@ async function buildOriginal(){
       if(got!==want&&!num) missed.push({e:p.e,why:'the new value did not read back from the saved file'})});
   }catch(err){placed.forEach(p=>missed.push({e:p.e,why:'the updated file could not be read back ('+err.message+')'}))}
   return {bytes:out,n,missed};
+}
+// Inserting rows into a sheet's XML. Moved with the rows: every row and cell below, the sheet's size, merged cells,
+// drop-down lists, conditional formatting, filters, hyperlinks, page breaks, the frozen pane and the selection, and
+// references to this sheet's cells in its own formulas, lists and rules. Not attempted (the reason is returned) when
+// something else could point at those rows: Excel tables, drawings, comments, or other sheets and names referring to it.
+async function insertRowsBlocked(zip,wbx,pathOf,name,xml){
+  if(/<tableParts\b[^>]*count="[1-9]/.test(xml)||/<tablePart\b/.test(xml)) return 'the sheet holds an Excel table';
+  if(/<(drawing|legacyDrawing|legacyDrawingHF)\b/.test(xml)) return 'the sheet holds drawings or comments';
+  const q=name.replace(/'/g,"''"), ref=new RegExp("(^|[^A-Za-z0-9_.])('"+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+"'|"+name.replace(/[.*+?^${}()|[\]\\ ]/g,'\\$&')+")!",'i');
+  const names=[...wbx.getElementsByTagName('definedName')].map(d=>d.textContent).filter(t=>ref.test(t)&&!/^#REF!/.test(t));
+  if(names.length) return 'a named range refers to the sheet';
+  for(const [other,p] of Object.entries(pathOf)){ if(other===name||!zip.file(p)) continue;
+    const ox=await zip.file(p).async('string'), fs=(ox.match(/<f\b[^>]*>[^<]*<\/f>/g)||[]).join(' ').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&');
+    if(fs.includes('!')&&ref.test(fs)) return 'a formula on the sheet "'+other+'" refers to it'}
+  return '';
+}
+function shiftRows(xml,at,K){
+  const state=tag=>/\bstate="(frozen|frozenSplit)"/.test(tag);   // a frozen pane's ySplit counts rows (a plain split is measured in points)
+  const cell=t=>t.replace(/(\$?)([A-Z]{1,3})(\$?)(\d+)/g,(m,d1,c,d2,r)=>(+r>=at?d1+c+d2+(+r+K):m));
+  // refs inside formulas: only this sheet's (no "Sheet!" before them), and not inside quoted text
+  const fx=t=>t.split(/("[^"]*")/).map((part,i)=>i%2?part:part.replace(/(^|[^A-Za-z0-9_!'.$])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\d(A-Za-z_])/g,(m,pre,d1,c,d2,r)=>pre+(+r>=at?d1+c+d2+(+r+K):d1+c+d2+r))).join('');
+  xml=xml.replace(/<row\b[^>]*>/g,tag=>tag.replace(/\br="(\d+)"/,(m,r)=>+r>=at?'r="'+(+r+K)+'"':m));
+  xml=xml.replace(/<c\b[^>]*>/g,tag=>tag.replace(/\br="([A-Z]+)(\d+)"/,(m,c,r)=>+r>=at?'r="'+c+(+r+K)+'"':m));
+  xml=xml.replace(/(<(?:dimension|mergeCell|hyperlink|autoFilter|conditionalFormatting|dataValidation|selection|pane|protectedRange|ignoredError|x14:conditionalFormatting|x14:dataValidation)\b[^>]*>)/g,tag=>tag.replace(/\b(ref|sqref|activeCell|topLeftCell)="([^"]*)"/g,(m,k,v)=>k+'="'+cell(v)+'"'));
+  xml=xml.replace(/<pane\b[^>]*>/g,tag=>tag.replace(/\bySplit="(\d+(?:\.\d+)?)"/,(m,y)=>state(tag)&&+y>=at?'ySplit="'+(+y+K)+'"':m));
+  xml=xml.replace(/<xm:sqref>([^<]*)<\/xm:sqref>/g,(m,v)=>'<xm:sqref>'+cell(v)+'</xm:sqref>');
+  xml=xml.replace(/<(f|formula|formula1|formula2|xm:f)\b([^>]*)>([^<]*)<\/\1>/g,(m,t,a,v)=>'<'+t+a.replace(/\bref="([^"]*)"/,(mm,rv)=>'ref="'+cell(rv)+'"')+'>'+fx(v)+'</'+t+'>');
+  xml=xml.replace(/<brk\b([^>]*)\bid="(\d+)"/g,(m,a,id)=>'<brk'+a+'id="'+(+id>=at?+id+K:id)+'"');
+  return xml;
 }
 // tells the person which edits could not be written; nothing is saved or cleared while this list is not empty
 function reportMissed(r,what){
@@ -2059,6 +2135,8 @@ const RULES={
   'ln-format':['info','Logical name format'],
   'type-missing':['warn','No attribute type'],
   'custom-prefix':['info','Custom field without a publisher prefix'],
+  'system-twin':['warn','Copy of a system field'],
+  'prefix-unknown':['info','Prefix not one of yours'],
   'lookup-no-target':['warn','Lookup without targets'],
   'lookup-unknown':['warn','Lookup to a table not in the workbook'],
   'dict-unlinked':['warn','Dictionary entry with no table tab'],
@@ -2114,10 +2192,72 @@ function reqClass(v){
 // a lookup's relationship is only "known" when something records it: today, imported Dataverse metadata
 // (an N:1 from this field to that table). Unknown ones are drawn as plain lines and flagged for review.
 function relKnown(sh,row,target){if(relTypeOf(sh,row)==='N:1') return true; const ln=getVal(sh,row,'Logical Name').trim(); const de=S.dv&&sh&&S.dv.ents[sh.logical];return !!(de&&de.m1.some(r=>r.attr===String(ln).toLowerCase()&&(r.target===target||(r.target==='owner'&&(target==='systemuser'||target==='team')))))}
-function ownPrefixes(ents){return new Set((ents||S.sheets.filter(s=>s.kind==='entity')).filter(s=>s.custom&&s.logical.includes('_')).map(s=>s.logical.split('_')[0]).filter(p=>!/^(ms|adx)/.test(p)))}
+/* ---------- publishers and prefixes ---------- */
+// Your publishers (prefix, unique name, display name, choice value prefix), and the prefixes that are Microsoft's or
+// another vendor's (out of the box). Kept in this browser for every workbook. An entry ending in * matches any prefix
+// starting with it (ms* covers msdyn, mspp, msdynce…). With no publishers saved, yours are guessed from the custom tables.
+const MS_PREFIXES_DEFAULT=['ms*','adx'];
+const myPubs=()=>{const v=store.get('dme.pubs'); return Array.isArray(v)?v.filter(p=>p&&/^[a-z][a-z0-9]{1,7}$/.test(p.prefix)):[]};
+const msPrefixes=()=>{const v=store.get('dme.msprefixes'); return Array.isArray(v)?v:MS_PREFIXES_DEFAULT};
+function isMsPrefix(p){p=String(p||'').toLowerCase(); return msPrefixes().some(x=>{x=String(x).trim().toLowerCase(); return x.endsWith('*')?!!x.slice(0,-1)&&p.startsWith(x.slice(0,-1)):p===x})}
+const prefixOf=ln=>{const m=/^([a-z][a-z0-9]{1,7})_/.exec(String(ln||'').trim().toLowerCase()); return m?m[1]:''};
+function guessedPrefixes(ents){return new Set((ents||S.sheets.filter(s=>s.kind==='entity')).filter(s=>s.custom&&s.logical.includes('_')).map(s=>s.logical.split('_')[0]).filter(p=>!isMsPrefix(p)))}
+function ownPrefixes(ents){const p=myPubs(); return p.length?new Set(p.map(x=>x.prefix)):guessedPrefixes(ents)}
+// every prefix used in the workbook's logical names, with how many tables and fields use it
+function prefixUse(){
+  const m=new Map(), add=(p,k)=>{if(!p) return; const o=m.get(p)||{p,tables:0,fields:0}; o[k]++; m.set(p,o)};
+  S.sheets.filter(s=>s.kind==='entity').forEach(sh=>{add(prefixOf(sh.logical),'tables'); sh.rows.forEach(r=>add(prefixOf(getVal(sh,r,'Logical Name')),'fields'))});
+  return [...m.values()].sort((a,b)=>b.fields+b.tables-a.fields-a.tables);
+}
+function pubsDialog(after){
+  const use=prefixUse(), mine=myPubs(), known=new Set(mine.map(p=>p.prefix));
+  const rows=mine.length?mine:[...guessedPrefixes()].map(p=>({prefix:p,pubName:p,pubDisplay:p.toUpperCase(),optPrefix:''}));
+  const m=document.createElement('div'); m.className='convmask'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true'); m.setAttribute('aria-label','Publishers and prefixes');
+  const row=p=>`<div class="pubrow"><input data-pk="prefix" value="${esc(p.prefix||'')}" placeholder="prefix" spellcheck="false" autocomplete="off"><input data-pk="pubName" value="${esc(p.pubName||'')}" placeholder="publisher unique name" spellcheck="false" autocomplete="off"><input data-pk="pubDisplay" value="${esc(p.pubDisplay||'')}" placeholder="display name" autocomplete="off"><input data-pk="optPrefix" value="${esc(p.optPrefix||'')}" placeholder="10000-99999" inputmode="numeric" autocomplete="off"><button class="btn ghost" data-pubdel title="Remove">✕</button></div>`;
+  const other=use.filter(u=>!known.has(u.p)&&!isMsPrefix(u.p));
+  m.innerHTML=`<div class="convbox solbox" style="max-width:760px"><h3>Publishers and prefixes</h3><p class="dim" style="margin:4px 0 12px">Your customisation prefixes, and the publisher each one belongs to. They decide what counts as yours in Checks, the prefix new fields get, and the publisher <b>Build solution</b> fills in. Kept in this browser for every workbook.</p>
+    <div class="pubhead"><span>Prefix</span><span>Publisher unique name</span><span>Display name</span><span>Choice value prefix</span><span></span></div>
+    <div id="pubrows">${rows.map(row).join('')}</div>
+    <div style="margin:6px 0 4px"><button class="btn" data-pubadd>＋ Add a publisher</button></div>
+    ${other.length?`<div class="dim" style="font-size:12.5px;margin:8px 0 0">Also used in this workbook: ${other.slice(0,12).map(u=>`<button class="chipbtn" data-pubuse="${esc(u.p)}" title="${u.tables} table${u.tables===1?'':'s'}, ${u.fields} field${u.fields===1?'':'s'}. Click to add it as yours.">${esc(u.p)}_ <span>${u.tables+u.fields}</span></button>`).join(' ')}</div>`:''}
+    <label class="solf" style="margin-top:14px"><span>Microsoft and other vendors' prefixes (treated as out of the box)</span><input data-msp value="${esc(msPrefixes().join(', '))}" spellcheck="false" autocomplete="off"><small>Separated by commas. An entry ending in * matches every prefix starting with it: ms* covers msdyn, mspp, msdynce and the rest. Add others you use, such as a partner's.</small></label>
+    <div class="solerr" id="puberr"></div>
+    <div class="convbtns"><button class="btn ghost" data-pubreset style="margin-right:auto" title="Forget the saved publishers and go back to guessing from the workbook">Reset</button><button class="btn" data-pubx="cancel">Cancel</button> <button class="btn primary" data-pubx="save">Save</button></div></div>`;
+  document.body.appendChild(m);
+  const list=m.querySelector('#pubrows');
+  const read=()=>{const out=[],err=[],seen=new Set();
+    list.querySelectorAll('.pubrow').forEach(r=>{const o={}; r.querySelectorAll('[data-pk]').forEach(i=>o[i.dataset.pk]=i.value.trim()); o.prefix=o.prefix.toLowerCase().replace(/_+$/,'');
+      if(!o.prefix&&!o.pubName&&!o.pubDisplay&&!o.optPrefix) return;
+      if(!/^[a-z][a-z0-9]{1,7}$/.test(o.prefix)) err.push('"'+(o.prefix||'(blank)')+'": a prefix is 2 to 8 lower-case letters or digits, starting with a letter.');
+      else if(seen.has(o.prefix)) err.push('"'+o.prefix+'" is listed twice.');
+      else if(isMsPrefix(o.prefix)) err.push('"'+o.prefix+'" matches a Microsoft prefix below.');
+      if(o.pubName&&!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(o.pubName)) err.push('"'+o.pubName+'": a publisher unique name is letters, digits and underscores.');
+      if(o.optPrefix&&!(Number.isInteger(+o.optPrefix)&&+o.optPrefix>=10000&&+o.optPrefix<=99999)) err.push('"'+o.optPrefix+'": a choice value prefix is a whole number from 10000 to 99999.');
+      seen.add(o.prefix); out.push({prefix:o.prefix,pubName:o.pubName||o.prefix,pubDisplay:o.pubDisplay||o.prefix.toUpperCase(),optPrefix:o.optPrefix?+o.optPrefix:''})});
+    const ms=m.querySelector('[data-msp]').value.split(/[\s,;]+/).map(x=>x.trim().toLowerCase().replace(/_$/,'')).filter(Boolean);
+    if(ms.some(x=>!/^[a-z][a-z0-9]*\*?$/.test(x))) err.push('Microsoft prefixes: letters and digits, optionally ending in *.');
+    m.querySelector('#puberr').innerHTML=err.map(x=>`<div>${esc(x)}</div>`).join(''); return err.length?null:{pubs:out,ms}};
+  const close=()=>{document.removeEventListener('keydown',key,true);m.remove()};
+  const save=()=>{const v=read(); if(!v) return; store.set('dme.pubs',v.pubs); store.set('dme.msprefixes',v.ms); S.issues=null; close(); updateCounts(); refreshSpecial(true); toast(v.pubs.length?'Saved '+v.pubs.length+' publisher'+(v.pubs.length===1?'':'s')+': '+v.pubs.map(p=>p.prefix+'_').join(', '):'Saved. With no publishers, your prefixes are guessed from the custom tables.'); if(after) after()};
+  const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}else if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();e.stopPropagation();save()}};
+  document.addEventListener('keydown',key,true);
+  m.addEventListener('click',e=>{
+    if(e.target===m) return close();
+    const t=e.target.closest('button'); if(!t) return;
+    if(t.dataset.pubx==='cancel') close(); else if(t.dataset.pubx==='save') save();
+    else if(t.hasAttribute('data-pubadd')){list.insertAdjacentHTML('beforeend',row({})); list.lastElementChild.querySelector('input').focus()}
+    else if(t.hasAttribute('data-pubdel')) t.closest('.pubrow').remove();
+    else if(t.dataset.pubuse){const p=t.dataset.pubuse; list.insertAdjacentHTML('beforeend',row({prefix:p,pubName:p,pubDisplay:p.toUpperCase()})); t.remove()}
+    else if(t.hasAttribute('data-pubreset')){store.del?store.del('dme.pubs'):store.set('dme.pubs',[]); store.set('dme.msprefixes',MS_PREFIXES_DEFAULT); S.issues=null; close(); updateCounts(); refreshSpecial(true); toast('Publishers reset: your prefixes are guessed from the custom tables again'); if(after) after()}
+  });
+  const first=list.querySelector('input'); if(first) first.focus();
+}
 // calculated, rollup and formula fields can't go in a generated solution (their definitions aren't in the workbook),
 // so they are listed to be created by hand after import. Only your own fields: Microsoft's come with their solutions.
 const MANUAL_RE=/calculated|rollup|formula/i;
+// columns Dataverse creates on every table. A field named prefix_createdon would be a second, custom copy of one of them.
+const SYSTEM_COLS=new Set(['createdon','createdby','createdonbehalfby','modifiedon','modifiedby','modifiedonbehalfby','ownerid','owneridtype','owninguser','owningteam','owningbusinessunit','statecode','statuscode','versionnumber','importsequencenumber','overriddencreatedon','timezoneruleversionnumber','utcconversiontimezonecode','transactioncurrencyid','exchangerate','processid','stageid','traversedpath']);
+const systemTwin=ln=>{const p=prefixOf(ln); return p&&!isMsPrefix(p)&&SYSTEM_COLS.has(String(ln).toLowerCase().slice(p.length+1))?String(ln).toLowerCase().slice(p.length+1):''};
 function manualFields(){
   const ents=S.sheets.filter(s=>s.kind==='entity'), own=ownPrefixes(ents), out=[];
   const mine=ln=>own.size?(ln.includes('_')&&own.has(ln.split('_')[0])):true;
@@ -2144,6 +2284,7 @@ function issues(){
     const seen={};
     sh.rows.forEach(row=>{
       const ln=getVal(sh,row,'Logical Name').trim(), at=getVal(sh,row,'Attribute Type');
+      if(isSubgridRow(sh,row)) return;   // a form sub-grid, not a column
       if(!ln){add('field-no-ln',sh,row,getVal(sh,row,'Display Name')||rowNo(row),'This field has no Logical Name.');return}
       // relationship columns
       const rt=relTypeOf(sh,row), rawRt=getVal(sh,row,'Relationship Type').trim();
@@ -2160,7 +2301,9 @@ function issues(){
       const k=ln.toLowerCase(); (seen[k]=seen[k]||[]).push(row);
       if(!LN.test(ln)) add('ln-format',sh,row,ln,'Dataverse logical names are lower-case letters, digits and underscores, starting with a letter.');
       if(sh.colIdx['Attribute Type']!==undefined&&!at) add('type-missing',sh,row,ln,'No attribute type is recorded.');
+      {const twin=systemTwin(ln); if(twin) add('system-twin',sh,row,ln,'Dataverse creates '+twin+' on every table. "'+ln+'" would be a second, custom copy, so it is left out of a generated solution. Use '+twin+' (and remove this row), unless you really need a separate field.')}
       if(facet('Custom Attribute',getVal(sh,row,'Custom Attribute'))==='True'&&!ln.includes('_')) add('custom-prefix',sh,row,ln,'Custom fields normally start with the publisher prefix, such as new_ or fp_.');
+      else if(myPubs().length&&facet('Custom Attribute',getVal(sh,row,'Custom Attribute'))==='True'){const px=prefixOf(ln); if(px&&!isMsPrefix(px)&&!ownPrefixes().has(px)) add('prefix-unknown',sh,row,ln,'"'+px+'_" is not one of your prefixes or a Microsoft one. Add it in Publishers and prefixes if it is yours, or check the name.')}
       if(isLookupType(at)){
         const tg=lookupTargetsOf(sh,row);
         if(!tg.length) add('lookup-no-target',sh,row,ln,'The lookup has no "Targets:" in Additional data, so its relationship is unknown.');
@@ -2348,7 +2491,7 @@ function pct(a,b){return b?Math.round(a/b*100):0}
 function renderOverview(){
   const main=$('#main'); const ents=S.sheets.filter(s=>s.kind==='entity'); const dict=S.sheets.find(s=>s.isDict);
   let fields=0,desc=0,lookups=0; const pairs=new Set();
-  ents.forEach(sh=>sh.rows.forEach(row=>{fields++; if(getVal(sh,row,'Description')) desc++;
+  ents.forEach(sh=>sh.rows.forEach(row=>{if(isSubgridRow(sh,row)) return; fields++; if(getVal(sh,row,'Description')) desc++;
     if(isLookupType(getVal(sh,row,'Attribute Type'))){lookups++; lookupTargetsOf(sh,row).forEach(t=>{if(S.byLogical[t]!=null&&t!==sh.logical) pairs.add([sh.logical,t].sort().join('|'))})}}));
   const iss=issues(), c=issueCounts();
   // unresolved lookups that need attention (warnings and errors); lookups to standard tables are counted separately
@@ -2456,13 +2599,13 @@ const isPkRow=(sh,row)=>{const k=pkOf(sh);return !!k&&getVal(sh,row,'Logical Nam
 const solKey=()=>'dme.sol:'+(S.proj||'bundled');
 function solDefaults(){
   const ents=S.sheets.filter(s=>s.kind==='entity'), own=ownPrefixes(ents), cnt=new Map();
-  ents.forEach(sh=>sh.rows.forEach(r=>{const m=/^([a-z][a-z0-9]{1,7})_/.exec(getVal(sh,r,'Logical Name').trim().toLowerCase()); if(m&&!/^(ms|adx)/.test(m[1])&&(!own.size||own.has(m[1]))) cnt.set(m[1],(cnt.get(m[1])||0)+1)}));
+  ents.forEach(sh=>sh.rows.forEach(r=>{const m=/^([a-z][a-z0-9]{1,7})_/.exec(getVal(sh,r,'Logical Name').trim().toLowerCase()); if(m&&!isMsPrefix(m[1])&&(!own.size||own.has(m[1]))) cnt.set(m[1],(cnt.get(m[1])||0)+1)}));
   const top=[...cnt.entries()].sort((a,b)=>b[1]-a[1])[0], prefix=top?top[0]:'new';
   const opt=new Map();
   ents.forEach(sh=>sh.rows.forEach(r=>{if(!getVal(sh,r,'Logical Name').trim().toLowerCase().startsWith(prefix+'_')||!/choice|picklist/i.test(getVal(sh,r,'Attribute Type'))) return;
     (getVal(sh,r,'Additional data').match(/^\s*\d{9,}\s*:/gm)||[]).forEach(x=>{const p=Math.floor(parseInt(x,10)/10000); opt.set(p,(opt.get(p)||0)+1)})}));
-  const op=[...opt.entries()].sort((a,b)=>b[1]-a[1])[0], P=prefix.toUpperCase();
-  return {solName:P+'_DataModel',solDisplay:P+' data model',version:'1.0.0.0',pubName:prefix,pubDisplay:P,prefix,optPrefix:op?op[0]:10000,scope:'all'};
+  const op=[...opt.entries()].sort((a,b)=>b[1]-a[1])[0], P=prefix.toUpperCase(), pub=myPubs().find(p=>p.prefix===prefix);
+  return {solName:P+'_DataModel',solDisplay:P+' data model',version:'1.0.0.0',pubName:pub?pub.pubName:prefix,pubDisplay:pub?pub.pubDisplay:P,prefix,optPrefix:pub&&pub.optPrefix?pub.optPrefix:op?op[0]:10000,scope:'all'};
 }
 const solSettings=()=>Object.assign(solDefaults(),store.get(solKey())||{});
 function solValidate(c){
@@ -2538,10 +2681,11 @@ function buildPlan(cfg){
     }
     const T={sh,isNew,schema:sh.schema||sh.logical,fields:[]};
     sh.rows.forEach(row=>{
-      const ln=getVal(sh,row,'Logical Name').trim().toLowerCase(); if(!ln||!mine(ln)) return;   // not yours: Dataverse's or Microsoft's own
+      const ln=getVal(sh,row,'Logical Name').trim().toLowerCase(); if(!ln||!mine(ln)||isSubgridRow(sh,row)) return;   // not yours (Dataverse's or Microsoft's own), or a form sub-grid
       if(tablesOnly&&!(isNew&&ln===pnameOf(sh))){if(!(isNew&&ln===pkOf(sh))){plan.counts.left++; rep(sh.label,ln,isNNRow(sh,row)?'N:N relationship':'Field','Left out','tables-only build')} return}
       if(isNNRow(sh,row)){plan.nn.push({sh,row,name:getVal(sh,row,'Logical Name').trim()}); return}
       if(isNew&&ln===pkOf(sh)) return;                                                           // the primary key is generated with the table
+      {const twin=systemTwin(ln); if(twin){rep(sh.label,ln,'Field','Not included','Dataverse creates '+twin+' on every table, so this would be a second, custom copy of it'); return}}
       const sp=fieldSpec(sh,row);
       if(sp.act==='auto'){plan.counts.auto++; return}
       if(sp.act==='manual'){rep(sh.label,ln,'Field','Build by hand',sp.why); return}
@@ -2738,7 +2882,7 @@ function solDialog(){
     <div class="solscope" role="radiogroup" aria-label="What to build"><span>What to build</span>
       <label><input type="radio" name="solscope" value="all" ${c.scope!=='tables'?'checked':''}><b>Tables, fields and relationships</b><small>Everything in the workbook with your prefix</small></label>
       <label><input type="radio" name="solscope" value="tables" ${c.scope==='tables'?'checked':''}><b>Tables only</b><small>Each new table with its primary name column; add the rest later</small></label></div>
-    <div class="solgrid">${f('solName','Solution unique name')}${f('solDisplay','Solution display name')}${f('version','Version','for example 1.0.0.0')}${f('pubName','Publisher unique name','must match the publisher if it already exists')}${f('pubDisplay','Publisher display name')}${f('prefix','Prefix','tables and fields starting with this are built')}${f('optPrefix','Choice value prefix','numbering for new choice options')}</div>
+    <div class="solgrid">${f('solName','Solution unique name')}${f('solDisplay','Solution display name')}${f('version','Version','for example 1.0.0.0')}${f('pubName','Publisher unique name','must match the publisher if it already exists')}${f('pubDisplay','Publisher display name')}${f('prefix','Prefix','tables and fields starting with this are built · <a href="#" data-sol="pubs">Publishers and prefixes</a>')}${f('optPrefix','Choice value prefix','numbering for new choice options')}</div>
     <div class="solsum" id="solsum"></div><div class="solerr" id="solerr"></div>
     <div class="convbtns"><button class="btn ghost" data-sol="ps1" title="Just the PowerShell script, for importing a solution zip you already have" style="margin-right:auto">Import script only</button><button class="btn" data-sol="cancel">Cancel</button> <button class="btn primary" data-sol="go">Generate</button></div></div>`;
   document.body.appendChild(m);
@@ -2750,14 +2894,19 @@ function solDialog(){
       (notIn.length?`<div style="color:var(--pink)"><b>${notIn.length} not included:</b> ${notIn.slice(0,4).map(r=>esc(r.tbl+' · '+r.item+': '+r.why)).join('; ')}${notIn.length>4?'; …':''}. Full list in build-report.csv.</div>`:''):`<b>Will be built</b><ul><li>${p.newTables.length} new table${p.newTables.length===1?'':'s'}</li><li>${p.shells.length} existing table${p.shells.length===1?'':'s'} gaining your fields</li><li>${p.fieldCount} field${p.fieldCount===1?'':'s'}, ${p.rels.length} one-to-many and ${p.nn.length} many-to-many relationship${p.nn.length===1?'':'s'}</li></ul>`+
       (hand.length?`<div><b>${hand.length}</b> to build by hand (calculated and rollup fields), listed in the download.</div>`:'')+
       (notIn.length?`<div style="color:var(--pink)"><b>${notIn.length} not included:</b> ${notIn.slice(0,4).map(r=>esc(r.tbl+' · '+r.item+': '+r.why)).join('; ')}${notIn.length>4?'; …':''}. Full list in build-report.csv.</div>`:'')};
+  {const pi=m.querySelector('[data-k="prefix"]'); pi.setAttribute('list','dme-pfx'); pi.insertAdjacentHTML('afterend',`<datalist id="dme-pfx">${myPubs().map(p=>`<option value="${esc(p.prefix)}">${esc(p.pubDisplay)}</option>`).join('')}</datalist>`);
+    // picking one of your prefixes fills in its publisher
+    pi.addEventListener('input',()=>{const pub=myPubs().find(p=>p.prefix===pi.value.trim().toLowerCase()); if(pub) [['pubName',pub.pubName],['pubDisplay',pub.pubDisplay],['optPrefix',pub.optPrefix]].forEach(([k,v])=>{if(v!=='') m.querySelector(`[data-k="${k}"]`).value=v})})}
   let t; m.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(summary,250)}); m.addEventListener('change',e=>{if(e.target.name==='solscope') summary()}); summary();
   const close=()=>{document.removeEventListener('keydown',key,true);m.remove()}, key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}};
   document.addEventListener('keydown',key,true);
   m.addEventListener('click',async e=>{const b=e.target.closest('[data-sol]'); if(!b){if(e.target===m)close();return}
     if(b.dataset.sol==='cancel') return close();
     if(b.dataset.sol==='ps1') return doExport('ps1');
+    if(b.dataset.sol==='pubs'){e.preventDefault(); return pubsDialog(()=>{const pf=read().prefix, pub=myPubs().find(p=>p.prefix===pf); if(pub){[['pubName',pub.pubName],['pubDisplay',pub.pubDisplay],['optPrefix',pub.optPrefix]].forEach(([k,v])=>{if(v!=='') m.querySelector(`[data-k="${k}"]`).value=v})} summary()})}
     const o=read(), errs=solValidate(o); if(errs.length){summary();return}
-    store.set(solKey(),o); b.disabled=true; b.textContent='Building…';
+    store.set(solKey(),o); {const ps=myPubs(), i=ps.findIndex(p=>p.prefix===o.prefix), pub={prefix:o.prefix,pubName:o.pubName,pubDisplay:o.pubDisplay,optPrefix:+o.optPrefix}; if(i>=0) ps[i]=pub; else if(ps.length) ps.push(pub); if(ps.length) store.set('dme.pubs',ps)}
+    b.disabled=true; b.textContent='Building…';
     try{await generateSolution(o); close()}catch(err){console.error(err); b.disabled=false; b.textContent='Generate'; m.querySelector('#solerr').textContent='Could not build the solution: '+err.message}
   });
   m.querySelector('[data-k]').focus();
@@ -3374,13 +3523,27 @@ function erdAction(a,btn){
 }
 
 function applyAndRender(){if(S.cur==='__erd')return;if(S.cur==='__readme'){renderReadme();return}if(S.cur==='__overview'){renderOverview();return}if(S.cur==='__issues'){renderIssues();return}const v=viewFor(S.cur);S.view=v;S.filtered=filterItems(v);renderMain()}
+// each screen (a table, Overview, Checks, ERD, All fields, How it works) is a step in the browser's history, so Back,
+// Alt+Left and a mouse's back button return to the previous screen. The address stays the same.
+let navDepth=0;
+function navRecord(fromHistory){
+  if(fromHistory) return; const v=S.cur;
+  if(history.state&&history.state.dmeView===v&&history.state.dmeProj===S.proj) return;
+  if(history.state&&history.state.dmeView!=null&&history.state.dmeProj!==S.proj) navDepth=0;   // another workbook: its own history starts here
+  try{ if(history.state&&history.state.dmeView!=null&&history.state.dmeProj===S.proj){history.pushState({dmeView:v,dmeProj:S.proj,depth:navDepth+1},''); navDepth++} else history.replaceState({dmeView:v,dmeProj:S.proj,depth:0},'') }catch(e){}
+  const b=$('#btnBack'); if(b) b.disabled=navDepth<=0;
+}
+function viewExists(v){v=String(v); return /^__(erd|readme|overview|issues|all)$/.test(v)||/^\d+$/.test(v)&&!!S.sheets[+v]}
+addEventListener('popstate',e=>{const st=e.state; if(!st||st.dmeView==null) return;
+  navDepth=st.depth||0; const b=$('#btnBack'); if(b) b.disabled=navDepth<=0;
+  go(st.dmeProj===S.proj&&viewExists(st.dmeView)?(/^\d+$/.test(st.dmeView)?+st.dmeView:st.dmeView):'__overview',{fromHistory:true})});
 function go(id,opts={}){
   const special={__erd:renderErdPage,__readme:renderReadme,__overview:renderOverview,__issues:renderIssues}[String(id)];
   if(special){
     S.cur=String(id);S.selIt=null;S.selItem=null;S.view=null;S.filtered=[];
     document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open'));   // a full page: no panel left on top of it
     $('#q').value=S.cur==='__issues'?(S.issQ||''):''; $('#q').placeholder=S.cur==='__issues'?'Search the checks…':'Open a table to search';
-    renderNav(); special(); return;
+    renderNav(); special(); navRecord(opts.fromHistory); return;
   }
   S.cur=String(id); S.selIt=null; S.selItem=null; $('#detail').classList.remove('open');
   const st=vstate(S.cur); $('#q').value=st.q; $('#q').placeholder='Search '+(S.cur==='__all'?'all fields':viewFor(S.cur).label)+'…';
@@ -3397,6 +3560,7 @@ function go(id,opts={}){
     if(tr){tr.scrollIntoView({block:'center'});tr.classList.add('flash')}
   }
   $('#gridwrap')&&($('#gridwrap').scrollTop=opts.focusRow?$('#gridwrap').scrollTop:0);
+  navRecord(opts.fromHistory);
 }
 
 /* ---------- events ---------- */
@@ -3553,6 +3717,21 @@ $('#btnWb').onclick=e=>{e.stopPropagation();wbMenu(e.currentTarget)};
 $('#btnTmpl').onclick=()=>{$('#tmplpanel').classList.contains('open')?$('#tmplpanel').classList.remove('open'):renderTemplate()};
 $('#tfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=ev=>{try{const u=new Uint8Array(ev.target.result);const b64=u8ToB64(u);if(!parseWorkbook(XLSX.read(u,{type:'array'})).length)throw new Error('no usable sheets');loadTemplate(b64,f.name);const kept=store.set('dme.tmpl',{name:f.name,b64});conformance();updateCounts();applyAndRender();renderTemplate();toast('Template set to '+f.name+(kept?'':'. This browser could not remember it, so it goes back to the bundled one on reload.'))}catch(err){dlg({title:'Could not use that template',body:esc(err.message),ok:'OK',cancel:null,danger:true})}};r.readAsArrayBuffer(f)};
 $('#btnHelp').onclick=()=>go('__readme');
+$('#btnBack').onclick=()=>{if(navDepth>0) history.back()};
+// hovering a drop-down, or any text cut short, shows it in full: a select shows its chosen option, an option its text,
+// and anything clipped (an ellipsis, or text wider than its box) its whole text. A title set on purpose is left alone.
+document.addEventListener('mouseover',e=>{
+  let el=e.target; if(!(el instanceof Element)) return;
+  if(el.tagName==='OPTION'){if(!el.title&&el.textContent.trim()) el.title=el.textContent.trim(); return}
+  if(el.tagName==='SELECT'){const o=el.selectedOptions&&el.selectedOptions[0], t=o?o.textContent.trim():''; if(!el.dataset.ownTitle){if(el.title&&el.dataset.autoTitle!==el.title) {el.dataset.ownTitle='1'; return} el.title=t; el.dataset.autoTitle=t} return}
+  if(el.tagName==='INPUT'){if((el.type==='text'||el.type==='search'||!el.type)&&el.scrollWidth>el.clientWidth+1&&el.value&&(!el.title||el.dataset.autoTitle===el.title)){el.title=el.value; el.dataset.autoTitle=el.value} return}
+  for(let i=0;i<3&&el&&el!==document.body;i++,el=el.parentElement){
+    if(el.title&&el.dataset.autoTitle!==el.title) return;           // a tooltip set on purpose
+    const cs=getComputedStyle(el), clipX=/hidden|clip/.test(cs.overflowX)&&el.scrollWidth>el.clientWidth+1, clipY=cs.webkitLineClamp!=='none'&&el.scrollHeight>el.clientHeight+2;
+    if(clipX||clipY){
+      const t=(el.innerText||el.textContent||'').trim().replace(/\s+\n/g,'\n'); if(t&&t.length<600){el.title=t; el.dataset.autoTitle=t} return}
+  }
+},{passive:true});
 $('#btnNav').onclick=()=>document.body.classList.toggle('navopen');
 $('#btnDv').onclick=()=>{$('#dvpanel').classList.contains('open')?$('#dvpanel').classList.remove('open'):renderDv()};
 $('#dvfile').onchange=e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)importDv(fs)};

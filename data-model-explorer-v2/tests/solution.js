@@ -37,6 +37,7 @@ function model() {
     f('fp_regardingid', 'fp_RegardingId', 'Regarding', 'Lookup', 'Targets:\naccount\ncontact'),
     f('fp_total', 'fp_Total', 'Total', 'Currency', 'Precision: 2', { kind: 'Calculated' }),
     f('fp_photo', 'fp_Photo', 'Photo', 'Image'),
+    f('fp_createdon', 'fp_CreatedOn', 'Created on', 'DateTime', 'Format: DateAndTime'),
     ['fp_event_contact', '', 'Attendees', '', 'People attending', 'True', '', '', 'Targets:\ncontact', '', '', 'N:N', '', '']]);
   ent('Venue (fp_Venue)', 'Venue', 'fp_Venue', 'fp_venue', 'True', [['Primary Name Column', 'fp_name'], ['Primary Key', 'fp_venueid']], [
     f('fp_venueid', 'fp_VenueId', 'Venue', 'Uniqueidentifier'), f('fp_name', 'fp_Name', 'Name', 'Text', 'Format: Text\nMax length: 100')]);
@@ -64,6 +65,8 @@ function model() {
   ok(rows.some(r => r[1] === 'No Name' && r[3] === 'No primary name column' && r[0] === 'Error'), 'a new table without a primary name column is an error');
   ok(rows.some(r => r[1] === 'Event' && r[3] === 'Relationship type not recorded' && /fp_contactid → contact/.test(r[4])), 'a lookup without a Relationship Type is flagged for review');
   ok(!rows.some(r => /fp_venueid → fp_venue|fp_eventid → fp_event/.test(r[4])), 'lookups with Relationship Type N:1 are not flagged');
+  ok(rows.some(r => r[0] === 'Warning' && r[3] === 'Copy of a system field' && /Dataverse creates createdon on every table/.test(r[4])), 'a prefixed copy of a system field (fp_createdon) is flagged');
+  ok(!rows.some(r => r[3] === 'Copy of a system field' && /"createdon"/.test(r[4])), 'the real system fields are not flagged');
   // table page: primary name tag and the N:N row
   if (!await p.locator('#nav .navitem:has-text("Event")').count()) await p.click('#nav [data-grp="Events"]');
   await p.click('#nav .navitem:has-text("Event")'); await p.waitForTimeout(400);
@@ -111,6 +114,7 @@ function model() {
   const expect = { fp_eventid: 'primarykey', fp_name: 'nvarchar', fp_email: 'nvarchar', fp_notes: 'ntext', fp_capacity: 'int', fp_big: 'bigint', fp_rate: 'decimal', fp_ratio: 'float', fp_price: 'money', fp_start: 'datetime', fp_doors: 'datetime', fp_public: 'bit', fp_status: 'picklist', fp_tags: 'multiselectpicklist', fp_venueid: 'lookup', fp_contactid: 'lookup', fp_customerid: 'customer' };
   const wrong = Object.entries(expect).filter(([ln, t]) => typeOf(ln) !== t).map(([ln, t]) => ln + ' expected ' + t + ' got ' + typeOf(ln));
   ok(!wrong.length, 'every supported field type maps to the right Dataverse type' + (wrong.length ? ': ' + wrong.join(', ') : ''));
+  ok(!attr(ev, 'fp_createdon') && /fp_createdon,Field,Not included,"?Dataverse creates createdon on every table/.test(await outer.file('build-report.csv').async('string')), 'the copy of createdon is not built, and the report says why');
   ok(['fp_price_base', 'fp_total', 'fp_photo', 'fp_regardingid', 'fp_event_contact'].every(ln => !attr(ev, ln)), 'left out of the table: currency base, calculated, image, multi-table lookup, and the N:N row');
   ok(/PrimaryName\|/.test(attr(ev, 'fp_name')) && /<RequiredLevel>required<\/RequiredLevel>/.test(attr(ev, 'fp_name')) && /<MaxLength>200<\/MaxLength>/.test(attr(ev, 'fp_name')), 'the primary name column is marked, required, with its length');
   ok(/<Format>email<\/Format>/.test(attr(ev, 'fp_email')) && /<MaxLength>4000<\/MaxLength>/.test(attr(ev, 'fp_notes')) && /<MinValue>0<\/MinValue><MaxValue>5000<\/MaxValue>/.test(attr(ev, 'fp_capacity')) && /<Accuracy>3<\/Accuracy>/.test(attr(ev, 'fp_rate')), 'text format, memo length, number range and precision carry over');

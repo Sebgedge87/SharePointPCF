@@ -21,6 +21,7 @@ function workbook() {
     f('title', 'Text'),                                                                       // Dataverse: ApplicationRequired
     f('title', 'Text'),                                                                       // duplicate
     f('', 'Text', { disp: 'Mystery' }),                                                       // no logical name
+    f('', 'Sub grid', { disp: 'Related cases' }),                                             // a form sub-grid: no logical name, and that's fine
     f('Bad Name', 'Text'),                                                                    // format
     f('prioritycode', ''),                                                                    // no type
     f('mycustom', 'Text', { custom: 'True' }),                                                // no publisher prefix
@@ -94,6 +95,7 @@ function dataverse() {
     ['Custom field without a publisher prefix', 'mycustom'], ['Lookup without targets', 'fp_needid'], ['Lookup to a table not in the workbook', 'contact'],
     ['Dictionary entry with no table tab', 'Ghost'], ['Table missing from the dictionary', ''], ['No primary key field listed', '']])
     ok(has(rows, check, field), `check found: ${check}${field ? ' (' + field + ')' : ''}`);
+  ok(!rows.some(r => /Related cases/.test(r.join(' '))), 'a Sub grid row without a logical name is not flagged');
   ok(!rows.some(r => /systemuser|team/.test(r[4]) && r[3] === 'Lookup to a table not in the workbook'), 'lookups to user and team are not flagged');
   const csvText = await download(() => p.click('[data-act="iss-csv"]'));
   ok(/Severity,Table/.test(csvText) && /Lookup to a table not in the workbook/.test(csvText), 'checks export as CSV');
@@ -111,14 +113,10 @@ function dataverse() {
   await p.click('.ovtile:has(span:text-is("unresolved lookups"))'); await p.waitForTimeout(300);
   ok(await p.locator('#isswrap tbody tr').count() === 2 && /Lookup checks/.test(await p.innerText('.toolbar')), 'the unresolved-lookups tile opens just those 2 findings');
 
-  // Dataverse links
+  // the Dataverse panel, opened as a file: compare with a solution (no environment URL or links any more)
   await p.click('#btnMore'); await p.click('.menu [data-more="dv"]'); await p.waitForTimeout(200);
-  await p.fill('#dvorg', 'javascript:alert(1)'); await p.waitForTimeout(100);
-  ok(await p.locator('#dvlinks a').count() === 0, 'an invalid environment URL gives no links');
-  await p.fill('#dvorg', 'https://contoso.crm11.dynamics.com/'); await p.waitForTimeout(100);
-  const href = await p.locator('#dvlinks a').first().getAttribute('href');
-  ok(href.startsWith('https://contoso.crm11.dynamics.com/api/data/v9.2/EntityDefinitions?$select=') && href.includes("LogicalName eq 'incident'") && href.includes('ManyToManyRelationships'), 'Dataverse links are built for the workbook\'s tables');
-  ok(await p.locator('#dvlinks details a').count() === 3, 'a one-link-per-table fallback is offered');
+  ok(await p.locator('#dvorg, #dvlinks').count() === 0 && await p.locator('#dvpanel [data-dv="pick"]').count() >= 1, 'the Dataverse panel asks for a solution, not an environment URL');
+  await p.click('[data-dvclose]');
 
   // a Dataverse error response is explained, not imported
   await p.setInputFiles('#dvfile', dvBad); await p.waitForSelector('.dlgbox');

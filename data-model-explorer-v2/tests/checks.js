@@ -21,6 +21,7 @@ function workbook() {
     f('title', 'Text'),                                                                       // Dataverse: ApplicationRequired
     f('title', 'Text'),                                                                       // duplicate
     f('', 'Text', { disp: 'Mystery' }),                                                       // no logical name
+    f('', 'Sub grid', { disp: 'Related cases' }),                                             // a form sub-grid: no logical name, and that's fine
     f('Bad Name', 'Text'),                                                                    // format
     f('prioritycode', ''),                                                                    // no type
     f('mycustom', 'Text', { custom: 'True' }),                                                // no publisher prefix
@@ -94,6 +95,7 @@ function dataverse() {
     ['Custom field without a publisher prefix', 'mycustom'], ['Lookup without targets', 'fp_needid'], ['Lookup to a table not in the workbook', 'contact'],
     ['Dictionary entry with no table tab', 'Ghost'], ['Table missing from the dictionary', ''], ['No primary key field listed', '']])
     ok(has(rows, check, field), `check found: ${check}${field ? ' (' + field + ')' : ''}`);
+  ok(!rows.some(r => /Related cases/.test(r.join(' '))), 'a Sub grid row without a logical name is not flagged');
   ok(!rows.some(r => /systemuser|team/.test(r[4]) && r[3] === 'Lookup to a table not in the workbook'), 'lookups to user and team are not flagged');
   const csvText = await download(() => p.click('[data-act="iss-csv"]'));
   ok(/Severity,Table/.test(csvText) && /Lookup to a table not in the workbook/.test(csvText), 'checks export as CSV');

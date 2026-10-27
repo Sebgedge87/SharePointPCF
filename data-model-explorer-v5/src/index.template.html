@@ -1817,19 +1817,27 @@ async function buildOriginal(){
     if(ci===undefined||rr==null||!sh.pos){missed.push({e,why:'the cell position is unknown'});return}
     (bySheet[sh.name]=bySheet[sh.name]||[]).push({e,row:rr+1+(sh.r0||0),col:sh.pos[ci],v:e.nw,sr:styleRow.get(e.row)});
   });
-  // table details: written beside their label; a detail the sheet lacks goes in an empty row above the field list
-  const freeUsed=new Map();
+  // table details: written beside their label; a detail the sheet lacks goes in an empty row above the field list,
+  // or, when there is none, in a row inserted just below the last detail (everything underneath moves down)
+  const freeUsed=new Map(), needRow=new Map(), insertAt={};
   S.metaEd.forEach(me=>{
     const sh=me.sh, c0=sh.c0||0, e={sh,row:{vals:[],orig:[],r:null,key:'__meta'},col:me.k,nw:me.nw,meta:true};
     if(!pathOf[sh.name]||!zip.file(pathOf[sh.name])){missed.push({e,why:'the sheet was not found in the file'});return}
     const rs=Object.values(sh.metaR), ref=rs.length?Math.max(...rs):null;
     let r=sh.metaR[me.k.toLowerCase()], newRow=false;
     if(r==null){const used=freeUsed.get(sh)||[]; const free=(sh.metaFree||[]).filter(x=>!used.includes(x));
-      if(!free.length){missed.push({e,why:'the table details have no empty row to add "'+me.k+'" in'});return}
+      if(!free.length){ if(ref==null){missed.push({e,why:'the table details have no empty row to add "'+me.k+'" in'});return}
+        (needRow.get(sh)||needRow.set(sh,[]).get(sh)).push({me,e,ref}); return}
       r=free[0]; used.push(r); freeUsed.set(sh,used); newRow=true}
     const L=bySheet[sh.name]=bySheet[sh.name]||[];
     if(newRow) L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+c0,v:me.k,sr:ref,sc:1+c0});
     L.push({e,row:r,col:2+c0,v:me.nw,sr:ref,sc:2+c0});
+  });
+  needRow.forEach((list,sh)=>{
+    const at=list[0].ref+1, L=bySheet[sh.name]=bySheet[sh.name]||[]; insertAt[sh.name]={at,K:list.length};
+    list.forEach(({me,e,ref},i)=>{const r=at+i;
+      L.push({e:Object.assign({},e,{nw:me.k}),row:r,col:1+(sh.c0||0),v:me.k,sr:ref,sc:1+(sh.c0||0),ins:true,lbl:true});
+      L.push({e,row:r,col:2+(sh.c0||0),v:me.nw,sr:ref,sc:2+(sh.c0||0),ins:true})});
   });
   // a column added from the template gets its header (and hint) written with the first value saved in it,
   // styled like the sheet's last original column
@@ -1850,6 +1858,11 @@ async function buildOriginal(){
     // the patcher understands plain sheet XML as Excel writes it. Anything else (for example namespace-prefixed
     // <x:row> tags from some generators) is refused rather than risk writing a broken file.
     if(xml.indexOf('<sheetData')<0||xml.indexOf('</sheetData>')<0){bySheet[name].forEach(ed=>missed.push({e:ed.e,why:'the sheet uses an XML layout this tool cannot safely edit'}));continue}
+    if(insertAt[name]){const {at,K}=insertAt[name];
+      const why=await insertRowsBlocked(zip,wbx,pathOf,name,xml);
+      if(why){bySheet[name]=bySheet[name].filter(ed=>{if(ed.ins){if(!ed.lbl) missed.push({e:ed.e,why:'the table details have no empty row, and a row cannot be added because '+why}); return false} return true})}
+      else{xml=shiftRows(xml,at,K); bySheet[name].forEach(ed=>{if(!ed.ins){if(ed.row>=at) ed.row+=K} if(ed.sr&&ed.sr>=at) ed.sr+=K})}
+    }
     for(const ed of bySheet[name]){
       const addr=XLSX.utils.encode_cell({r:ed.row-1,c:ed.col-1});
       const rowRe=new RegExp('<row\\b[^>]*?\\br="'+ed.row+'"[^>]*?(\\/>|>)','');
@@ -1885,6 +1898,35 @@ async function buildOriginal(){
       if(got!==want&&!num) missed.push({e:p.e,why:'the new value did not read back from the saved file'})});
   }catch(err){placed.forEach(p=>missed.push({e:p.e,why:'the updated file could not be read back ('+err.message+')'}))}
   return {bytes:out,n,missed};
+}
+// Inserting rows into a sheet's XML. Moved with the rows: every row and cell below, the sheet's size, merged cells,
+// drop-down lists, conditional formatting, filters, hyperlinks, page breaks, the frozen pane and the selection, and
+// references to this sheet's cells in its own formulas, lists and rules. Not attempted (the reason is returned) when
+// something else could point at those rows: Excel tables, drawings, comments, or other sheets and names referring to it.
+async function insertRowsBlocked(zip,wbx,pathOf,name,xml){
+  if(/<tableParts\b[^>]*count="[1-9]/.test(xml)||/<tablePart\b/.test(xml)) return 'the sheet holds an Excel table';
+  if(/<(drawing|legacyDrawing|legacyDrawingHF)\b/.test(xml)) return 'the sheet holds drawings or comments';
+  const q=name.replace(/'/g,"''"), ref=new RegExp("(^|[^A-Za-z0-9_.])('"+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+"'|"+name.replace(/[.*+?^${}()|[\]\\ ]/g,'\\$&')+")!",'i');
+  const names=[...wbx.getElementsByTagName('definedName')].map(d=>d.textContent).filter(t=>ref.test(t)&&!/^#REF!/.test(t));
+  if(names.length) return 'a named range refers to the sheet';
+  for(const [other,p] of Object.entries(pathOf)){ if(other===name||!zip.file(p)) continue;
+    const ox=await zip.file(p).async('string'), fs=(ox.match(/<f\b[^>]*>[^<]*<\/f>/g)||[]).join(' ').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&');
+    if(fs.includes('!')&&ref.test(fs)) return 'a formula on the sheet "'+other+'" refers to it'}
+  return '';
+}
+function shiftRows(xml,at,K){
+  const state=tag=>/\bstate="(frozen|frozenSplit)"/.test(tag);   // a frozen pane's ySplit counts rows (a plain split is measured in points)
+  const cell=t=>t.replace(/(\$?)([A-Z]{1,3})(\$?)(\d+)/g,(m,d1,c,d2,r)=>(+r>=at?d1+c+d2+(+r+K):m));
+  // refs inside formulas: only this sheet's (no "Sheet!" before them), and not inside quoted text
+  const fx=t=>t.split(/("[^"]*")/).map((part,i)=>i%2?part:part.replace(/(^|[^A-Za-z0-9_!'.$])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\d(A-Za-z_])/g,(m,pre,d1,c,d2,r)=>pre+(+r>=at?d1+c+d2+(+r+K):d1+c+d2+r))).join('');
+  xml=xml.replace(/<row\b[^>]*>/g,tag=>tag.replace(/\br="(\d+)"/,(m,r)=>+r>=at?'r="'+(+r+K)+'"':m));
+  xml=xml.replace(/<c\b[^>]*>/g,tag=>tag.replace(/\br="([A-Z]+)(\d+)"/,(m,c,r)=>+r>=at?'r="'+c+(+r+K)+'"':m));
+  xml=xml.replace(/(<(?:dimension|mergeCell|hyperlink|autoFilter|conditionalFormatting|dataValidation|selection|pane|protectedRange|ignoredError|x14:conditionalFormatting|x14:dataValidation)\b[^>]*>)/g,tag=>tag.replace(/\b(ref|sqref|activeCell|topLeftCell)="([^"]*)"/g,(m,k,v)=>k+'="'+cell(v)+'"'));
+  xml=xml.replace(/<pane\b[^>]*>/g,tag=>tag.replace(/\bySplit="(\d+(?:\.\d+)?)"/,(m,y)=>state(tag)&&+y>=at?'ySplit="'+(+y+K)+'"':m));
+  xml=xml.replace(/<xm:sqref>([^<]*)<\/xm:sqref>/g,(m,v)=>'<xm:sqref>'+cell(v)+'</xm:sqref>');
+  xml=xml.replace(/<(f|formula|formula1|formula2|xm:f)\b([^>]*)>([^<]*)<\/\1>/g,(m,t,a,v)=>'<'+t+a.replace(/\bref="([^"]*)"/,(mm,rv)=>'ref="'+cell(rv)+'"')+'>'+fx(v)+'</'+t+'>');
+  xml=xml.replace(/<brk\b([^>]*)\bid="(\d+)"/g,(m,a,id)=>'<brk'+a+'id="'+(+id>=at?+id+K:id)+'"');
+  return xml;
 }
 // tells the person which edits could not be written; nothing is saved or cleared while this list is not empty
 function reportMissed(r,what){

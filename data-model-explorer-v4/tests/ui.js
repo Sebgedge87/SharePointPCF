@@ -53,7 +53,7 @@ function areaModel() {
   ok(!/Discard all edits|Forget loaded versions/.test(exp), 'the Save & share menu holds only exports');
   ok(['SAVE THE WORKBOOK', 'SHARE', 'FOR THE BUILD', 'LOGS'].every(h => exp.toUpperCase().includes(h)) && /Read-only copy/.test(exp), 'Save & share is grouped: save, share, build, logs');
   await p.click('#btnCheck'); const chk = await p.innerText('.menu'); await p.keyboard.press('Escape'); await p.mouse.click(700, 600);
-  ok(/Checks\s*\d+ errors? · \d+ warnings?/.test(chk) && /Compare with Dataverse/.test(chk) && /Template/.test(chk), 'Check holds Checks (with counts), the Dataverse comparison and the template');
+  ok(/Checks\s*\d+ errors? · \d+ warnings?/.test(chk) && /Compare with a solution/.test(chk) && /Template/.test(chk), 'Check holds Checks (with counts), the Dataverse comparison and the template');
   await p.click('#btnWb'); const wbm = await p.innerText('.menu'); await p.keyboard.press('Escape'); await p.mouse.click(700, 600);
   ok(/Load a newer version of this workbook/.test(wbm) && /Open another workbook/.test(wbm) && /Manage files/.test(wbm), 'the workbook menu holds open, newer version and manage files');
   await p.click('#btnBuild'); await p.waitForSelector('.solbox'); ok(true, 'Build solution opens the solution builder'); await p.keyboard.press('Escape'); await p.waitForTimeout(200);
