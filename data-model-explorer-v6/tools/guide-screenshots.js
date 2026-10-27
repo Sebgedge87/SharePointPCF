@@ -58,7 +58,7 @@ const SCALE = 1.25, boxes = {};
   await snap('10-changes', ['#btnChanges', '#changes [data-arm]', '#changes [data-crev]', '#changes [data-act="revert-all"]'], { sel: '#changes', maxH: 230 });
   await p.click('[data-cclose]');
   await p.click('#btnExport'); await p.waitForTimeout(300);
-  await snap('11-export', ['#btnExport', '.menu [data-x="xlsx-orig"]', '.menu [data-x="ro-copy"]', '.menu [data-x="solution"]'], '.menu');
+  await snap('11-export', ['#btnExport', '.menu [data-x="save"]', '.menu [data-x="ro-copy"]', '.menu [data-x="solution"]'], '.menu');
   await p.click('.menu [data-x="xlsx-orig"]'); await p.waitForSelector('.namebox');
   await snap('12-filename', ['.namebox input', '.namebox [data-n="1"]'], '.namebox');
   await p.click('.namebox [data-n="0"]');

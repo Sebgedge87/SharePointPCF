@@ -49,7 +49,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
   await q.keyboard.press('Escape');
   await q.click('#btnExport'); await q.waitForTimeout(200);
   const items = await q.$$eval('.menu [data-x]', bs => bs.map(x => x.dataset.x));
-  ok(JSON.stringify(items) === '["ro-xlsx","xlsx-plain","csv","csv-all"]', 'Save & share offers the workbook itself, a plain copy of the values and the view as CSV (' + items.join(', ') + ')');
+  ok(JSON.stringify(items) === '["ro-xlsx","xlsx-plain","csv"]', 'Save & share offers the workbook itself, a plain copy of the values and the view as CSV (with a hidden-columns tick box) (' + items.join(', ') + ')');
   { const [dl] = await Promise.all([q.waitForEvent('download'), q.click('.menu [data-x="ro-xlsx"]')]); const f = path.join(out, 'ro_download.xlsx'); await dl.saveAs(f);
     const XLSX = require('xlsx'), w = XLSX.readFile(f), sn = w.SheetNames.find(n => /formus_TestTask/i.test(n)), rows = XLSX.utils.sheet_to_json(w.Sheets[sn], { header: 1 });
     ok(dl.suggestedFilename() === 'Import_Test_Model.xlsx' && rows.some(r => r.includes('Read-only check value')), 'Download the workbook gives the Excel file inside the copy, with the edits written in'); }
