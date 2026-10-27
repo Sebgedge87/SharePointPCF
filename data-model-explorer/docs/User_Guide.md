@@ -97,6 +97,8 @@ When the page reopens a workbook from last time, the Overview says which one, so
 | Relationship type not recorded | Info | Set Relationship Type to `N:1` on lookups you have confirmed |
 | Calculated or rollup field to create by hand | Info | Nothing to fix: listed for after the import |
 | Logical name format; custom field without a publisher prefix; no primary key field listed | Info | Usually Microsoft's own fields; check your own |
+| Copy of a system field | Warning | A field such as `fp_createdon` would be a second copy of a column Dataverse creates on every table (`createdon`). Use the system field and remove the row; it is left out of a generated solution |
+| Prefix not one of yours | Info | A custom field's prefix is neither one of your publishers' nor a Microsoft one. Add it in Publishers and prefixes if it is yours, or correct the name. Only checked once you have saved your publishers |
 
 Checks starting "Dataverse" appear only after you load Dataverse metadata (see Comparing with Dataverse).
 
@@ -138,6 +140,7 @@ Every table tab is a page: its details along the top, counts by field type, and 
 
 - **Sidebar.** Tables grouped by area, with their field and lookup counts. Type in the box at the top to filter by name or logical name.
 - **Search.** The box in the header (shortcut `/`) searches the open table, or every field in **All fields**.
+- **Back.** The ← button beside the search box returns to the previous screen (a table, the Overview, Checks, the ERD), as do the browser's Back, `Alt`+`←` and a mouse's back button.
 - **Column filters.** The funnel icon on any column header filters by its values. Active filters show above the grid with a × to clear each one.
 - **Quick filters.** **Edited only** shows rows you have changed; **Area** (in All fields) limits the list to areas; the counts by field type filter to that type when clicked.
 - **Columns ▾** shows or hides columns. Schema Name, Type and Relationship Name are hidden by default.
@@ -153,6 +156,8 @@ Every table tab is a page: its details along the top, counts by field type, and 
 - Columns with a fixed set of values (Attribute Type, Required Level, Relationship Type, Cascade Delete and similar) edit as a **dropdown**; **＋ New value…** adds one.
 - Edited cells are highlighted. The row panel shows the original value with **revert**, and the **Changes** button lists every edit.
 - In the row panel, `j` and `k` (or ↑ ↓) move to the next and previous row.
+- Changing a field's **Attribute Type** to **Lookup** asks which table it looks up to, then adds `Targets:` and the table to Additional data (and N:1 as the Relationship Type if it is blank). **Skip** leaves it for Checks to flag.
+- A dropdown or any text that is cut short shows in full when you hover over it.
 
 ![Editing a cell: a dropdown for Required Level](images/07-edit.png)
 
@@ -207,7 +212,7 @@ Dataverse primary keys are always unique identifiers (GUIDs) created with the ta
 | Current view as CSV / all columns | The rows you can see, with the visible columns or all of them |
 | Change log (CSV) | Your edits |
 
-The first two only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list and new table details into empty rows above it, so nothing moves. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section), **nothing is saved**, the reason is shown, and your edits are kept: use **New version in template format** instead.
+The first two only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list. A table detail the sheet doesn't have yet (for example Primary Name Column or Primary Key) goes into an empty row above the field list or, when there is none, into a row inserted just below the last detail: everything underneath moves down with it, including merged cells, dropdown lists, conditional formatting, filters and the frozen header. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section, or the sheet has an Excel table, a drawing, comments, or a formula on another sheet pointing at it, so rows can't be inserted), **nothing is saved**, the reason is shown, and your edits are kept: use **New version in template format** instead.
 
 Every workbook download asks for a file name first, suggesting the next version: `Model v1.2` becomes `Model v1.3`, `Model 1.4` becomes `Model 1.5`, and other names get `(updated)` or `(edited)`.
 
@@ -282,6 +287,16 @@ If Dataverse rejects a link (usually a very long one), use the one-link-per-tabl
 | Dataverse relationship not documented; custom Dataverse field not documented | The environment has it, the workbook doesn't |
 | Table not in the Dataverse metadata | No definition loaded for that table |
 
+## Publishers and prefixes
+
+**More ▾ → Publishers and prefixes** lists your customisation prefixes and the publisher each belongs to: the prefix (for example `cxp`, `ax` or `portal`), the publisher's unique name, its display name and its choice value prefix. They are kept in this browser for every workbook.
+
+- **Checks** count a field as yours when it starts with one of your prefixes, and flag a custom field whose prefix is neither yours nor Microsoft's.
+- **＋ Add field** gives a new field the table's own prefix, or your usual one.
+- **Build solution** suggests your prefixes in its Prefix box and fills in that prefix's publisher. Building with a new prefix adds it to the list.
+- **Microsoft and other vendors' prefixes** are treated as out of the box. The default is `ms*, adx`: an entry ending in `*` matches every prefix that starts with it, so `ms*` covers `msdyn`, `mspp`, `msdynce` and the rest. Add any others you use, such as a partner's.
+- Prefixes used in the workbook that are not listed appear under the table, to add with one click. **Reset** goes back to guessing your prefixes from the custom tables, as before.
+
 ## Generating a Dataverse solution
 
 **Export → Dataverse solution (.zip)…** (or **Build solution…** on the Overview) turns the workbook into an unmanaged solution, so nothing is created by hand in Power Apps. Clear the errors in Checks first.
@@ -306,7 +321,7 @@ If Dataverse rejects a link (usually a very long one), use the one-link-per-tabl
 
 **What is built:** every new table with your prefix, with its primary name column, primary key, ownership, notes and audit settings, and its fields; your fields on standard tables such as Contact, without changing anything else about those tables; a relationship for every lookup and customer lookup, with its cascade setting; every N:N relationship. Text length and format, number ranges and precision, currency precision, date format, Yes/No labels, choice options and values, defaults, required level and field security carry over.
 
-**Not built** (listed in the build report instead): calculated and rollup fields, activity tables, lookups to several tables, image and file fields, choice fields with no options, tables with no primary name column or a primary key that isn't a unique identifier, forms and views.
+**Not built** (listed in the build report instead): calculated and rollup fields, prefixed copies of system fields (such as `fp_createdon`: Dataverse creates `createdon` on every table), activity tables, lookups to several tables, image and file fields, choice fields with no options, tables with no primary name column or a primary key that isn't a unique identifier, forms and views.
 
 | In the download | What it is |
 | --- | --- |
@@ -353,7 +368,7 @@ If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1`
 | --- | --- |
 | A table shows in the page that isn't in my workbook | You are looking at a different workbook kept in the browser: pick yours in the workbook selector, or **Manage files… → Remove all…** |
 | My edits disappeared after opening a file | You opened it as a **different workbook**, which has its own edits. Switch back in the workbook selector |
-| Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a detail before the field list. Use **New version in template format**, or add empty rows in Excel and reload |
+| Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a sheet that rows can't be inserted into (it holds an Excel table, a drawing or comments, or another sheet's formula points at it). Use **New version in template format**, or add empty rows in Excel and reload |
 | **Save back to the original file** is greyed out | Open the file with the Open workbook… or Load version… button (not by dragging it) in Chrome or Edge to link it, or use **Download an updated copy** |
 | A lookup shows a plain grey line in the ERD and "relationship type not recorded" | Set Relationship Type to `N:1` on that lookup once confirmed |
 | A table is "Not included": no Primary Name Column | Open a text field in that table and click **Set as primary name** |
@@ -411,5 +426,7 @@ The page reads workbooks in the FormusPro data-model template: one **Table Dicti
 **Many-to-many relationships.** Add a row whose Logical Name is the relationship name (for example `formus_project_resource`), Relationship Type `N:N`, and `Targets: formus_resource` in Additional data.
 
 **Forms and Views.** Rows starting `Forms:` and `Views:` below the field list are read and shown under the field list; they are not built in Dataverse.
+
+**Sub-grids.** A row in the field list whose Attribute Type is `Sub grid` documents a sub-grid on a form. It needs no logical name, and it is not checked, counted as a field or built.
 
 **Older workbooks.** Columns and table details the template has but your workbook lacks (for example Relationship Type) are added in the page, marked **added**, and written to the file with the first value you save in them. A column you add to the template's header row is read, shown, filterable and editable too.

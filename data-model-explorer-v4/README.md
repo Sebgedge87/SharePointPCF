@@ -29,7 +29,7 @@ resource) works as in 3.0. The full guide, with screenshots, is [`docs/User_Guid
 
 ## Putting it in an environment
 
-`FORMUS_DataModelExplorer_4_0_2_0.zip` in this folder is an unmanaged solution holding the page as one HTML web
+`FORMUS_DataModelExplorer_4_0_3_0.zip` in this folder is an unmanaged solution holding the page as one HTML web
 resource, `formus_/dme/DataModelExplorer.html` (2.4 MB; the default web resource limit is 5 MB), with publisher unique
 name `FORMUS`, prefix `formus` and choice value prefix `75047`. It uses the same web resource name and id as 3.0, so
 importing it into an environment that has 3.0 replaces 3.0 there. **The publisher unique name must match the one in the

@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 5.0.2 · 23 October 2026"
+subtitle: "Version 5.0.3 · 23 October 2026"
 ---
 
 ## Introduction
@@ -57,7 +57,7 @@ This guide describes version 5.0.0, in the SharePointPCF repository under `data-
 | --- | --- |
 | Workbook (shows the file's name) | Load a newer version of this workbook, open another one, or switch to one kept in this browser |
 | Changes | Every edit you have made, with a count. The label beside it says whether your edits are **kept in browser**; on a narrow screen it is a green or red dot |
-| Check | Checks, Compare with Dataverse, What changed (after loading a newer version) and Template. The count is errors plus warnings |
+| Check | Checks, Compare with a solution (or This environment), Publishers and prefixes, What changed (after loading a newer version) and Template. The count is errors plus warnings |
 | Save & share | Save the workbook, make a read-only copy or a CSV, and the build and log downloads, in groups |
 | Build solution | Turn the workbook into a Dataverse solution. Greyed out until a workbook is open |
 | ? | How it works |
@@ -119,7 +119,7 @@ The Overview is the landing page: it sizes the model, shows how complete it is, 
 
 ![The Overview](images/02-overview.png)
 
-**1** Count cards open their list · **2** Open all checks · **3** Build solution… · **4** Check against Dataverse…
+**1** Count cards open their list · **2** Open all checks · **3** Build solution… · **4** Compare with a solution…
 
 When the page reopens a workbook from last time, the Overview says which one, so you can switch if it is not the one you want.
 
@@ -145,8 +145,10 @@ When the page reopens a workbook from last time, the Overview says which one, so
 | Relationship type not recorded | Info | Set Relationship Type to `N:1` on lookups you have confirmed |
 | Calculated or rollup field to create by hand | Info | Nothing to fix: listed for after the import |
 | Logical name format; custom field without a publisher prefix; no primary key field listed | Info | Usually Microsoft's own fields; check your own |
+| Copy of a system field | Warning | A field such as `fp_createdon` would be a second copy of a column Dataverse creates on every table (`createdon`). Use the system field and remove the row; it is left out of a generated solution |
+| Prefix not one of yours | Info | A custom field's prefix is neither one of your publishers' nor a Microsoft one. Add it in Publishers and prefixes if it is yours, or correct the name. Only checked once you have saved your publishers |
 
-Checks starting "Dataverse" appear only after you load Dataverse metadata (see Comparing with Dataverse).
+Checks starting "Dataverse" appear only after you load Dataverse metadata (see Comparing with a solution).
 
 Use the **Errors**, **Warnings** and **Info** buttons (with their counts) to show or hide each severity, the **Area** filter to narrow the list, and the search box to find a table or field. **Export (CSV)** downloads the list.
 
@@ -188,6 +190,7 @@ Every table tab is a page: its details along the top, counts by field type, and 
 
 - **Sidebar.** Tables grouped by area, with their field and lookup counts. Type in the box at the top to filter by name or logical name.
 - **Search.** The box in the header (shortcut `/`) searches the open table, or every field in **All fields**.
+- **Back.** The ← button beside the search box returns to the previous screen (a table, the Overview, Checks, the ERD), as do the browser's Back, `Alt`+`←` and a mouse's back button.
 - **Column filters.** The funnel icon on any column header filters by its values. Active filters show above the grid with a × to clear each one.
 - **Quick filters.** **Edited only** shows rows you have changed; **Area** (in All fields) limits the list to areas; the counts by field type filter to that type when clicked.
 - **Columns ▾** shows or hides columns. Schema Name, Type and Relationship Name are hidden by default.
@@ -203,6 +206,8 @@ Every table tab is a page: its details along the top, counts by field type, and 
 - Columns with a fixed set of values (Attribute Type, Required Level, Relationship Type, Cascade Delete and similar) edit as a **dropdown**; **＋ New value…** adds one.
 - Edited cells are highlighted. The row panel shows the original value with **revert**, and the **Changes** button lists every edit.
 - In the row panel, `j` and `k` (or ↑ ↓) move to the next and previous row.
+- Changing a field's **Attribute Type** to **Lookup** asks which table it looks up to, then adds `Targets:` and the table to Additional data (and N:1 as the Relationship Type if it is blank). **Skip** leaves it for Checks to flag.
+- A dropdown or any text that is cut short shows in full when you hover over it.
 
 ![Editing a cell: a dropdown for Required Level](images/07-edit.png)
 
@@ -260,7 +265,7 @@ The menu is in four groups: **Save the workbook**, **Share**, **For the build** 
 | Change log (CSV) | Your edits |
 | Read-only copy (.html) | A copy of the page holding this workbook, with your edits written in, that can be viewed but not changed (next section) |
 
-The first two only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list and new table details into empty rows above it, so nothing moves. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section), **nothing is saved**, the reason is shown, and your edits are kept: use **New version in template format** instead.
+The first two only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list. A table detail the sheet doesn't have yet (for example Primary Name Column or Primary Key) goes into an empty row above the field list or, when there is none, into a row inserted just below the last detail: everything underneath moves down with it, including merged cells, dropdown lists, conditional formatting, filters and the frozen header. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section, or the sheet has an Excel table, a drawing, comments, or a formula on another sheet pointing at it, so rows can't be inserted), **nothing is saved**, the reason is shown, and your edits are kept: use **New version in template format** instead.
 
 Every workbook download asks for a file name first, suggesting the next version: `Model v1.2` becomes `Model v1.3`, `Model 1.4` becomes `Model 1.5`, and other names get `(updated)` or `(edited)`.
 
@@ -301,7 +306,7 @@ Uploaded to an environment as a web resource, the page reads the environment's t
 
 ### Putting it in an environment
 
-1. Get the solution zip: `FORMUS_DataModelExplorer_5_0_2_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
+1. Get the solution zip: `FORMUS_DataModelExplorer_5_0_3_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
 2. Import it into the environment (Power Apps → Solutions → Import, or `pac solution import`). It holds one HTML web resource of about 2.4 MB, under the 5 MB default limit.
 3. Open `https://<your-org>.crm.dynamics.com/WebResources/<prefix>_/dme/DataModelExplorer.html`, or add that web resource to an app's navigation.
 
@@ -380,7 +385,7 @@ The template sets which columns and table details every workbook has, the dropdo
 
 ![The Check menu](images/14-check.png)
 
-**1** Check ▾ · **2** Compare with Dataverse… · **3** Template
+**1** Check ▾ · **2** Compare with a solution… · **3** Template
 
 Click **Check ▾ → Template**. The panel lists tables not in the template, extra columns the workbook has, and columns or details it is missing. A pink count on the button shows how many tables differ.
 
@@ -415,28 +420,37 @@ Click **Check ▾ → Template**. The panel lists tables not in the template, ex
 
 A new column needs a code change only if the solution builder or a check should use it.
 
-## Comparing with Dataverse
+## Comparing with a solution
 
-The page can check the workbook against the real table definitions in a Dataverse environment: fields, types, required levels, relationships (with N:N and cascade settings) and alternate keys. It stays offline: you open the links yourself while signed in, save what they return, and load the files.
+Opened as a file, the page checks the workbook against a solution exported from Power Apps: its tables, fields (types, required levels, custom or standard), relationships with their cascade settings, N:N and alternate keys. Nothing is uploaded: the file is read in the browser. Inside Dynamics 365 or XrmToolBox, the same panel picks a solution straight from the environment instead (Using it inside Dynamics 365).
 
-1. Click **Check against Dataverse…** on the Overview, or **Check ▾ → Compare with Dataverse…**.
-2. Enter the **environment URL**, for example `https://yourorg.crm11.dynamics.com`. The page builds one link per 20 tables.
-3. Open each link in the browser where you are signed in to Dataverse, and save the page (`Ctrl`+`S`) as a `.json` file.
-4. Click **Choose JSON files…** (or drop them onto the page). You can load several, and add more later.
-5. Click **See the differences**: the Dataverse checks appear in **Checks**, and each table page shows what Dataverse has.
+1. In Power Apps, open **Solutions**, select the solution and choose **Export** (managed or unmanaged).
+2. Click **Compare with a solution…** on the Overview, or **Check ▾ → Compare with a solution…**.
+3. Click **Add a solution (.zip)…** and pick the exported file, or drop it onto the page. Several can be added at once; a solution built with **Build solution** works too.
+4. Click **See the differences**: the Dataverse checks appear in **Checks**, and each table page shows what the solution has.
 
-![The Dataverse check panel](images/16-dataverse.png)
+![The Dataverse panel](images/16-dataverse.png)
 
-**1** Environment URL · **2** Open each link · **3** Choose JSON files…
+**1** Add a solution (.zip)… · **2** How to export one from Power Apps
 
-If Dataverse rejects a link (usually a very long one), use the one-link-per-table list instead. The metadata is kept in the browser for this workbook; **Remove imported metadata** forgets it.
+Only your own tables are expected in the solution: a standard table such as Account that it doesn't hold is not flagged. A table included in the solution as a shell (only the columns you added) is compared on those columns, so its other standard columns are not reported missing. The comparison is kept in the browser for this workbook; **Remove** forgets it.
 
 | Dataverse check | Means |
 | --- | --- |
-| Field not in Dataverse; relationship not in Dataverse | The workbook has it, the environment doesn't (yet) |
-| Attribute type or required level differs | Workbook and environment disagree |
-| Dataverse relationship not documented; custom Dataverse field not documented | The environment has it, the workbook doesn't |
-| Table not in the Dataverse metadata | No definition loaded for that table |
+| Field not in Dataverse | The workbook has it, the solution doesn't (yet) |
+| Attribute type or required level differs | Workbook and solution disagree |
+| Dataverse relationship not documented; custom Dataverse field not documented; table in the solution but not documented | The solution has it, the workbook doesn't |
+| Table not in the Dataverse metadata | One of your tables is not in the solution |
+
+## Publishers and prefixes
+
+**Check ▾ → Publishers and prefixes** lists your customisation prefixes and the publisher each belongs to: the prefix (for example `cxp`, `ax` or `portal`), the publisher's unique name, its display name and its choice value prefix. They are kept in this browser for every workbook.
+
+- **Checks** count a field as yours when it starts with one of your prefixes, and flag a custom field whose prefix is neither yours nor Microsoft's.
+- **＋ Add field** gives a new field the table's own prefix, or your usual one.
+- **Build solution** suggests your prefixes in its Prefix box and fills in that prefix's publisher. Building with a new prefix adds it to the list.
+- **Microsoft and other vendors' prefixes** are treated as out of the box. The default is `ms*, adx`: an entry ending in `*` matches every prefix that starts with it, so `ms*` covers `msdyn`, `mspp`, `msdynce` and the rest. Add any others you use, such as a partner's.
+- Prefixes used in the workbook that are not listed appear under the table, to add with one click. **Reset** goes back to guessing your prefixes from the custom tables, as before.
 
 ## Generating a Dataverse solution
 
@@ -462,7 +476,7 @@ If Dataverse rejects a link (usually a very long one), use the one-link-per-tabl
 
 **What is built:** every new table with your prefix, with its primary name column, primary key, ownership, notes and audit settings, and its fields; your fields on standard tables such as Contact, without changing anything else about those tables; a relationship for every lookup and customer lookup, with its cascade setting; every N:N relationship. Text length and format, number ranges and precision, currency precision, date format, Yes/No labels, choice options and values, defaults, required level and field security carry over.
 
-**Not built** (listed in the build report instead): calculated and rollup fields, activity tables, lookups to several tables, image and file fields, choice fields with no options, tables with no primary name column or a primary key that isn't a unique identifier, forms and views.
+**Not built** (listed in the build report instead): calculated and rollup fields, prefixed copies of system fields (such as `fp_createdon`: Dataverse creates `createdon` on every table), activity tables, lookups to several tables, image and file fields, choice fields with no options, tables with no primary name column or a primary key that isn't a unique identifier, forms and views.
 
 | In the download | What it is |
 | --- | --- |
@@ -500,7 +514,7 @@ If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1`
 2. Create the fields in `calculated-and-rollup-fields.xlsx` in Power Apps, with their formulas.
 3. For tables with **Has Activities** set, turn on Activities in the table's properties.
 4. Lay out forms and views.
-5. Optionally, compare the workbook with the environment (Comparing with Dataverse) to confirm everything landed.
+5. Optionally, compare the workbook with the environment (Comparing with a solution) to confirm everything landed.
 6. Export the solution from development as **managed** for test and production.
 
 ## Troubleshooting and FAQ
@@ -509,7 +523,7 @@ If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1`
 | --- | --- |
 | A table shows in the page that isn't in my workbook | You are looking at a different workbook kept in the browser: pick yours in the workbook selector, or **Manage files… → Remove all…** |
 | My edits disappeared after opening a file | You opened it as a **different workbook**, which has its own edits. Switch back in the workbook selector |
-| Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a detail before the field list. Use **New version in template format**, or add empty rows in Excel and reload |
+| Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a sheet that rows can't be inserted into (it holds an Excel table, a drawing or comments, or another sheet's formula points at it). Use **New version in template format**, or add empty rows in Excel and reload |
 | **Save to the original file** is greyed out | Open the file with Open workbook… or Load a newer version… (not by dragging it) in Chrome or Edge to link it, or use **Download an updated copy** |
 | A lookup shows a plain grey line in the ERD and "relationship type not recorded" | Set Relationship Type to `N:1` on that lookup once confirmed |
 | A line is missing from the ERD | Its row may be hidden: look for a faded row with a crossed-out eye and click the eye, or click **show all** in the side panel |
@@ -577,5 +591,7 @@ The page reads workbooks in the FormusPro data-model template: one **Table Dicti
 **Many-to-many relationships.** Add a row whose Logical Name is the relationship name (for example `formus_project_resource`), Relationship Type `N:N`, and `Targets: formus_resource` in Additional data.
 
 **Forms and Views.** Rows starting `Forms:` and `Views:` below the field list are read and shown under the field list; they are not built in Dataverse.
+
+**Sub-grids.** A row in the field list whose Attribute Type is `Sub grid` documents a sub-grid on a form. It needs no logical name, and it is not checked, counted as a field or built.
 
 **Older workbooks.** Columns and table details the template has but your workbook lacks (for example Relationship Type) are added in the page, marked **added**, and written to the file with the first value you save in them. A column you add to the template's header row is read, shown, filterable and editable too.
