@@ -3426,7 +3426,7 @@ function renderErdPage(){
     <div class="dim" id="erdcore" style="margin:2px 0 6px"></div><div class="dim" id="erdhid" style="margin:0 0 6px"></div><div class="quick"><button data-eq="custom">Custom only</button><button data-eq="all">All</button><button data-eq="none">None</button></div>
     <div class="quick" style="margin-top:8px">${hasAreas()?`<button data-areabtn="erd" class="${E.areas.size?'on':''}" style="${E.areas.size?'border-color:var(--accent);background:var(--accent-bg)':''}">Area: ${esc(areaLabel(E.areas))} ▾</button><label style="font-size:12.5px"><input type="checkbox" id="erdacol" ${E.acol?'checked':''}> Colour by area</label>`:`<span class="dim" style="font-size:12.5px">Fill in <b>Area</b> in the Table Dictionary to pick tables by area.</span>`}</div>
     <div class="quick" style="margin-top:4px"><button data-eq="shown" title="Tick every table currently shown by the filter below">Select shown</button><button data-eq="unshown" title="Untick every table currently shown by the filter below">Clear shown</button></div>
-    <div style="margin-top:8px"><input type="search" id="erdq" placeholder="Filter by name or logical name, e.g. rhs_" value="${esc(E.q)}"></div></div>
+    <div style="margin-top:8px"><input type="search" id="erdq" placeholder="Filter by name or logical name${(()=>{const p=[...ownPrefixes()][0]; return p?", e.g. "+esc(p)+"_":""})()}" value="${esc(E.q)}"></div></div>
     <div class="lst" id="erdlst">${list}</div></div>
     <div class="stage"><div class="tb"><span class="info" id="erdinfo"></span><span class="grow"></span>
       <button class="btn" data-ez="0.8">−</button><button class="btn" data-ez="0" title="Fit the whole diagram in the panel">Fit</button><button class="btn" data-ez="1.25">+</button>

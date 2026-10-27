@@ -59,6 +59,8 @@ const SCALE = 1.25, boxes = {};
   await p.click('[data-cclose]');
   await p.click('#btnExport'); await p.waitForTimeout(300);
   await snap('11-export', ['#btnExport', '.menu [data-x="save"]', '.menu [data-x="ro-copy"]', '.menu [data-x="solution"]'], '.menu');
+  // the menu as Chrome and Edge show it; then Save as… names a download, as other browsers do, for the next picture
+  await p.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
   await p.click('.menu [data-x="xlsx-orig"]'); await p.waitForSelector('.namebox');
   await snap('12-filename', ['.namebox input', '.namebox [data-n="1"]'], '.namebox');
   await p.click('.namebox [data-n="0"]');

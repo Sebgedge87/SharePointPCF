@@ -3911,7 +3911,7 @@ function renderErdPage(){
   const seg=(k,opts)=>`<div class="seg">${opts.map(([v,l])=>`<button data-ek="${k}" data-ev="${v}" class="${E[k]===v?'on':''}">${l}</button>`).join('')}</div>`;
   main.innerHTML=`<div class="erdv"><div class="ctl"><div class="ctop"><h1>ERD</h1>
     <div class="esec">Tables <span class="dim" id="erdcount"></span></div>
-    <input type="search" id="erdq" placeholder="Filter tables, e.g. rhs_" value="${esc(E.q)}">
+    <input type="search" id="erdq" placeholder="Filter tables${(()=>{const p=[...ownPrefixes()][0]; return p?", e.g. "+esc(p)+"_":""})()}" value="${esc(E.q)}">
     <div class="quick"><button data-eq="custom">Custom only</button><button data-eq="all">All</button><button data-eq="none">None</button>${hasAreas()?`<button data-areabtn="erd" class="${E.areas.size?'on':''}" style="${E.areas.size?'border-color:var(--accent);background:var(--accent-bg)':''}">Area: ${esc(areaLabel(E.areas))} ▾</button>`:''}</div>
     <div class="quick" id="erdshown" style="${E.q?'':'display:none'}"><button data-eq="shown" title="Tick every table the filter shows">Tick all shown</button><button data-eq="unshown" title="Untick every table the filter shows">Untick all shown</button></div>
     <div class="dim enote" id="erdcore"></div><div class="dim enote" id="erdhid"></div>
