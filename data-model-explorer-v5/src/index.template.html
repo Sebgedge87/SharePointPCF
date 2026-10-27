@@ -33,6 +33,8 @@ a{color:var(--accent);text-decoration:underline;text-decoration-color:rgba(10,72
 #btnMob{display:none}
 .hidebtn{display:none!important}
 .wbname{display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.menu kbd{float:right;margin-left:12px;font:500 11px/1.6 inherit;color:var(--faint)}
+.menu .mchk{display:flex;align-items:center;gap:6px;padding:0 9px 6px 9px;font-size:12px;color:var(--dim);cursor:pointer}
 .menu .mh{padding:6px 9px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650}
 .menu{max-height:70vh;overflow:auto}
 .ovnote{display:flex;gap:10px;align-items:flex-start;max-width:900px;margin:12px 0 0}
@@ -921,7 +923,7 @@ async function exportTemplated(){
     [26,30,24,50,50].forEach((w,i)=>cl.getColumn(i+1).width=w);
   }
   const out=await tw.xlsx.writeBuffer();
-  const fn=await nameDialog(nextName(S.fileName,' (edited)'),'New version in template format'); if(!fn) return;
+  const fn=await nameDialog(nextName(S.fileName,' (edited)'),'Rebuilt in the current template'); if(!fn) return;
   download(fn,new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
   toast('Exported '+fn+' in template format');
 }
@@ -1727,14 +1729,20 @@ function checkMenu(anchor){
 function exportMenu(anchor){
   closePops();
   const el=document.createElement('div'); el.className='menu';
-  const save=S.handle?'<button data-x="save-orig">Save to the original file<small>Writes your edits into '+esc(S.fileName)+'</small></button>':'<button disabled title="Open the file with Workbook ▾ → Open in Chrome or Edge to link it">Save to the original file<small>Open the file in Chrome or Edge to link it</small></button>';
+  const n=changeTotal(), picker=!!window.showSaveFilePicker;
+  // Save writes to the file the page is linked to; with none yet, it asks where (or downloads, where the browser can't ask)
+  const save=`<button data-x="save">Save<kbd>Ctrl+S</kbd><small>${S.handle?(n?'Writes '+n+' change'+(n===1?'':'s')+' into '+esc(S.fileName):'No changes to save · linked to '+esc(S.fileName)):picker?'Choose where to save it: the page saves there from then on':'Downloads the workbook with your edits written in'}</small></button>`+
+    `<button data-x="xlsx-orig">Save as…<small>${picker?'A new file, same formatting, your edits written in':'Download a copy, same formatting, your edits written in'}</small></button>`;
+  // one CSV item; the tick box adds the hidden columns
+  const csvItem=`<button data-x="csv">This view as CSV<small>The rows you can see${S.view?' in '+esc(S.view.label):''}</small></button><label class="mchk"><input type="checkbox" id="csvAll"> include hidden columns</label>`;
   el.innerHTML=RO?
-    `<div class="mh">This workbook</div><button data-x="ro-xlsx">Download the workbook (.xlsx)<small>${esc(EMBEDDED_NAME)}, formatting kept</small></button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)<small>Values only, no styling</small></button><hr><div class="mh">What you see</div><button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>`:
-    `<div class="mh">Save the workbook</div>${save}<button data-x="xlsx-orig">Download an updated copy (.xlsx)<small>Same file and formatting, your edits written in</small></button><button data-x="xlsx">New version in template format (.xlsx)<small>The whole workbook in the current template</small></button><button data-x="xlsx-plain">Full workbook, plain values (.xlsx)<small>Values only, no styling</small></button>`+
-    `<hr><div class="mh">Share</div><button data-x="ro-copy">Read-only copy (.html)…<small>For a client or support team: this workbook, with your edits, to view but not change</small></button><button data-x="csv">Current view as CSV<small>The rows and columns you can see</small></button><button data-x="csv-all">Current view as CSV, all columns<small>Includes hidden columns</small></button>`+
-    `<hr><div class="mh">For the build</div><button data-x="solution">Dataverse solution (.zip)…<small>Same as Build solution</small></button><button data-x="ps1">Import script (import.ps1)<small>Imports a solution zip with pac: installs pac if needed and signs you in</small></button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>`+
+    `<div class="mh">This workbook</div><button data-x="ro-xlsx">Download the workbook (.xlsx)<small>${esc(EMBEDDED_NAME)}, formatting kept</small></button><button data-x="xlsx-plain">Values only, no formatting (.xlsx)<small>Every sheet's values, no styling</small></button><hr><div class="mh">What you see</div>${csvItem}`:
+    `<div class="mh">Save</div>${save}`+
+    `<hr><div class="mh">Other formats</div><button data-x="xlsx">Rebuilt in the current template (.xlsx)<small>The whole workbook laid out afresh in the template</small></button><button data-x="xlsx-plain">Values only, no formatting (.xlsx)<small>Every sheet's values, no styling</small></button>`+
+    `<hr><div class="mh">Share</div><button data-x="ro-copy">Read-only copy (.html)…<small>For a client or support team: this workbook, with your edits, to view but not change</small></button>${csvItem}`+
+    `<hr><div class="mh">Build</div><button data-x="solution">Dataverse solution (.zip)…<small>Same as Build solution</small></button><button data-x="ps1">Import script (import.ps1)<small>Imports a solution zip with pac: installs pac if needed and signs you in</small></button><button data-x="manual">Calculated and rollup fields (.xlsx)<small>Per table, to create by hand after import</small></button>`+
     `<hr><div class="mh">Logs</div><button data-x="log">Change log (CSV)<small>Every edit, original against new</small></button>${S.diff?'<button data-x="diff">Version differences (CSV)</button>':''}`;
-  el.addEventListener('click',e=>{const b=e.target.closest('[data-x]');const x=b&&b.dataset.x;if(!x)return;closePops();doExport(x)});
+  el.addEventListener('click',e=>{const b=e.target.closest('[data-x]');let x=b&&b.dataset.x;if(!x)return; if(x==='csv'&&el.querySelector('#csvAll').checked) x='csv-all'; closePops();doExport(x)});
   placePop(el,anchor); el.style.left=Math.max(8,anchor.getBoundingClientRect().right-el.offsetWidth)+'px';
 }
 
@@ -1960,7 +1968,7 @@ function shiftRows(xml,at,K){
 // tells the person which edits could not be written; nothing is saved or cleared while this list is not empty
 function reportMissed(r,what){
   const items=r.missed.slice(0,12).map(m=>'<li><b>'+esc(m.e.sh.label)+'</b> · <span class="mono">'+esc(editLabel(m.e))+'</span> · '+esc(m.e.col)+' <span class="dim">('+esc(m.why)+')</span></li>').join('');
-  return dlg({title:what+' was stopped',body:r.missed.length+' of your changes could not be written into '+esc(S.fileName)+', so nothing was saved and all your edits are kept.<ul style="margin:8px 0 0;padding-left:18px">'+items+(r.missed.length>12?'<li>… and '+(r.missed.length-12)+' more</li>':'')+'</ul><br>Use <b>New version in template format</b> to export everything instead.',ok:'OK',cancel:null});
+  return dlg({title:what+' was stopped',body:r.missed.length+' of your changes could not be written into '+esc(S.fileName)+', so nothing was saved and all your edits are kept.<ul style="margin:8px 0 0;padding-left:18px">'+items+(r.missed.length>12?'<li>… and '+(r.missed.length-12)+' more</li>':'')+'</ul><br>Use <b>Save &amp; share → Rebuilt in the current template</b> to export everything instead.',ok:'OK',cancel:null});
 }
 // the suggested name for a new copy: a version number in the name goes up by one (v1.2 -> v1.3), otherwise a suffix is added
 function nextName(name,suffix){
@@ -2014,9 +2022,9 @@ async function exportOriginal(){
 }
 async function saveToOriginal(){
   const h=S.handle; if(!h) return toast('Open the file with Workbook ▾ in Chrome or Edge to link it first');
-  if(!hasWrites()) return toast('No edits to save');
-  const n=changeTotal();
-  if(!await dlg({title:'Overwrite the original file?',body:'This replaces <b>'+esc(S.fileName)+'</b> on your computer with your '+n+' change'+(n===1?'':'s')+'. Only the changed cells (and any rows added for new table details) change.',ok:'Overwrite',danger:true})) return;
+  if(!hasWrites()) return toast('No changes to save');
+  // Save saves: only the changed cells (and any rows added for new table details) change, and the file on disk is
+  // checked below so another program's changes are never overwritten without asking
   try{
     let perm=await h.queryPermission({mode:'readwrite'}); if(perm!=='granted') perm=await h.requestPermission({mode:'readwrite'});
     if(perm!=='granted') return toast('Permission to write to the file was not given');
@@ -2032,7 +2040,7 @@ async function saveToOriginal(){
       if(await dlg({title:'The original file could not be found',body:'<b>'+esc(S.fileName)+'</b> has been moved, renamed or deleted since it was opened, or the browser lost its link to it. Choose where to save the updated workbook, and the page links to that file from now on. Your edits are kept until it is saved.',ok:'Save as…'})) return saveAsNew();
       return;
     }
-    toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use "Download an updated copy" instead.')
+    toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use Save as… to save a copy instead.')
   }
 }
 // save the updated workbook to a file you choose, and link the page to it
@@ -2042,7 +2050,7 @@ async function saveAsNew(){
     if(r.missed.length) return reportMissed(r,'Saving');
     let h; try{h=await showSaveFilePicker({suggestedName:S.fileName,types:[{description:'Excel workbook',accept:{[XLSX_MIME]:['.xlsx']}}]})}catch(e){return}
     await writeSaved(h,r);
-  }catch(err){console.error(err);toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use "Download an updated copy" instead.')}
+  }catch(err){console.error(err);toast('Could not write to the file ('+(err&&err.message||err)+'). Your edits are kept. Use Save as… to save a copy instead.')}
 }
 // write, read back, and only then let go of the edits that are now in the file
 async function writeSaved(h,r){
@@ -2082,12 +2090,16 @@ function doExport(kind){
   } else if(kind==='log'){
     if(!S.edits.size) return toast('No changes to export');
     download(base+' - change log.csv',new Blob([csv(changeRows())],{type:'text/csv'}));
+  } else if(kind==='save'){
+    if(S.handle) saveToOriginal(); else if(window.showSaveFilePicker) saveAsNew(); else doExport('xlsx-orig');
   } else if(kind==='save-orig'){
     saveToOriginal();
   } else if(kind==='ro-xlsx'){
     download(EMBEDDED_NAME,new Blob([b64ToU8(S.curB64)],{type:XLSX_MIME})); toast('Downloaded '+EMBEDDED_NAME);
   } else if(kind==='ro-copy'){
     exportReadOnly().catch(err=>{console.error(err);toast('Could not make the read-only copy ('+err.message+')')});
+  } else if(kind==='xlsx-orig'&&window.showSaveFilePicker){
+    saveAsNew();
   } else if(kind==='xlsx-orig'){
     exportOriginal().catch(err=>{console.error(err);toast('Could not update the original ('+err.message+'). Use the template export instead.')});
   } else if(kind==='xlsx'){
@@ -2109,7 +2121,7 @@ function doExport(kind){
       XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31));
     });
     if(hasWrites()) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeRows()),'Change log');
-    nameDialog(nextName(S.fileName,' (edited)'),'Full workbook, plain values').then(fn=>{if(!fn) return; XLSX.writeFile(wb,fn); toast('Exported '+fn+'. Values only: cell styling is not carried over')});
+    nameDialog(nextName(S.fileName,' (edited)'),'Values only, no formatting').then(fn=>{if(!fn) return; XLSX.writeFile(wb,fn); toast('Exported '+fn+'. Values only: cell styling is not carried over')});
   } else if(kind==='solution'){
     solDialog();
   } else if(kind==='ps1'){
@@ -2199,11 +2211,11 @@ function renderReadme(){
   <p>The <b>template</b> is your workbook with the data removed: the same tabs, label cells, header styling, column widths, filters and frozen headers, but no rows. It is built into this file, and <b>Check ▾ → Template</b> lets you download it, swap it for a different one, or see how the loaded file compares (new tables, extra columns, missing columns).</p>
   <table>
     <tr><th>Save &amp; share option</th><th>What you get</th></tr>
-    <tr><td><b>New version in template format</b></td><td>Every tab rebuilt with the template's formatting, including your edits. Extra columns get the template header style. New tables are styled like the template's table tabs. A Change log tab is added if you made edits.</td></tr>
-    <tr><td><b>Save to the original file</b></td><td>Writes your edits straight into the workbook you opened, keeping its own formatting. Chrome and Edge only, and the file must have been opened through <b>Workbook ▾</b> (Open another workbook… or Load a newer version…) so the browser holds a link to it. You confirm the overwrite, the browser asks for write permission, and you are warned if the file on disk changed since you loaded it. The file is checked before and after writing: if any edit cannot be written, nothing is saved, your edits are kept, and you are shown which ones.</td></tr>
-    <tr><td><b>Download an updated copy (.xlsx)</b></td><td>The same as above, but as a new download. Works in every browser.</td></tr>
-    <tr><td>Full workbook, plain values</td><td>Same data without template styling. Used as a fallback.</td></tr>
-    <tr><td>Current view as CSV</td><td>Exactly the rows and columns you currently see (after filters and sorting). A second option includes the hidden columns too. Values that Excel would run as a formula are written as text.</td></tr>
+    <tr><td><b>Save</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>)</td><td>Writes your edits straight into your workbook, keeping its own formatting: only the changed cells change. The first time, if the page isn't linked to a file yet, it asks where to save (Chrome and Edge; other browsers download the workbook). If another program changed the file since you opened it, it asks before overwriting.</td></tr>
+    <tr><td><b>Save as…</b></td><td>The same, into a new file you choose, which the page then saves to.</td></tr>
+    <tr><td><b>Rebuilt in the current template</b></td><td>Every tab rebuilt with the template's formatting, including your edits. Extra columns get the template header style. New tables are styled like the template's table tabs. A Change log tab is added if you made edits.</td></tr>
+    <tr><td>Values only, no formatting</td><td>Same data without template styling. Used as a fallback.</td></tr>
+    <tr><td>This view as CSV</td><td>Exactly the rows and columns you currently see (after filters and sorting). Tick <b>include hidden columns</b> for the hidden ones too. Values that Excel would run as a formula are written as text.</td></tr>
     <tr><td>Change log / Version differences</td><td>CSVs of your edits, or of what changed between versions.</td></tr>
   </table>
   <p>Exported files can be loaded straight back in, which makes a round trip possible: <i>load, review and edit, export, reload</i>.</p>`)}
@@ -2271,7 +2283,7 @@ function renderReadme(){
     <li>Saving to the original changes only the cells you edited. Everything else in the file, including Excel's stored line breaks, formatting and validations, is left exactly as it was.</li>
     <li>If a field is <b>renamed</b> in a new version it appears as one removed field and one new field, because fields are matched on Logical Name.</li>
     <li>The <b>Forms</b> and <b>Views</b> lists at the bottom of each table tab are read separately from the fields. They are shown below the grid and exported, but are read-only and not part of search or filters. Version comparison lists forms and views added or removed.</li>
-    <li>The <b>template export</b> and the plain-values export write values as text, do not recreate Excel Table objects, comments, validations or macros, and take cell styling from the template rather than the loaded file. <b>Save to the original file</b> and <b>Download an updated copy</b> do not have these limits: they leave everything except your edited cells exactly as it was.</li>
+    <li>The <b>template export</b> and the plain-values export write values as text, do not recreate Excel Table objects, comments, validations or macros, and take cell styling from the template rather than the loaded file. <b>Save</b> and <b>Save as…</b> do not have these limits: they leave everything except your edited cells exactly as it was.</li>
     <li>If the template export fails for any reason, the tool falls back to the plain-values export and tells you.</li>
   </ul>
   <div class="note2"><b>Tip:</b> <b>Check ▾ → Template</b> shows how many tables differ from the template. It is a quick check that a new workbook really is in the expected layout before you export.</div>`)}
@@ -4260,6 +4272,8 @@ $('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{if(S.cu
 $('#sq').addEventListener('input',e=>{S.sideFilter=e.target.value;renderNav()});
 $('#btnChanges').onclick=()=>{$('#changes').classList.contains('open')?$('#changes').classList.remove('open'):renderChanges()};
 $('#btnExport').onclick=e=>{e.stopPropagation();exportMenu(e.currentTarget)};
+// Ctrl+S (Cmd+S): Save, as in the Save & share menu
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='s'){e.preventDefault(); if(!RO&&!document.querySelector('.convmask')) doExport('save')}});
 $('#btnMore').onclick=e=>{e.stopPropagation();moreMenu(e.currentTarget)};
 $('#btnCheck').onclick=e=>{e.stopPropagation();checkMenu(e.currentTarget)};
 $('#btnBuild').onclick=()=>doExport('solution');

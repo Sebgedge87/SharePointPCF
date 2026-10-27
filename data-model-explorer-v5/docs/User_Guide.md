@@ -76,7 +76,7 @@ Double-click `Data_Model_Explorer.html` to open it in Chrome or Edge, then open 
 
 **1** Open workbook… · **2** Download blank template, to start a new model
 
-**Browsers.** Chrome or Edge. Saving back to the original file uses a feature only those browsers have; everything else also works in other modern browsers.
+**Browsers.** Chrome or Edge. Saving into your own file (Save) uses a feature only those browsers have (elsewhere Save downloads); everything else also works in other modern browsers.
 
 ## Switching between workbooks
 
@@ -251,23 +251,23 @@ Dataverse primary keys are always unique identifiers (GUIDs) created with the ta
 
 ![The Save & share menu](images/11-export.png)
 
-**1** Save & share ▾ · **2** Download an updated copy · **3** Read-only copy · **4** Dataverse solution
+**1** Save & share ▾ · **2** Save · **3** Read-only copy · **4** Dataverse solution
 
-The menu is in four groups: **Save the workbook**, **Share**, **For the build** and **Logs**.
+The menu is in five groups: **Save**, **Other formats**, **Share**, **Build** and **Logs**.
 
 | Save & share menu item | What you get |
 | --- | --- |
-| Save to the original file | Writes your edits into the file on disk. Available when the file was opened with Open workbook… or Load a newer version… in Chrome or Edge |
-| Download an updated copy (.xlsx) | The same file and formatting with your edits written in |
-| New version in template format (.xlsx) | The whole workbook laid out and styled by the template, with a Change log sheet |
-| Full workbook, plain values (.xlsx) | Values only, no styling |
-| Current view as CSV / all columns | The rows you can see, with the visible columns or all of them |
+| Save (`Ctrl`+`S`) | Writes your edits into your workbook. If the page isn't linked to a file yet (it was dragged in, or the file has moved), it asks where to save the first time and saves there from then on. In browsers that can't ask (Firefox, Safari) it downloads the workbook |
+| Save as… | The same, into a new file you choose |
+| Rebuilt in the current template (.xlsx) | The whole workbook laid out and styled by the template, with a Change log sheet |
+| Values only, no formatting (.xlsx) | Every sheet's values, no styling |
+| This view as CSV | The rows you can see, with the visible columns; tick **include hidden columns** for all of them |
 | Change log (CSV) | Your edits |
 | Read-only copy (.html) | A copy of the page holding this workbook, with your edits written in, that can be viewed but not changed (next section) |
 
-The first two only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list. A table detail the sheet doesn't have yet (for example Primary Name Column or Primary Key) goes into an empty row above the field list or, when there is none, into a row inserted just below the last detail: everything underneath moves down with it, including merged cells, dropdown lists, conditional formatting, filters and the frozen header, and anything elsewhere that points at those rows: named ranges, print titles, other sheets' formulas and charts. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section, or the sheet has an Excel table, a drawing or comments, or a pivot table reads from it, so rows can't be inserted), **nothing is saved**, the reason is shown, and your edits are kept: use **New version in template format** instead.
+Save and Save as only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list. A table detail the sheet doesn't have yet (for example Primary Name Column or Primary Key) goes into an empty row above the field list or, when there is none, into a row inserted just below the last detail: everything underneath moves down with it, including merged cells, dropdown lists, conditional formatting, filters and the frozen header, and anything elsewhere that points at those rows: named ranges, print titles, other sheets' formulas and charts. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section, or the sheet has an Excel table, a drawing or comments, or a pivot table reads from it, so rows can't be inserted), **nothing is saved**, the reason is shown, and your edits are kept: use **Rebuilt in the current template** instead. If another program changed the file since you opened it, Save asks before overwriting it.
 
-If the original file has been moved, renamed or deleted since you opened it, **Save back to the original file** says so and offers **Save as…**: pick a folder and a name, and the page saves there and links to that file from then on. To see which version of the page you are using, hover the **?** button or open **How it works**.
+If the file has been moved, renamed or deleted since you opened it, **Save** says so and offers **Save as…**: pick a folder and a name, and the page saves there from then on. To see which version of the page you are using, hover the **?** button or open **How it works**.
 
 Every workbook download asks for a file name first, suggesting the next version: `Model v1.2` becomes `Model v1.3`, `Model 1.4` becomes `Model 1.5`, and other names get `(updated)` or `(edited)`.
 
@@ -322,7 +322,7 @@ The page opens on **This environment**, and the header's **Environment** button 
 
 1. Find the solution in the list and click it, for example `FORMUS import test`. Type in the search box to find it by name or unique name. Your unmanaged solutions are listed first; managed ones are folded under **Managed** and open when you click it or search.
 2. Click **Load … as the model** (the button names the solution). The page reads the solution's tables and, for each one, its columns, types, required levels, choice options, number and text settings, lookups with their cascade, and N:N relationships. Alternate keys are read too and shown on each table page under From Dataverse.
-3. The model opens like a workbook, in the template layout, so everything works on it: Checks, the ERD, search and the exports. **Save & share → New version in template format** saves it as a workbook to keep or send.
+3. The model opens like a workbook, in the template layout, so everything works on it: Checks, the ERD, search and the exports. **Save & share → Rebuilt in the current template** saves it as a workbook to keep or send.
 
 A table added to the solution whole brings all its columns; a standard table such as Contact, added only for the columns you made on it, brings just those columns (plus its key and name). Helper columns Dataverse makes for others (such as the name behind a lookup) are left out.
 
@@ -381,7 +381,7 @@ It needs the Microsoft Edge WebView2 Runtime (part of Windows 10 and 11) and a c
 
 ## Updating the template
 
-The template sets which columns and table details every workbook has, the dropdown options, and the look of **New version in template format**. The page has the current FormusPro template built in; you can replace it with your own.
+The template sets which columns and table details every workbook has, the dropdown options, and the look of **Rebuilt in the current template**. The page has the current FormusPro template built in; you can replace it with your own.
 
 ### Checking a workbook against the template
 
@@ -396,8 +396,8 @@ Click **Check ▾ → Template**. The panel lists tables not in the template, ex
 1. Open the workbook. Columns and table details it lacks (for example Relationship Type, Cascade Delete, Primary Name Column) are added in the page and marked **added**.
 2. Fill them in where you need them.
 3. Save it one of two ways:
-    - **Download an updated copy** or **Save to the original file**: only the added columns you filled in are written, with their headers and hints.
-    - **New version in template format**: the whole workbook rebuilt in the current template layout, every column and detail included.
+    - **Save** or **Save as…**: only the added columns you filled in are written, with their headers and hints.
+    - **Rebuilt in the current template**: the whole workbook rebuilt in the current template layout, every column and detail included.
 
 ### Using your own template
 
@@ -418,7 +418,7 @@ Click **Check ▾ → Template**. The panel lists tables not in the template, ex
 | Text in the hint row above a column | Shown as the column's tooltip and written with the column |
 | An Excel data-validation list on a column | Its options become the column's dropdown |
 | A new label row in the table details | Shown in **✎ Table details** and added to tables that lack it |
-| Fonts, colours, widths | Used by **New version in template format** |
+| Fonts, colours, widths | Used by **Rebuilt in the current template** |
 
 A new column needs a code change only if the solution builder or a check should use it.
 
@@ -525,8 +525,8 @@ If Windows refuses to run the downloaded script, run `Unblock-File .\import.ps1`
 | --- | --- |
 | A table shows in the page that isn't in my workbook | You are looking at a different workbook kept in the browser: pick yours in the workbook selector, or **Manage files… → Remove all…** |
 | My edits disappeared after opening a file | You opened it as a **different workbook**, which has its own edits. Switch back in the workbook selector |
-| Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a sheet that rows can't be inserted into (it holds an Excel table, a drawing or comments, or a pivot table reads from it). Use **New version in template format**, or add empty rows in Excel and reload |
-| **Save to the original file** is greyed out | Open the file with Open workbook… or Load a newer version… (not by dragging it) in Chrome or Edge to link it, or use **Download an updated copy** |
+| Saving was stopped and nothing was saved | Read the reason it gives. Usually there is no empty row for an added field before the Forms section, or a sheet that rows can't be inserted into (it holds an Excel table, a drawing or comments, or a pivot table reads from it). Use **Rebuilt in the current template**, or add empty rows in Excel and reload |
+| **Save** asks where to save every time | The page isn't linked to a file: in Firefox and Safari it can't be, so Save downloads. In Chrome and Edge, open the file with Open workbook… (not by dragging it), or save once and it is linked from then on |
 | A lookup shows a plain grey line in the ERD and "relationship type not recorded" | Set Relationship Type to `N:1` on that lookup once confirmed |
 | A line is missing from the ERD | Its row may be hidden: look for a faded row with a crossed-out eye and click the eye, or click **show all** in the side panel |
 | A client or support team needs to see the model | Send a read-only copy (Sharing a read-only copy) |

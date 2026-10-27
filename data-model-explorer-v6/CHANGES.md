@@ -1,11 +1,12 @@
 # 6.0.0
 
+- **Save & share is simpler.** **Save** (`Ctrl`+`S`) writes your edits into your workbook, asking where only the first time (or after the file has moved), and no longer asks "Overwrite the original file?" each time; it still asks if another program changed the file. **Save as…** saves to a new file. The template and values-only exports are under **Other formats**, and the two CSV items are one, with an **include hidden columns** tick box.
 - **Separate web resources in Dataverse.** The solution zip (`FORMUS_DataModelExplorer_6_0_0_0.zip`) holds the page (`DataModelExplorer.html`, 0.2 MB), its code (`app.js`) and the libraries (`lib/xlsx.full.min.js`, `lib/exceljs.min.js`, `lib/jszip.min.js`) as five web resources. A new version replaces only what changed and the libraries stay cached. The page keeps 5.0's name and id, so importing over 5.0 updates it. `make-webresource-solution.py --single` still packages one file.
 - Opened as a file, and in XrmToolBox, the page is still one file (`Data_Model_Explorer.html`), built from the same source.
 - **A red bar** says when a part of the page did not load, or the parts are from different versions (an unfinished import, or an old copy in the browser's cache), and what to do.
 - A read-only copy made inside Dynamics 365 has the code and libraries written in, so it is still one file.
 - **Saving no longer stops on a named range** (as in 5.0.5): named ranges, filters, print titles, other sheets' formulas and charts move with inserted rows.
-- **XrmToolBox:** saving back to the original file asks only the page's own **Overwrite the original file?** (as in 5.0.5).
+- **XrmToolBox:** saving no longer shows the browser's own permission box (as in 5.0.5).
 
 # 5.0.4
 

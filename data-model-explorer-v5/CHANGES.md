@@ -1,7 +1,8 @@
 # 5.0.5
 
+- **Save & share is simpler.** **Save** (`Ctrl`+`S`) writes your edits into your workbook, asking where only the first time (or after the file has moved), and no longer asks "Overwrite the original file?" each time; it still asks if another program changed the file. **Save as…** saves to a new file. The template and values-only exports are under **Other formats**, and the two CSV items are one, with an **include hidden columns** tick box.
 - **Saving no longer stops on a named range.** When rows are inserted for table details, named ranges (including the ones Excel keeps for filters and print titles), formulas on other sheets and charts that point at the sheet move down with the rows. Excel's calculation chain is dropped for Excel to rebuild. Only an Excel table, drawings or comments on the sheet, or a pivot table reading from it, still stop the save.
-- **XrmToolBox:** saving back to the original file no longer shows the browser's own permission box; the page's **Overwrite the original file?** is the only question. The tool is rebuilt (`xrmtoolbox/release`, 5.0.5).
+- **XrmToolBox:** saving no longer shows the browser's own permission box. The tool is rebuilt (`xrmtoolbox/release`, 5.0.5).
 
 # 5.0.4
 

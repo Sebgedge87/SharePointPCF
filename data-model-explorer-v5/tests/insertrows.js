@@ -56,6 +56,8 @@ async function model() {
 (async () => {
   const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const p = await (await b.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })).newPage();
+  // Save as… downloads here, as in a browser without a save dialog (Firefox, Safari); tests/save.js covers the dialog
+  await p.addInitScript(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto(page_); await p.waitForTimeout(1200);
   await p.setInputFiles('#file', await model()); await p.waitForTimeout(2000); await p.keyboard.press('Escape');
