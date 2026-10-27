@@ -195,6 +195,19 @@ function model(file, extra = [], old = false, gap = false) {
   await p.reload(); await p.waitForTimeout(2000); await openTab('Case');
   ok(/Primary name\s*:?\s*title/i.test(await chips()), 'changed details survive a reload');
 
+  // changing a field to Lookup asks for its table and writes "Targets:" into Additional data
+  const setType = async (ln, t) => { await row(ln).locator('td[data-col="Attribute Type"]').dblclick(); await p.waitForSelector('td.editing select'); await p.selectOption('td.editing select', t); await p.waitForTimeout(300); };
+  await setType('title', 'Lookup');
+  ok(await p.locator('.solbox h3:has-text("Which table does Case Title look up to?")').count() === 1, 'changing a field to Lookup asks which table it looks up to');
+  await p.click('.solbox [data-lta="go"]'); await p.waitForTimeout(200);
+  ok(/Pick a table/.test(await p.innerText('#lterr')), 'it needs a table name');
+  await p.fill('.solbox [data-lt]', 'account'); await p.click('.solbox [data-lta="go"]'); await p.waitForTimeout(400);
+  ok(/Targets:?\s*account/.test(await row('title').locator('td[data-col="Additional data"]').innerText()) && await row('title').locator('td[data-col="Relationship Type"]').innerText() === 'N:1', 'it adds "Targets: account" to Additional data and N:1 as the Relationship Type');
+  await setType('title', 'Uniqueidentifier'); await setType('title', 'Lookup');
+  ok(await p.locator('.solbox').count() === 0, 'a lookup that already has a target is not asked again');
+  await setType('title', 'Uniqueidentifier');
+  ok(await p.locator('.solbox').count() === 0, 'other types are not asked about');
+
   ok(!errs.length, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
 })();
