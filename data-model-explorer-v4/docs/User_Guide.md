@@ -263,6 +263,8 @@ The menu is in four groups: **Save the workbook**, **Share**, **For the build** 
 
 The first two only rewrite the cells you changed; formatting, validations and everything else stay byte for byte. Added rows go into the empty rows after the field list. A table detail the sheet doesn't have yet (for example Primary Name Column or Primary Key) goes into an empty row above the field list or, when there is none, into a row inserted just below the last detail: everything underneath moves down with it, including merged cells, dropdown lists, conditional formatting, filters and the frozen header. The file is then read back and every edit checked. If any edit can't be written (for example there is no empty row left before the Forms section, or the sheet has an Excel table, a drawing, comments, or a formula on another sheet pointing at it, so rows can't be inserted), **nothing is saved**, the reason is shown, and your edits are kept: use **New version in template format** instead.
 
+If the original file has been moved, renamed or deleted since you opened it, **Save back to the original file** says so and offers **Save as…**: pick a folder and a name, and the page saves there and links to that file from then on. To see which version of the page you are using, hover the **?** button or open **How it works**.
+
 Every workbook download asks for a file name first, suggesting the next version: `Model v1.2` becomes `Model v1.3`, `Model 1.4` becomes `Model 1.5`, and other names get `(updated)` or `(edited)`.
 
 ![Naming the file](images/12-filename.png)

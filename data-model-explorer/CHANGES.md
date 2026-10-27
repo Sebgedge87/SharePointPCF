@@ -1,3 +1,9 @@
+# 1.9.7
+
+- **The version is shown** when you hover the ? button and at the top of How it works, so you can tell which build you are using.
+- **Saving when the original file has gone.** If the linked file has been moved, renamed or deleted (or the browser lost its link to it), Save back to the original file offers **Save as…**: choose where to save the updated workbook, and the page links to that file from then on. Your edits are kept until it is saved.
+- **A table with no details at all** (the sheet starts at the field list header): a new detail such as Primary Name Column goes in a row inserted above the header, instead of stopping the save.
+
 # 1.9.6
 
 - **Saving no longer stops when a table detail has no row.** Save to the original file / Download an updated copy insert a row just below the last table detail (for example Primary Name Column or Primary Key) and move everything underneath down: cells, merged cells, dropdown lists, conditional formatting, filters, hyperlinks, page breaks, the frozen header and the sheet's own formulas. If an Excel table, a drawing, comments, a named range or another sheet's formula points at the sheet, nothing is saved and the reason is given, as before.
