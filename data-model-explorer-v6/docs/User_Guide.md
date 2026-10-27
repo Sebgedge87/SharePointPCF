@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 6.0.0 · 27 October 2026"
+subtitle: "Version 6.0.1 · 27 October 2026"
 ---
 
 ## Introduction
@@ -315,7 +315,7 @@ Uploaded to an environment as a web resource, the page reads the environment's t
 
 ### Putting it in an environment
 
-1. Get the solution zip: `FORMUS_DataModelExplorer_6_0_0_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
+1. Get the solution zip: `FORMUS_DataModelExplorer_6_0_1_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
 2. Import it into the environment (Power Apps → Solutions → Import, or `pac solution import`). It holds five web resources under `<prefix>_/dme/`, each well under the 5 MB default limit:
 
    | Web resource | Holds | Size |
@@ -335,7 +335,9 @@ The page opens on **This environment**, and the header's **Environment** button 
 
 ![This environment](images/20-environment.png)
 
-**1** Find and pick a solution · **2** Load it as the model · **3** The solution to check against · **4** Managed environment
+**1** Find and pick a solution · **2** Load it as the model · **3** Managed environment · **4** Check the workbook against it
+
+There is one list of solutions, with a search box. Pick a solution once, then load it as the model or check the workbook against it: both buttons name the solution picked.
 
 ### Loading a solution as the data model
 
@@ -348,11 +350,11 @@ A table added to the solution whole brings all its columns; a standard table suc
 ### Checking the workbook against the environment
 
 1. Open the data-model workbook (the design).
-2. Click **Environment**, and under **Check this workbook against the environment** pick what to compare with:
+2. Click **Environment**, and in the solution list pick what to compare with:
     - **a solution**, which also finds tables in the solution that the workbook doesn't have; or
-    - **Default solution: the tables in this workbook**, which reads every table the workbook names, wherever it came from.
+    - **Default solution: the tables in this workbook** (at the top of the list), which reads every table the workbook names, wherever it came from.
 3. In a test or production environment, tick **Managed environment** to also find anything created or changed directly there.
-4. Click **Check**.
+4. Click **Check against …** (the button names the solution).
 
 ![The check against a managed environment](images/21-environment-check.png)
 

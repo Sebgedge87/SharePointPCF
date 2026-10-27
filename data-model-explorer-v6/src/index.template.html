@@ -2905,7 +2905,7 @@ async function liveSetDv(main,extra){
   try{await idb.put(rec)}catch(e){}
   updateCounts(); refreshSpecial(true);
 }
-const LV={sols:null,user:'',busy:false,msg:'',err:'',sol1:'',sol2:'',managed:false,last:null};
+const LV={sols:null,user:'',busy:false,msg:'',err:'',sol1:'',managed:false,last:null};   // sol1: the solution picked ('' = the Default solution)
 function liveProg(m){LV.msg=m; const el=$('#liveprog'); if(el) el.textContent=m}
 async function liveStart(){
   if(LV.sols||LV.busy) return; LV.busy=true; LV.err='';
@@ -2936,7 +2936,7 @@ async function liveLoad(){
 }
 async function liveCheck(){
   if(isStarter()) return toast('Open the data-model workbook first');
-  const sol=LV.sol2?(LV.sols||[]).find(s=>s.solutionid===LV.sol2):null;
+  const sol=LV.sol1?(LV.sols||[]).find(s=>s.solutionid===LV.sol1):null;
   LV.busy=true; LV.err=''; renderLive();
   try{
     let solTables=null;
@@ -2961,15 +2961,16 @@ function renderLive(){
   let h=`<header><div style="flex:1;min-width:0"><h3>This environment</h3><div class="mono dim">${esc(location.host)}${LV.user?' · '+esc(LV.user):''}</div></div><button class="btn ghost" data-dvclose>✕</button></header><div class="body">`;
   if(LV.err) h+=`<div class="err" style="white-space:pre-wrap;color:var(--edit);background:var(--edit-bg);border-radius:10px;padding:10px;margin-bottom:12px">${esc(LV.err)}</div>`;
   if(!LV.sols) h+=`<p class="dim">${LV.busy?'Reading the solutions in this environment…':'The solutions could not be read.'}</p>`;
-  h+=`<div class="fld"><div class="k">Load a solution as the data model</div>
+  // one list of solutions, with a search; what to do with the one picked is underneath
+  h+=`<div class="fld"><div class="k">Solution</div>
+    ${solPick(1,dis)}</div>
+    <div class="fld"><div class="k">Load it as the data model</div>
     <p class="dim" style="margin:2px 0 8px">Builds the model from what is in the environment: the solution's tables, columns, choices, lookups and N:N, in the template layout. Save it with Save &amp; share to keep it as a workbook.</p>
-    ${solPick(1,dis)}
-    <div style="margin-top:8px"><button class="btn primary" data-live="load" ${dis||!LV.sol1?'disabled':''}>${LV.sol1?'Load '+esc(solName(LV.sol1))+' as the model':'Load as model'}</button></div></div>`;
-  h+=`<div class="fld"><div class="k">Check this workbook against the environment</div>
+    <button class="btn primary" data-live="load" ${dis||!LV.sol1?'disabled':''}>${liveLoadLabel()}</button></div>
+    <div class="fld"><div class="k">Check this workbook against it</div>
     <p class="dim" style="margin:2px 0 8px">${isStarter()?'Open the data-model workbook first.':'Compares <b>'+esc(S.fileName)+'</b> with what is really there: undocumented tables, fields and N:N, fields not built yet, and differences in types, required levels and relationships.'}</p>
-    ${solPick(2,dis)}
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="livemanaged" style="width:auto;height:auto;flex:none;margin-top:3px" ${LV.managed?'checked':''} ${dis}><span>Managed environment (test or production): also find anything created or changed directly here, as unmanaged. <span class="dim">Slower: one check per custom field.</span></span></label>
-    <div style="margin-top:8px"><button class="btn primary" data-live="check" ${dis||isStarter()?'disabled':''}>Check</button></div></div>`;
+    <div style="margin-top:8px"><button class="btn primary" data-live="check" ${dis||isStarter()?'disabled':''}>${liveCheckLabel()}</button></div></div>`;
   h+=`<div id="liveprog" class="dim" style="min-height:20px">${esc(LV.msg)}</div>`;
   const L=LV.last;
   if(L&&L.kind==='check'&&S.dv&&S.dv.live){
@@ -2989,11 +2990,14 @@ function renderLive(){
       const g=e.target.closest('[data-spgrp]'); if(g){LV['mg'+w]=!LV['mg'+w]; list.innerHTML=solRows(w); return}
       const r=e.target.closest('[data-sid]'); if(!r) return;
       LV['sol'+w]=r.dataset.sid; list.innerHTML=solRows(w);
-      if(w==='1'){const b=d.querySelector('[data-live="load"]'); b.disabled=!LV.sol1; b.textContent=LV.sol1?'Load '+solName(LV.sol1)+' as the model':'Load as model'}
+      const lb=d.querySelector('[data-live="load"]'), cb=d.querySelector('[data-live="check"]');
+      if(lb){lb.disabled=!!LV.busy||!LV.sol1; lb.textContent=liveLoadLabel()} if(cb) cb.textContent=liveCheckLabel();
     };
     const on=list.querySelector('.sprow.on'); if(on) list.scrollTop=on.offsetTop-list.offsetTop-60;
   });
 }
+const liveLoadLabel=()=>LV.sol1?'Load '+solName(LV.sol1)+' as the model':'Pick a solution to load it';
+const liveCheckLabel=()=>'Check against '+(LV.sol1?solName(LV.sol1):'the Default solution');
 // A searchable solution list: your unmanaged solutions first, managed ones folded underneath (opened by searching or clicking)
 function solName(id){const s=(LV.sols||[]).find(x=>x.solutionid===id); return s?s.friendlyname:''}
 function solPick(w,dis){
@@ -3005,7 +3009,7 @@ function solRows(w){
   const row=s=>`<button type="button" class="sprow ${s.solutionid===sel?'on':''}" data-sid="${esc(s.solutionid)}" role="option" aria-selected="${s.solutionid===sel}"><b>${esc(s.friendlyname)}</b><span>${esc(s.uniquename)} · ${esc(s.version||'')}</span></button>`;
   const um=all.filter(s=>!s.ismanaged&&hit(s)), mm=all.filter(s=>s.ismanaged&&hit(s));
   const open=LV['mg'+w]||!!q||mm.some(s=>s.solutionid===sel);
-  let h=w==='2'&&!q?`<button type="button" class="sprow ${sel===''?'on':''}" data-sid="" role="option"><b>Default solution: the tables in this workbook</b><span>Wherever they came from</span></button>`:'';
+  let h=!q?`<button type="button" class="sprow ${sel===''?'on':''}" data-sid="" role="option"><b>Default solution: the tables in this workbook</b><span>For a check, wherever they came from (nothing to load)</span></button>`:'';
   h+=`<div class="spgh">Unmanaged · ${um.length}</div>`+(um.length?um.map(row).join(''):'<div class="spnone">None'+(q?' match':'')+'</div>');
   if(mm.length) h+=`<button type="button" class="spgh spgrp" data-spgrp>${open?'▾':'▸'} Managed · ${mm.length}</button>`+(open?mm.map(row).join(''):'');
   return h;

@@ -1,3 +1,8 @@
+# 6.0.1
+
+- **This environment: one solution list.** One searchable list of solutions; under it, **Load … as the model** and **Check against …**, both naming the solution picked. The Default solution (the workbook's own tables) is at the top of the list, for checking.
+- The XrmToolBox tool is rebuilt with this page (`xrmtoolbox/release`, 6.0.1).
+
 # 6.0.0
 
 - The ERD's table filter suggests your own prefix (from Publishers and prefixes, or the workbook's), not `rhs_`.
