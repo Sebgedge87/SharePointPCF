@@ -59,6 +59,13 @@ namespace FormusPro.DataModelExplorer
             cw.WebResourceRequested += OnRequest;
             // links the page opens in a new window (Microsoft Learn, maker portal) go to the normal browser
             cw.NewWindowRequested += (s, e) => { e.Handled = true; OpenInBrowser(e.Uri); };
+            // saving back to a workbook the person opened: the page asks "Overwrite the original file?" itself, so the
+            // browser's own permission prompt (a plain Windows box here) is answered for this page only
+            cw.PermissionRequested += (s, e) =>
+            {
+                if (e.PermissionKind == CoreWebView2PermissionKind.FileReadWrite && org != null && e.Uri.StartsWith(org + "/", StringComparison.OrdinalIgnoreCase))
+                { e.State = CoreWebView2PermissionState.Allow; e.Handled = true; }
+            };
             ready = true;
             ExecuteMethod(Open);   // asks for a connection if there isn't one yet
         }

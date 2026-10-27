@@ -1,3 +1,7 @@
+# 2.0.8
+
+- **Saving no longer stops on a named range.** When rows are inserted for table details, named ranges (including the ones Excel keeps for filters and print titles), formulas on other sheets and charts that point at the sheet move down with the rows. Excel's calculation chain is dropped for Excel to rebuild. Only an Excel table, drawings or comments on the sheet, or a pivot table reading from it, still stop the save.
+
 # 2.0.7
 
 - **The version is shown** when you hover the ? button and at the top of How it works, so you can tell which build you are using.

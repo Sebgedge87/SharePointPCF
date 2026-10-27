@@ -1,0 +1,6 @@
+node_modules
+dist/
+*.xlsx
+!assets/Data_Model_Template.xlsx
+!samples/Import_Test_Model.xlsx
+tests/out/

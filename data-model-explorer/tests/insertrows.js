@@ -1,8 +1,9 @@
 // Saving table details a sheet has no row for: node tests/insertrows.js  (run `npm run build` first)
 // The details sit straight above the field list with no spare row, so the save inserts rows below the last detail and
-// moves everything underneath down: the field list, Forms, merged cells, drop-down lists, conditional formatting and
-// the frozen pane. A sheet another sheet's formula points at is left alone, and the reason given.
-const path = require('path'), fs = require('fs'), ExcelJS = require('exceljs');
+// moves everything underneath down: the field list, Forms, merged cells, drop-down lists, conditional formatting, the
+// frozen pane, named ranges, filters, print titles, and other sheets' formulas pointing at it. A sheet holding an Excel
+// table is left alone, and the reason given.
+const path = require('path'), fs = require('fs'), ExcelJS = require('exceljs'), JSZip = require('jszip');
 const { chromium } = require('playwright');
 const page_ = 'file://' + path.resolve(__dirname, '../dist/Data_Model_Explorer.html');
 const out = path.join(__dirname, 'out'); fs.mkdirSync(out, { recursive: true });
@@ -29,14 +30,27 @@ async function model() {
     ws.views = [{ state: 'frozen', ySplit: 10 }];
     return ws;
   };
-  table('Need (formus_Need)', 'Need', 'formus_need');
-  table('Outcome (formus_Outcome)', 'Outcome', 'formus_outcome');
+  const need = table('Need (formus_Need)', 'Need', 'formus_need');
+  need.autoFilter = 'A10:I13'; need.pageSetup.printTitlesRow = '10:10';
+  wb.definedNames.add("'Need (formus_Need)'!$A$11:$A$13", 'NeedFields');
+  const outcome = table('Outcome (formus_Outcome)', 'Outcome', 'formus_outcome');
+  outcome.addTable({ name: 'OutcomeForms', ref: 'E16', columns: [{ name: 'Form' }, { name: 'Note' }], rows: [['Main', '']] });
   // a table whose sheet starts at the header row: no details at all
   const bare = wb.addWorksheet('Bare (formus_bare)');
   bare.addRows([H, ['formus_bareid', 'formus_BareId', 'Bare', 'Uniqueidentifier', 'Key', 'True', 'Simple', 'SystemRequired'], ['formus_name', 'formus_Name', 'Name', 'Text', 'Name', 'True', 'Simple', 'None']]);
   bare.getCell('H2').dataValidation = { type: 'list', allowBlank: true, formulae: ['"None,Recommended,ApplicationRequired"'] };
-  wb.addWorksheet('Summary').getCell('A1').value = { formula: "'Outcome (formus_Outcome)'!B1", result: 'Outcome' };
-  const f = path.join(out, 'insert_rows.xlsx'); await wb.xlsx.writeFile(f); return f;
+  const sum = wb.addWorksheet('Summary');
+  sum.getCell('A1').value = { formula: "'Outcome (formus_Outcome)'!B1", result: 'Outcome' };
+  sum.getCell('A2').value = { formula: "COUNTA('Need (formus_Need)'!A11:A13)&\" fields in 'Need (formus_Need)'!A11\"", result: '3' };
+  sum.getCell('A3').value = { formula: "'Need (formus_Need)'!B1", result: 'Need' };
+  const f = path.join(out, 'insert_rows.xlsx'); await wb.xlsx.writeFile(f);
+  // as Excel saves it: with its hidden name for the filter, and its list of formula cells in calculation order
+  const z = await JSZip.loadAsync(fs.readFileSync(f));
+  z.file('xl/workbook.xml', (await z.file('xl/workbook.xml').async('string')).replace('</definedNames>', '<definedName name="_xlnm._FilterDatabase" localSheetId="1" hidden="1">\'Need (formus_Need)\'!$A$10:$I$13</definedName></definedNames>'));
+  z.file('xl/calcChain.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><c r="A1" i="5" l="1"/><c r="A2"/><c r="A3"/></calcChain>');
+  z.file('[Content_Types].xml', (await z.file('[Content_Types].xml').async('string')).replace('</Types>', '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/></Types>'));
+  z.file('xl/_rels/workbook.xml.rels', (await z.file('xl/_rels/workbook.xml.rels').async('string')).replace('</Relationships>', '<Relationship Id="rIdCalc" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/></Relationships>'));
+  fs.writeFileSync(f, await z.generateAsync({ type: 'nodebuffer' })); return f;
 }
 
 (async () => {
@@ -68,6 +82,14 @@ async function model() {
   const cf = (ws.conditionalFormattings || []).map(c => c.ref); ok(cf.includes('C13:C15'), 'conditional formatting moved (' + cf.join(', ') + ')');
   ok(ws.views[0] && ws.views[0].ySplit === 12, 'the frozen header moved (' + (ws.views[0] && ws.views[0].ySplit) + ')');
   ok(String(v('A9')) === 'Primary Name Column' && ws.getCell('A9').style && ws.getCell('B9').value === 'formus_name', 'the new detail cells hold plain values');
+  const zx = await JSZip.loadAsync(fs.readFileSync(saved)), wbXml = await zx.file('xl/workbook.xml').async('string');
+  ok(/<definedName name="NeedFields"[^>]*>'Need \(formus_Need\)'!\$A\$13:\$A\$15</.test(wbXml), 'a named range on the sheet moved with its rows');
+  ok(/_xlnm\._FilterDatabase"[^>]*>'Need \(formus_Need\)'!\$A\$12:\$I\$15</.test(wbXml) && /<autoFilter ref="A12:I15"/.test(await zx.file('xl/worksheets/sheet2.xml').async('string')), 'the filter moved (the sheet\'s and Excel\'s hidden name for it)');
+  ok(/_xlnm\.Print_Titles"[^>]*>'Need \(formus_Need\)'!\$12:\$12</.test(wbXml), 'the print title rows moved');
+  const sum = wb.getWorksheet('Summary'), fm = a => (sum.getCell(a).value || {}).formula;
+  ok(fm('A2') === "COUNTA('Need (formus_Need)'!A13:A15)&\" fields in 'Need (formus_Need)'!A11\"", 'a formula on another sheet points at the moved rows (text in quotes left alone): ' + fm('A2'));
+  ok(fm('A3') === "'Need (formus_Need)'!B1" && fm('A1') === "'Outcome (formus_Outcome)'!B1", 'references above the inserted rows, and to other sheets, are unchanged');
+  ok(!zx.file('xl/calcChain.xml') && !/calcChain/.test(await zx.file('[Content_Types].xml').async('string')) && !/calcChain/.test(await zx.file('xl/_rels/workbook.xml.rels').async('string')), 'Excel\'s calculation chain is dropped, for Excel to rebuild');
 
   // the saved file opens with the details in place
   const p2 = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
@@ -88,12 +110,12 @@ async function model() {
   const saved2 = await download(); const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.readFile(saved2); const bs = wb2.getWorksheet('Bare (formus_bare)');
   ok(bs.getCell('A1').value === 'Primary Name Column' && bs.getCell('B1').value === 'formus_name' && bs.getCell('A2').value === 'Logical Name' && bs.getCell('A4').value === 'formus_name' && bs.dataValidations.model['H3'] && !bs.dataValidations.model['H2'], 'with no details at all, the detail goes in a row inserted above the header');
 
-  // Outcome: another sheet's formula refers to it, so rows are not inserted, and the reason is given
+  // Outcome: it holds an Excel table, so rows are not inserted, and the reason is given
   await openTab('Outcome'); await setDetails('formus_name', 'formus_outcomeid');
   const [d2] = await Promise.all([p.waitForEvent('download', { timeout: 4000 }).catch(() => null), (async () => { await p.click('#btnExport'); await p.click('.menu [data-x="xlsx-orig"]'); })()]);
   await p.waitForSelector('.dlgbox', { timeout: 5000 }).catch(() => {});
   const msg = await p.innerText('.dlgbox').catch(() => '');
-  ok(!d2 && /Outcome[\s\S]*Primary Name Column[\s\S]*a formula on the sheet "Summary" refers to it/.test(msg), 'a sheet another formula points at is not changed, and the reason is given');
+  ok(!d2 && /Outcome[\s\S]*Primary Name Column[\s\S]*the sheet holds an Excel table/.test(msg), 'a sheet holding an Excel table is not changed, and the reason is given');
 
   await p.click('.dlgbox button').catch(() => {});
   // the version is shown

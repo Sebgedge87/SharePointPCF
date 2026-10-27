@@ -1,3 +1,8 @@
+# 5.0.5
+
+- **Saving no longer stops on a named range.** When rows are inserted for table details, named ranges (including the ones Excel keeps for filters and print titles), formulas on other sheets and charts that point at the sheet move down with the rows. Excel's calculation chain is dropped for Excel to rebuild. Only an Excel table, drawings or comments on the sheet, or a pivot table reading from it, still stop the save.
+- **XrmToolBox:** saving back to the original file no longer shows the browser's own permission box; the page's **Overwrite the original file?** is the only question. The tool is rebuilt (`xrmtoolbox/release`, 5.0.5).
+
 # 5.0.4
 
 - **The version is shown** when you hover the ? button and at the top of How it works, so you can tell which build you are using.

@@ -1,0 +1,20 @@
+{
+  "name": "data-model-explorer",
+  "version": "6.0.0",
+  "private": true,
+  "description": "Viewer and editor for Dataverse data-model workbooks: one offline file, an XrmToolBox tool, and separate web resources for Dataverse (6.0)",
+  "scripts": {
+    "build": "python3 build.py",
+    "pretest": "npm run build",
+    "test": "node tests/smoke.js && node tests/roundtrip.js && node tests/checks.js && node tests/ui.js && node tests/solution.js && node tests/addrows.js && node tests/insertrows.js && node tests/erd.js && node tests/prefixes.js && node tests/solutionzip.js && node tests/navigation.js && node tests/readonly.js && node tests/live.js && node tests/webresource.js && node tests/webfiles.js",
+    "webresource": "python3 tools/make-webresource-solution.py"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "jszip": "3.10.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

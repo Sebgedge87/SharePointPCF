@@ -1770,6 +1770,7 @@ async function buildOriginal(){
   });
   const esc2=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/\r/g,'_x000D_');
   const colNum=a=>{let n=0;for(const ch of a.replace(/\d+/g,''))n=n*26+ch.charCodeAt(0)-64;return n};
+  const moved=[];   // sheets with rows inserted: references to them elsewhere move too
   for(const name of Object.keys(bySheet)){
     const pth=pathOf[name]; let xml=await zip.file(pth).async('string');
     // the patcher understands plain sheet XML as Excel writes it. Anything else (for example namespace-prefixed
@@ -1778,7 +1779,7 @@ async function buildOriginal(){
     if(insertAt[name]){const {at,K}=insertAt[name];
       const why=await insertRowsBlocked(zip,wbx,pathOf,name,xml);
       if(why){bySheet[name]=bySheet[name].filter(ed=>{if(ed.ins){if(!ed.lbl) missed.push({e:ed.e,why:'the table details have no empty row, and a row cannot be added because '+why}); return false} return true})}
-      else{xml=shiftRows(xml,at,K); bySheet[name].forEach(ed=>{if(!ed.ins){if(ed.row>=at) ed.row+=K} if(ed.sr&&ed.sr>=at) ed.sr+=K})}
+      else{xml=shiftRows(xml,at,K); moved.push({name,at,K}); bySheet[name].forEach(ed=>{if(!ed.ins){if(ed.row>=at) ed.row+=K} if(ed.sr&&ed.sr>=at) ed.sr+=K})}
     }
     for(const ed of bySheet[name]){
       const addr=XLSX.utils.encode_cell({r:ed.row-1,c:ed.col-1});
@@ -1806,6 +1807,7 @@ async function buildOriginal(){
     }
     zip.file(pth,xml);
   }
+  await moveSheetRefs(zip,moved);
   const out=await zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
   // read the result back and check that every edited cell now holds its new value
   try{
@@ -1818,18 +1820,44 @@ async function buildOriginal(){
 }
 // Inserting rows into a sheet's XML. Moved with the rows: every row and cell below, the sheet's size, merged cells,
 // drop-down lists, conditional formatting, filters, hyperlinks, page breaks, the frozen pane and the selection, and
-// references to this sheet's cells in its own formulas, lists and rules. Not attempted (the reason is returned) when
-// something else could point at those rows: Excel tables, drawings, comments, or other sheets and names referring to it.
+// references to this sheet's cells in its own formulas, lists and rules; and (moveSheetRefs) named ranges, filters and
+// print titles, other sheets' formulas and charts that point at it. Not attempted (the reason is returned) when something
+// cannot be moved safely: an Excel table, drawings or comments on the sheet, or a pivot table reading from it.
 async function insertRowsBlocked(zip,wbx,pathOf,name,xml){
   if(/<tableParts\b[^>]*count="[1-9]/.test(xml)||/<tablePart\b/.test(xml)) return 'the sheet holds an Excel table';
   if(/<(drawing|legacyDrawing|legacyDrawingHF)\b/.test(xml)) return 'the sheet holds drawings or comments';
-  const q=name.replace(/'/g,"''"), ref=new RegExp("(^|[^A-Za-z0-9_.])('"+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+"'|"+name.replace(/[.*+?^${}()|[\]\\ ]/g,'\\$&')+")!",'i');
-  const names=[...wbx.getElementsByTagName('definedName')].map(d=>d.textContent).filter(t=>ref.test(t)&&!/^#REF!/.test(t));
-  if(names.length) return 'a named range refers to the sheet';
-  for(const [other,p] of Object.entries(pathOf)){ if(other===name||!zip.file(p)) continue;
-    const ox=await zip.file(p).async('string'), fs=(ox.match(/<f\b[^>]*>[^<]*<\/f>/g)||[]).join(' ').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&');
-    if(fs.includes('!')&&ref.test(fs)) return 'a formula on the sheet "'+other+'" refers to it'}
+  // named ranges, other sheets' formulas and charts that point at the sheet are moved with it (moveSheetRefs); a pivot
+  // table's source is not, so a sheet a pivot table reads from is left alone
+  const xa=s=>s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  for(const f of Object.keys(zip.files).filter(f=>/^xl\/pivotCache\/pivotCacheDefinition\d*\.xml$/.test(f))){
+    const px=await zip.file(f).async('string'); if(px.includes('sheet="'+xa(name)+'"')) return 'a pivot table reads from it'}
   return '';
+}
+// references to a sheet from anywhere ('Sheet name'!A10, Sheet!$A$10:$C$40, 'Sheet'!$10:$12) move down K rows from row
+// "at": in named ranges, in every sheet's formulas, drop-down lists and rules, and in charts. Text in quotes is left alone.
+function shiftSheetRefs(text,name,at,K){
+  const rx=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const quoted="'"+name.replace(/'/g,"''")+"'", bare=/^[A-Za-z_][A-Za-z0-9_.]*$/.test(name)?name:null;
+  const re=new RegExp("(^|[^A-Za-z0-9_.'])("+rx(quoted)+(bare?'|'+rx(bare):'')+")!(\\$?[A-Z]{0,3}\\$?\\d*)(?::(\\$?[A-Z]{0,3}\\$?\\d*))?",'gi');
+  const one=s=>s&&s.replace(/^(\$?[A-Z]{0,3}\$?)(\d+)$/i,(m,c,r)=>+r>=at?c+(+r+K):m);
+  return text.split(/("[^"]*")/).map((part,i)=>i%2?part:part.replace(re,(m,pre,sh,a,b)=>pre+sh+'!'+one(a)+(b!=null?':'+one(b):''))).join('');
+}
+async function moveSheetRefs(zip,moved){
+  if(!moved.length) return;
+  const dec=s=>s.replace(/&apos;/g,"'").replace(/&quot;/g,'"');   // both may stand unescaped in element text
+  const fix=s=>{moved.forEach(({name,at,K})=>{s=shiftSheetRefs(s,name,at,K)}); return s};
+  const files=Object.keys(zip.files).filter(f=>f==='xl/workbook.xml'||/^xl\/(worksheets|charts)\/[^/]+\.xml$/.test(f));
+  for(const f of files){
+    const x=await zip.file(f).async('string');
+    const y=x.replace(/<(definedName|f|formula|formula1|formula2|xm:f|c:f)\b([^>]*)>([^<]*)<\/\1>/g,(m,tg,a,v)=>{const d=dec(v); if(d.indexOf('!')<0) return m; const n=fix(d); return n===d?m:'<'+tg+a+'>'+n+'</'+tg+'>'});
+    if(y!==x) zip.file(f,y);
+  }
+  // Excel's list of formula cells in calculation order names cells by address: drop it, and Excel rebuilds it on opening
+  if(zip.file('xl/calcChain.xml')){
+    zip.remove('xl/calcChain.xml');
+    const ct=await zip.file('[Content_Types].xml').async('string'); zip.file('[Content_Types].xml',ct.replace(/<Override\b[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/>/,''));
+    const rl=await zip.file('xl/_rels/workbook.xml.rels').async('string'); zip.file('xl/_rels/workbook.xml.rels',rl.replace(/<Relationship\b[^>]*Target="(?:\/xl\/)?calcChain\.xml"[^>]*\/>/,''));
+  }
 }
 function shiftRows(xml,at,K){
   const state=tag=>/\bstate="(frozen|frozenSplit)"/.test(tag);   // a frozen pane's ySplit counts rows (a plain split is measured in points)

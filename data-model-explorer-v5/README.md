@@ -19,7 +19,7 @@ the connected environment's address, so the page runs in its "inside Dynamics 36
 
 ### Try it without building
 
-`xrmtoolbox/release/FormusPro.DataModelExplorer.XrmToolBox.dll` is the tool, ready built (5.0.4, for XrmToolBox
+`xrmtoolbox/release/FormusPro.DataModelExplorer.XrmToolBox.dll` is the tool, ready built (5.0.5, for XrmToolBox
 1.2025.10 or later).
 
 1. Download it, right-click it → **Properties** → tick **Unblock** → OK. (Windows marks downloaded files, and XrmToolBox
