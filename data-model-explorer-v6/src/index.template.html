@@ -935,10 +935,10 @@ async function exportTemplated(){
     changeRows().forEach((r,i)=>{const row=cl.addRow(r);if(i===0)row.font={bold:true}});
     [26,30,24,50,50].forEach((w,i)=>cl.getColumn(i+1).width=w);
   }
-  const out=await tw.xlsx.writeBuffer();
+  const cut=fitExcelJS(tw), out=await tw.xlsx.writeBuffer();
   const fn=await nameDialog(nextName(S.fileName,' (edited)'),'Rebuilt in the current template'); if(!fn) return;
   download(fn,new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  toast('Exported '+fn+' in template format');
+  toast('Exported '+fn+' in template format'); cutReport(cut,fn);
 }
 
 /* ---------- version diff ---------- */
@@ -1801,6 +1801,7 @@ async function manualWorkbook(){
   [26,26,16,...COLS.map(c=>c[1])].forEach((w,i)=>al.getColumn(i+1).width=w); head(al.addRow(ah));
   tables.forEach(t=>byTable.get(t).forEach(m=>{const r=al.addRow([t.label,t.logical,areaOf(t),...fieldVals(m)]); r.alignment={wrapText:true,vertical:'top'}}));
   al.autoFilter={from:{row:1,column:1},to:{row:1,column:ah.length}}; al.views=[{state:'frozen',ySplit:1}];
+  cutReport(fitExcelJS(wb),'Calculated and rollup fields');
   return await wb.xlsx.writeBuffer();
 }
 function changeRows(){
@@ -1901,7 +1902,7 @@ async function buildOriginal(){
       const cm=cellRe.exec(body); const old=cm?cm[0]:''; const sm=/\bs="(\d+)"/.exec(old.slice(0,old.indexOf('>')+1));
       let sa=sm?' s="'+sm[1]+'"':'';
       if(!sm&&ed.sr){const sAddr=XLSX.utils.encode_cell({r:ed.sr-1,c:(ed.sc||ed.col)-1}); const st=new RegExp('<c\\b[^>]*?\\br="'+sAddr+'"[^>]*?\\bs="(\\d+)"').exec(xml)||new RegExp('<c\\b[^>]*?\\bs="(\\d+)"[^>]*?\\br="'+sAddr+'"').exec(xml); if(st) sa=' s="'+st[1]+'"'}   /* a new cell borrows the look of a neighbouring one */ const wasNum=old&&!/\bt="/.test(old.slice(0,old.indexOf('>')+1))&&/<v>/.test(old);
-      const v=ed.v; let nc;
+      const v=ed.v.length>XL_MAX?cutText(ed.v):ed.v; let nc;   // Excel's limit for a cell
       if(v==='') nc='<c r="'+addr+'"'+sa+'/>';
       else if(wasNum&&/^-?\d+(\.\d+)?$/.test(v.trim())) nc='<c r="'+addr+'"'+sa+'><v>'+v.trim()+'</v></c>';
       else nc='<c r="'+addr+'"'+sa+' t="inlineStr"><is><t xml:space="preserve">'+esc2(v)+'</t></is></c>';
@@ -2009,6 +2010,17 @@ function nameDialog(def,what,ext='.xlsx'){
   });
 }
 const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+// Excel holds at most 32,767 characters in a cell (a long list of choice options can run past it). Longer text is cut to
+// fit, with a note at its end, so the workbook can still be written; cutReport says which cells were cut.
+const XL_MAX=32767;
+const cutText=s=>{const note=' … [cut: Excel holds 32,767 characters in a cell; this had '+s.length.toLocaleString('en-GB')+']'; return s.slice(0,XL_MAX-note.length)+note};
+function fitSheetJS(wb){const cut=[]; wb.SheetNames.forEach(n=>{const ws=wb.Sheets[n]; Object.keys(ws).forEach(k=>{const c=ws[k]; if(k[0]!=='!'&&c&&typeof c.v==='string'&&c.v.length>XL_MAX){c.v=cutText(c.v); c.t='s'; delete c.w; delete c.h; delete c.r; cut.push(n+'!'+k)}})}); return cut}
+function fitExcelJS(wb){const cut=[]; wb.eachSheet(ws=>ws.eachRow(row=>row.eachCell(c=>{if(typeof c.value==='string'&&c.value.length>XL_MAX){c.value=cutText(c.value); cut.push(ws.name+'!'+c.address)}}))); return cut}
+function cutReport(cut,what){
+  if(!cut.length) return;
+  const list=cut.slice(0,8).map(a=>'<li class="mono">'+esc(a)+'</li>').join('')+(cut.length>8?'<li>… and '+(cut.length-8)+' more</li>':'');
+  dlg({title:'Some text was too long for Excel',body:what+': '+cut.length+' cell'+(cut.length===1?'':'s')+' held more than the 32,767 characters Excel allows in a cell, so '+(cut.length===1?'it was':'they were')+' shortened. The end of each says <span class="mono">[cut: …]</span> and how long it was.<ul style="margin:8px 0 0;padding-left:18px">'+list+'</ul>',ok:'OK',cancel:null});
+}
 // true while the page shows its built-in empty starter template rather than a workbook someone opened
 const isStarter=()=>S.curB64===EMBEDDED_B64&&EMBEDDED_B64===TEMPLATE_B64;
 // a copy of this page that opens straight onto this workbook (your edits written in) and cannot change it
@@ -2141,7 +2153,7 @@ function doExport(kind){
       XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31));
     });
     if(hasWrites()) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(changeRows()),'Change log');
-    nameDialog(nextName(S.fileName,' (edited)'),'Values only, no formatting').then(fn=>{if(!fn) return; XLSX.writeFile(wb,fn); toast('Exported '+fn+'. Values only: cell styling is not carried over')});
+    nameDialog(nextName(S.fileName,' (edited)'),'Values only, no formatting').then(fn=>{if(!fn) return; const cut=fitSheetJS(wb); XLSX.writeFile(wb,fn); toast('Exported '+fn+'. Values only: cell styling is not carried over'); cutReport(cut,fn)});
   } else if(kind==='solution'){
     solDialog();
   } else if(kind==='ps1'){
@@ -2913,7 +2925,9 @@ async function liveLoad(){
     liveProg('Building the model…');
     const lw=liveWorkbook(defs,st,sol.friendlyname);
     const name=sol.uniquename+' (live '+new Date().toISOString().slice(0,10)+').xlsx';
+    const cut=fitSheetJS(lw.wb);
     const ok=await loadFile(new File([XLSX.write(lw.wb,{type:'array',bookType:'xlsx'})],name,{type:XLSX_MIME}));
+    if(ok) cutReport(cut,'The model of '+esc(sol.friendlyname));
     if(ok){ await liveSetDv(defs.main,{files:['Live: solution '+sol.friendlyname],sol:{name:sol.friendlyname,unique:sol.uniquename,tables:names}}); LV.last={kind:'load',sol:sol.friendlyname,tables:lw.tables,attrs:lw.attrs}; toast('Loaded '+lw.tables+' tables and '+lw.attrs+' columns from '+sol.friendlyname) }
     liveProg('');
   }catch(e){LV.err=e.message; liveProg('')}
@@ -4592,7 +4606,7 @@ function loadFile(f,handle){ return new Promise(done=>{
     try{
       let u=new Uint8Array(ev.target.result);
       let wb=XLSX.read(u,XLSX_OPTS), fname=f.name, cv=null;
-      if(isMetaExport(wb)){const mod=convModal(f.name); try{cv=await convertMetadata(wb,mod.update); await mod.finish(cv)}catch(e3){mod.close();throw e3} wb=cv.wb; u=new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})); fname=f.name.replace(/\.xls$/i,'.xlsx'); handle=null}   // the converted workbook keeps the export's name
+      if(isMetaExport(wb)){const mod=convModal(f.name); try{cv=await convertMetadata(wb,mod.update); await mod.finish(cv)}catch(e3){mod.close();throw e3} wb=cv.wb; cutReport(fitSheetJS(wb),'The converted workbook'); u=new Uint8Array(XLSX.write(wb,{type:'array',bookType:'xlsx'})); fname=f.name.replace(/\.xls$/i,'.xlsx'); handle=null}   // the converted workbook keeps the export's name
       const shs=parseWorkbook(wb);
       if(!shs.length) throw new Error('no usable sheets found');
       // nothing to compare with when the page was showing the empty starter template, or for a converted export

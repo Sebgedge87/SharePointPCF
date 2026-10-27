@@ -51,7 +51,7 @@ function areaModel() {
   ok(await p.evaluate(() => { const t = document.querySelector('.top'); return t.scrollWidth <= t.clientWidth + 1 }), 'the header fits at 1440 px without scrolling');
   await p.click('#btnExport'); const exp = await p.innerText('.menu'); await p.keyboard.press('Escape'); await p.mouse.click(700, 600);
   ok(!/Discard all edits|Forget loaded versions/.test(exp), 'the Save & share menu holds only exports');
-  ok(['SAVE THE WORKBOOK', 'SHARE', 'FOR THE BUILD', 'LOGS'].every(h => exp.toUpperCase().includes(h)) && /Read-only copy/.test(exp), 'Save & share is grouped: save, share, build, logs');
+  ok(['SAVE', 'OTHER FORMATS', 'SHARE', 'BUILD', 'LOGS'].every(h => exp.toUpperCase().includes(h)) && /Read-only copy/.test(exp), 'Save & share is grouped: save, other formats, share, build, logs');
   await p.click('#btnCheck'); const chk = await p.innerText('.menu'); await p.keyboard.press('Escape'); await p.mouse.click(700, 600);
   ok(/Checks\s*\d+ errors? · \d+ warnings?/.test(chk) && /Compare with a solution/.test(chk) && /Template/.test(chk), 'Check holds Checks (with counts), the Dataverse comparison and the template');
   await p.click('#btnWb'); const wbm = await p.innerText('.menu'); await p.keyboard.press('Escape'); await p.mouse.click(700, 600);
@@ -217,7 +217,7 @@ function areaModel() {
   await p.click('#btnMob'); const mob = await p.innerText('.menu');
   ok(/Workbook/.test(mob) && /Changes/.test(mob) && /Check/.test(mob) && /Save & share/.test(mob) && /Build solution/.test(mob) && /How it works/.test(mob), 'the ⋯ menu has workbook, changes, check, save & share, build and help');
   await p.click('.menu [data-mob="exp"]'); await p.waitForTimeout(200);
-  ok(/Current view as CSV/.test(await p.innerText('.menu').catch(() => '')), 'Save & share… in the ⋯ menu opens the save and export options');
+  ok(/This view as CSV/.test(await p.innerText('.menu').catch(() => '')), 'Save & share… in the ⋯ menu opens the save and export options');
 
   ok(!errs.length, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();

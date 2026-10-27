@@ -1,5 +1,6 @@
 # 5.0.5
 
+- **Text longer than Excel allows in a cell** (32,767 characters, for example a long list of choice options) no longer stops an export, loading a solution as the model, or converting a metadata export with "Text length must not exceed 32767 characters". The text is cut to fit, ends with `[cut: … this had N]`, and the page lists the cells it cut.
 - **Save & share is simpler.** **Save** (`Ctrl`+`S`) writes your edits into your workbook, asking where only the first time (or after the file has moved), and no longer asks "Overwrite the original file?" each time; it still asks if another program changed the file. **Save as…** saves to a new file. The template and values-only exports are under **Other formats**, and the two CSV items are one, with an **include hidden columns** tick box.
 - **Saving no longer stops on a named range.** When rows are inserted for table details, named ranges (including the ones Excel keeps for filters and print titles), formulas on other sheets and charts that point at the sheet move down with the rows. Excel's calculation chain is dropped for Excel to rebuild. Only an Excel table, drawings or comments on the sheet, or a pivot table reading from it, still stop the save.
 - **XrmToolBox:** saving no longer shows the browser's own permission box. The tool is rebuilt (`xrmtoolbox/release`, 5.0.5).
