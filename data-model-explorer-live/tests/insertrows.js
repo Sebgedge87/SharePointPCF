@@ -31,6 +31,10 @@ async function model() {
   };
   table('Need (formus_Need)', 'Need', 'formus_need');
   table('Outcome (formus_Outcome)', 'Outcome', 'formus_outcome');
+  // a table whose sheet starts at the header row: no details at all
+  const bare = wb.addWorksheet('Bare (formus_bare)');
+  bare.addRows([H, ['formus_bareid', 'formus_BareId', 'Bare', 'Uniqueidentifier', 'Key', 'True', 'Simple', 'SystemRequired'], ['formus_name', 'formus_Name', 'Name', 'Text', 'Name', 'True', 'Simple', 'None']]);
+  bare.getCell('H2').dataValidation = { type: 'list', allowBlank: true, formulae: ['"None,Recommended,ApplicationRequired"'] };
   wb.addWorksheet('Summary').getCell('A1').value = { formula: "'Outcome (formus_Outcome)'!B1", result: 'Outcome' };
   const f = path.join(out, 'insert_rows.xlsx'); await wb.xlsx.writeFile(f); return f;
 }
@@ -76,12 +80,28 @@ async function model() {
   ok(JSON.stringify(lns) === JSON.stringify(['formus_needid', 'formus_name', 'formus_score']), 'and the same three fields');
   await p2.close();
 
+  // a table with no details at all: they go in rows inserted above the header
+  if (!await p.locator('#nav .navitem:has-text("Bare")').count()) await p.click('#nav [data-grp]').catch(() => {});
+  await p.click('#nav .navitem:has-text("Bare")'); await p.waitForTimeout(400);
+  await p.click('[data-act="details"]'); await p.waitForSelector('.solbox');
+  await p.fill('.solbox label:has-text("Primary Name Column") input', 'formus_name'); await p.click('.solbox [data-dd="save"]'); await p.waitForTimeout(300);
+  const saved2 = await download(); const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.readFile(saved2); const bs = wb2.getWorksheet('Bare (formus_bare)');
+  ok(bs.getCell('A1').value === 'Primary Name Column' && bs.getCell('B1').value === 'formus_name' && bs.getCell('A2').value === 'Logical Name' && bs.getCell('A4').value === 'formus_name' && bs.dataValidations.model['H3'] && !bs.dataValidations.model['H2'], 'with no details at all, the detail goes in a row inserted above the header');
+
   // Outcome: another sheet's formula refers to it, so rows are not inserted, and the reason is given
   await openTab('Outcome'); await setDetails('formus_name', 'formus_outcomeid');
   const [d2] = await Promise.all([p.waitForEvent('download', { timeout: 4000 }).catch(() => null), (async () => { await p.click('#btnExport'); await p.click('.menu [data-x="xlsx-orig"]'); })()]);
   await p.waitForSelector('.dlgbox', { timeout: 5000 }).catch(() => {});
   const msg = await p.innerText('.dlgbox').catch(() => '');
   ok(!d2 && /Outcome[\s\S]*Primary Name Column[\s\S]*a formula on the sheet "Summary" refers to it/.test(msg), 'a sheet another formula points at is not changed, and the reason is given');
+
+  await p.click('.dlgbox button').catch(() => {});
+  // the version is shown
+  const ver = require('../package.json').version;
+  ok(new RegExp('version ' + ver.replace(/\./g, '\\.')).test(await p.getAttribute('#btnHelp', 'title')), 'the ? button says which version this is (' + ver + ')');
+  if (await p.isVisible('#btnHelp')) await p.click('#btnHelp'); else { await p.click('#btnMore'); await p.click('.menu [data-more="help"]'); }
+  await p.waitForTimeout(300);
+  ok((await p.innerText('#main h1')).includes('version ' + ver), 'and so does How it works');
 
   ok(!errs.length, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close(); process.exit(fails ? 1 : 0);

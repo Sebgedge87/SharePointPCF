@@ -1,6 +1,6 @@
 {
   "name": "data-model-explorer",
-  "version": "5.0.3",
+  "version": "5.0.4",
   "private": true,
   "description": "Offline, single-file viewer and editor for Dataverse data-model workbooks (5.0: also an XrmToolBox tool)",
   "scripts": {

@@ -26,7 +26,9 @@ t = (root / 'src/index.template.html').read_text(encoding='utf-8')
 wb = pathlib.Path(a.workbook)
 assert '"__FILENAME__"' in t, 'template is missing the "__FILENAME__" placeholder'
 # data first, libraries last, so text inside a library can never be mistaken for a placeholder
+version = json.loads((root / 'package.json').read_text())['version']
 t = (t.replace('"__MODE__"', '"readonly"' if a.readonly else '"edit"')
+      .replace('"__VERSION__"', js_str(version))
       .replace('"__FILENAME__"', js_str(wb.name))
       .replace('__TEMPLATE_B64__', b64(root / 'assets/Data_Model_Template.xlsx'))
       .replace('__LOGO__', b64(root / 'assets/logo.png'))
