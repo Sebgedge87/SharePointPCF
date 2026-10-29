@@ -4,7 +4,7 @@ New folder (`data-model-explorer-v7`), from 6.0.1.
 
 - **Dark mode.** The page follows the system's light or dark setting. The theme button in the header (beside ?) cycles Automatic, Dark and Light, and the choice is kept in the browser. The ERD on the page follows the theme; exported ERD images and draw.io files keep their light colours.
 - **Generic.** No company logo or name anywhere: the page, the guide, the template (its comment columns are now **Comments**), the example workbook (prefix `sample_`), the Dynamics 365 solution (`DataModelExplorer_7_0_0_0.zip`, publisher `DataModelExplorer`, prefix `dme`, so the page opens at `/WebResources/dme_/dme/DataModelExplorer.html`) and the XrmToolBox tool (`DataModelExplorer.XrmToolBox.dll`).
-- **XrmToolBox:** the tool's file name changed, so remove `FormusPro.DataModelExplorer.XrmToolBox.dll` from the Plugins folder when installing this one, or both appear in the tool list.
+- **XrmToolBox:** the tool's file name changed, so remove the 6.0 tool's dll from the Plugins folder when installing this one, or both appear in the tool list.
 
 # 6.0.1
 
@@ -16,7 +16,7 @@ New folder (`data-model-explorer-v7`), from 6.0.1.
 - The ERD's table filter suggests your own prefix (from Publishers and prefixes, or the workbook's), not `rhs_`.
 - **Text longer than Excel allows in a cell** (32,767 characters, for example a long list of choice options) no longer stops an export, loading a solution as the model, or converting a metadata export with "Text length must not exceed 32767 characters". The text is cut to fit, ends with `[cut: … this had N]`, and the page lists the cells it cut.
 - **Save & share is simpler.** **Save** (`Ctrl`+`S`) writes your edits into your workbook, asking where only the first time (or after the file has moved), and no longer asks "Overwrite the original file?" each time; it still asks if another program changed the file. **Save as…** saves to a new file. The template and values-only exports are under **Other formats**, and the two CSV items are one, with an **include hidden columns** tick box.
-- **Separate web resources in Dataverse.** The solution zip (`FORMUS_DataModelExplorer_6_0_0_0.zip`) holds the page (`DataModelExplorer.html`, 0.2 MB), its code (`app.js`) and the libraries (`lib/xlsx.full.min.js`, `lib/exceljs.min.js`, `lib/jszip.min.js`) as five web resources. A new version replaces only what changed and the libraries stay cached. The page keeps 5.0's name and id, so importing over 5.0 updates it. `make-webresource-solution.py --single` still packages one file.
+- **Separate web resources in Dataverse.** The solution zip (6.0.0) holds the page (`DataModelExplorer.html`, 0.2 MB), its code (`app.js`) and the libraries (`lib/xlsx.full.min.js`, `lib/exceljs.min.js`, `lib/jszip.min.js`) as five web resources. A new version replaces only what changed and the libraries stay cached. The page keeps 5.0's name and id, so importing over 5.0 updates it. `make-webresource-solution.py --single` still packages one file.
 - Opened as a file, and in XrmToolBox, the page is still one file (`Data_Model_Explorer.html`), built from the same source.
 - **A red bar** says when a part of the page did not load, or the parts are from different versions (an unfinished import, or an old copy in the browser's cache), and what to do.
 - A read-only copy made inside Dynamics 365 has the code and libraries written in, so it is still one file.
