@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Data Model Explorer as an XrmToolBox tool. Build: dotnet build -c Release (Windows, .NET SDK 8 or later). -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>DataModelExplorer.XrmToolBox</AssemblyName>
+    <RootNamespace>DataModelExplorer</RootNamespace>
+    <Version>6.0.1</Version>
+    <Company>Data Model Explorer</Company>
+    <Product>Data Model Explorer</Product>
+    <LangVersion>latest</LangVersion>
+    <!-- XrmToolBox already has every library this uses: only the tool's own dll goes in the Plugins folder -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="XrmToolBoxPackage" Version="1.2025.10.74" />
+    <!-- the version XrmToolBox.Extensibility is built against (the package itself asks for an older one) -->
+    <PackageReference Include="MscrmTools.Xrm.Connection" Version="1.2025.9.64" />
+    <!-- the WebView2 version XrmToolBox ships with -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the page, built by `npm run build` in the folder above and copied there as Data_Model_Explorer.html -->
+    <EmbeddedResource Include="..\Data_Model_Explorer.html" LogicalName="DataModelExplorer.html" />
+  </ItemGroup>
+</Project>
