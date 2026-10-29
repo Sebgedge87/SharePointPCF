@@ -1,3 +1,11 @@
+# 7.0.0
+
+New folder (`data-model-explorer-v7`), from 6.0.1.
+
+- **Dark mode.** The page follows the system's light or dark setting. The theme button in the header (beside ?) cycles Automatic, Dark and Light, and the choice is kept in the browser. The ERD on the page follows the theme; exported ERD images and draw.io files keep their light colours.
+- **Generic.** No company logo or name anywhere: the page, the guide, the template (its comment columns are now **Comments**), the example workbook (prefix `sample_`), the Dynamics 365 solution (`DataModelExplorer_7_0_0_0.zip`, publisher `DataModelExplorer`, prefix `dme`, so the page opens at `/WebResources/dme_/dme/DataModelExplorer.html`) and the XrmToolBox tool (`DataModelExplorer.XrmToolBox.dll`).
+- **XrmToolBox:** the tool's file name changed, so remove `FormusPro.DataModelExplorer.XrmToolBox.dll` from the Plugins folder when installing this one, or both appear in the tool list.
+
 # 6.0.1
 
 - **This environment: one solution list.** One searchable list of solutions; under it, **Load … as the model** and **Check against …**, both naming the solution picked. The Default solution (the workbook's own tables) is at the top of the list, for checking.

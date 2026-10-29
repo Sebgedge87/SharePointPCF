@@ -1,8 +1,11 @@
-# Data Model Explorer 6.0
+# Data Model Explorer 7.0
 
-Version 5.0, with the page **split into separate web resources** for Dataverse. Kept in its own folder: 1.9
+Version 6.0, made **generic** (no company logo or name) and with a **dark mode**. Kept in its own folder: 1.9
 (`../data-model-explorer`), 2.0 (`../data-model-explorer-v2`), 3.0 (`../data-model-explorer-live`), 4.0
-(`../data-model-explorer-v4`) and 5.0 (`../data-model-explorer-v5`) are unchanged.
+(`../data-model-explorer-v4`), 5.0 (`../data-model-explorer-v5`) and 6.0 (`../data-model-explorer-v6`) are unchanged.
+
+The Dynamics 365 solution defaults to the publisher `DataModelExplorer` with the prefix `dme`; pass your own with
+`python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`.
 
 `npm run build` writes the page two ways from the same source:
 
@@ -11,7 +14,7 @@ Version 5.0, with the page **split into separate web resources** for Dataverse. 
 | `dist/Data_Model_Explorer.html` (copied to `Data_Model_Explorer.html`) | Opened as a file, and built into the XrmToolBox tool: one file with everything inlined |
 | `dist/web/` | The Dataverse solution: `DataModelExplorer.html` (layout, styles, template), `app.js` (the code) and `lib/` (SheetJS, ExcelJS, JSZip) |
 
-`DataModelExplorer_6_0_1_0.zip` packages `dist/web` as five web resources (`npm run webresource`, or
+`DataModelExplorer_7_0_0_0.zip` packages `dist/web` as five web resources (`npm run webresource`, or
 `python3 tools/make-webresource-solution.py --single` for the one-file page as before). A new version then only
 replaces the files that changed, the browser keeps the libraries cached, and the code can be reviewed file by file.
 The page and `app.js` carry the same build id (version plus a hash of the code and libraries), and the script tags ask
@@ -31,7 +34,7 @@ the connected environment's address, so the page runs in its "inside Dynamics 36
 
 ### Try it without building
 
-`xrmtoolbox/release/DataModelExplorer.XrmToolBox.dll` is the tool, ready built (6.0.1, for XrmToolBox
+`xrmtoolbox/release/DataModelExplorer.XrmToolBox.dll` is the tool, ready built (7.0.0, for XrmToolBox
 1.2025.10 or later).
 
 1. Download it, right-click it → **Properties** → tick **Unblock** → OK. (Windows marks downloaded files, and XrmToolBox

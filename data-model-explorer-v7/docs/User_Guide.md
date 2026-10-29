@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 6.0.1 · 27 October 2026"
+subtitle: "Version 7.0.0 · 29 October 2026"
 ---
 
 ## Introduction
@@ -18,7 +18,12 @@ It is for anyone who owns or reviews a data model kept in the data-model templat
 | Share | Give a client or support team a read-only copy they can view but not change |
 | Live | Inside Dynamics 365 or XrmToolBox: load a solution as the model, or check the workbook against the environment for undocumented and unmanaged changes |
 
-This guide describes version 6.0, in the SharePointPCF repository under `data-model-explorer-v7`. Versions 1.9 (`data-model-explorer`), 2.0 (`data-model-explorer-v2`), 3.0 (`data-model-explorer-live`), 4.0 (`data-model-explorer-v4`) and 5.0 (`data-model-explorer-v5`) stay as they are, with their own guides.
+This guide describes version 7.0, in the SharePointPCF repository under `data-model-explorer-v7`. Versions 1.9 (`data-model-explorer`), 2.0 (`data-model-explorer-v2`), 3.0 (`data-model-explorer-live`), 4.0 (`data-model-explorer-v4`), 5.0 (`data-model-explorer-v5`) and 6.0 (`data-model-explorer-v6`) stay as they are, with their own guides.
+
+**New in 7.0**
+
+- **Dark mode.** The page follows your system's light or dark setting; the theme button in the header picks Dark or Light instead, and the page remembers it (The header). Exported ERD images and files stay light.
+- **Generic.** No company logo or name: the template's comment columns are called **Comments**, the example workbook uses the `sample_` prefix, and the Dynamics 365 solution and XrmToolBox tool are simply Data Model Explorer.
 
 **New in 6.0**
 
@@ -58,7 +63,7 @@ This guide describes version 6.0, in the SharePointPCF repository under `data-mo
 
 ![The header](images/00-header.png)
 
-**1** Workbook · **2** Changes · **3** Check · **4** Save & share · **5** Build solution · **6** How it works
+**1** Workbook · **2** Changes · **3** Check · **4** Save & share · **5** Build solution · **6** Theme · **7** How it works
 
 | Button | What it does |
 | --- | --- |
@@ -67,9 +72,14 @@ This guide describes version 6.0, in the SharePointPCF repository under `data-mo
 | Check | Checks, Compare with a solution (or This environment), Publishers and prefixes, What changed (after loading a newer version) and Template. The count is errors plus warnings |
 | Save & share | Save the workbook, make a read-only copy or a CSV, and the build and log downloads, in groups |
 | Build solution | Turn the workbook into a Dataverse solution. Greyed out until a workbook is open |
-| ? | How it works |
+| Theme (◐, ☾ or ☀) | Automatic (as your system), Dark or Light: each click moves to the next, and the page remembers your choice in this browser |
+| ? | How it works, with the version number |
 
 On a phone the buttons fold into one **⋯** menu.
+
+![Dark mode](images/23-dark.png)
+
+In dark mode (your system's setting, or the theme button) everything on screen is dark, the ERD included. Exported ERD images, draw.io files and workbooks are unchanged.
 
 ## Opening (uploading) a workbook
 
@@ -315,7 +325,7 @@ Uploaded to an environment as a web resource, the page reads the environment's t
 
 ### Putting it in an environment
 
-1. Get the solution zip: `DataModelExplorer_6_0_1_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
+1. Get the solution zip: `DataModelExplorer_7_0_0_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
 2. Import it into the environment (Power Apps → Solutions → Import, or `pac solution import`). It holds five web resources under `<prefix>_/dme/`, each well under the 5 MB default limit:
 
    | Web resource | Holds | Size |
