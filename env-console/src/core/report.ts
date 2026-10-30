@@ -111,22 +111,22 @@ export function renderReportHtml(r: HealthReport): string {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Environment health report ${esc(r.generatedAt.slice(0, 10))}</title>
 <style>
-body{margin:0;background:#F6F8FA;color:#1B2A38;font:14px/1.5 "IBM Plex Sans","Segoe UI",system-ui,sans-serif}
+body{margin:0;background:#FFFFFF;color:#0A4873;font:14px/1.5 Aptos,"Segoe UI",system-ui,sans-serif}
 main{max-width:1200px;margin:0 auto;padding:32px 24px 48px}
-h1,h2{font-family:Rubik,"Segoe UI",system-ui,sans-serif;color:#0A4873;margin:0}
+h1,h2{font-family:Aptos,"Segoe UI",system-ui,sans-serif;color:#0A4873;margin:0}
 h1{font-size:28px}h2{font-size:18px;margin:32px 0 12px}
 .eyebrow{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#BB1C73}
-.muted{color:#4D6A82}.mono{font-family:"IBM Plex Mono",Consolas,monospace;font-size:12px}
-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #D5DEE7;border-radius:8px;overflow:hidden;font-size:13px}
+.muted{color:#4F6E8A}.mono{font-family:"Aptos Mono",Consolas,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #D3DDE7;border-radius:8px;overflow:hidden;font-size:13px}
 th,td{padding:8px 10px;border-bottom:1px solid #E6ECF1;text-align:left;vertical-align:top}
-thead th{background:#F0F3F6;color:#4D6A82;font-weight:500}
+thead th{background:#ECF1F5;color:#0A4873;font-weight:600}
 tbody th{font-weight:600}
-.bad{color:#8E1B1B;font-weight:700}.diff{background:#E3EEF7;color:#0A4873;font-weight:600}
+.bad{color:#8E1B1B;font-weight:700}.diff{background:#ECF1F5;color:#0A4873;font-weight:600}
 .sev{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700}
-.critical{background:#FCE8E8;color:#8E1B1B}.warning{background:#FDF1DC;color:#7A4600}.info{background:#E3EEF7;color:#0A4873}
+.critical{background:#FCE8E8;color:#8E1B1B}.warning{background:#FDF1DC;color:#7A4600}.info{background:#ECF1F5;color:#0A4873}
 @media print{body{background:#fff}main{padding:0}h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}
 </style></head><body><main>
-<div class="eyebrow">Env Console</div>
+<div class="eyebrow">FormusPro · Env Console</div>
 <h1>Environment health report</h1>
 <p class="muted">Generated ${esc(new Date(r.generatedAt).toUTCString())} · activity over the last ${r.days} days · ${envs.length} environments</p>
 

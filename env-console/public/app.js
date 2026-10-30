@@ -1,7 +1,8 @@
 // Env Console dashboard. Talks only to its own server; all text is set with textContent.
 
-const KNOWN_COLORS = { DEV: "#127A5C", TEST: "#2F5BD3", UAT: "#9A5800", PREPROD: "#7B3FB0", PROD: "#B42318" };
-const PALETTE = ["#127A5C", "#2F5BD3", "#9A5800", "#7B3FB0", "#B42318", "#0F6A8A", "#5B6370"];
+// FormusPro brand palette (primary + secondary); white text reads on all of them.
+const KNOWN_COLORS = { DEV: "#0A4873", TEST: "#1F6FAE", UAT: "#061A46", PREPROD: "#7B134D", PROD: "#BB1C73" };
+const PALETTE = ["#0A4873", "#1F6FAE", "#061A46", "#7B134D", "#BB1C73", "#000000", "#4F6E8A"];
 const KIND_LABEL = { flow: "Cloud flows", rule: "Business rules", plugin: "Plugin steps" };
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -11,7 +12,7 @@ function storeGet(k) { try { return localStorage.getItem(k); } catch { return nu
 function storeSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } }
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 function applyTheme() {
-  const choice = storeGet("pcxTheme") || "system";
+  const choice = storeGet("pcxTheme") || "light";
   const dark = choice === "dark" || (choice === "system" && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   document.querySelectorAll("[data-theme-choice]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.themeChoice === choice ? "true" : "false"));

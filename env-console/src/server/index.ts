@@ -46,11 +46,13 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
-  "/app.css": { file: "app.css", type: "text/css; charset=utf-8" }
+  "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
+  "/brand/formuspro-logo-blue.png": { file: "brand/formuspro-logo-blue.png", type: "image/png" },
+  "/brand/formuspro-logo-white.png": { file: "brand/formuspro-logo-white.png", type: "image/png" }
 };
 
 const SECURITY_HEADERS: Record<string, string> = {
-  "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store"

@@ -29,7 +29,7 @@ It runs in one of two ways:
 - **CLI page:** a terminal in the dashboard that runs `pcx` commands (on your own machine only), next to a reference of every command with examples you can click to use.
 - **Remove unmanaged changes:** from Solution compare, with a reason and confirmation.
 - **Microsoft and system items** are hidden by default on Flows & plugins; one switch shows them.
-- **Brand and themes:** FormusPro navy and magenta with Rubik and IBM Plex Sans, in a light theme and a dark theme (Light / Dark / follow the system).
+- **Brand and themes:** follows the FormusPro brand guidelines: blue logo top left, white page with blue text, magenta only as an accent, Aptos type (Segoe UI where Aptos isn't installed), brand colours in charts and environment labels. Light is the default; there is also a dark theme built on the brand's dark blue, and a "follow the system" option.
 
 ## Requirements
 

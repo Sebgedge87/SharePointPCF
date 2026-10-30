@@ -1,58 +1,66 @@
-/* Env Console — brand: navy #0A4873, magenta #BB1C73; Rubik headings, IBM Plex Sans body. */
+/* Env Console — FormusPro brand: Blue Azure #0A4873, Magenta #BB1C73 (accent only), White.
+   Secondary palette (charts and tables only): Dark Blue #061A46, Off White #ECF1F5, Dark Magenta #7B134D, Light Magenta #F7D4E7.
+   Typeface: Aptos, falling back to Segoe UI. */
 :root {
   color-scheme: light;
-  --ground: #F6F8FA; --surface: #FFFFFF; --surface-2: #F0F3F6; --line: #D5DEE7; --line-soft: #E6ECF1;
-  --text: #1B2A38; --text-2: #33495C; --muted: #4D6A82;
-  --primary: #0A4873; --primary-hover: #083A5D; --on-primary: #FFFFFF; --link: #0A5C99; --link-hover: #0A4873;
-  --brand: #BB1C73; --accent-soft: #E3EEF7; --accent-text: #0A4873;
+  --ground: #FFFFFF; --surface: #FFFFFF; --surface-2: #ECF1F5; --line: #D3DDE7; --line-soft: #E4EAF0;
+  --text: #0A4873; --heading: #0A4873; --text-2: #2B5A80; --muted: #4F6E8A;
+  --primary: #0A4873; --primary-hover: #083A5D; --on-primary: #FFFFFF; --link: #0A4873; --link-hover: #BB1C73;
+  --brand: #BB1C73; --on-brand: #FFFFFF; --accent-soft: #ECF1F5; --accent-text: #0A4873;
   --ok: #16794C; --ok-soft: #E3F3EA; --ok-text: #0B5A3A;
   --bad: #C62828; --bad-soft: #FCE8E8; --bad-text: #8E1B1B;
   --warn-soft: #FDF1DC; --warn-text: #7A4600;
-  --inverse: #0A2A44; --inverse-text: #FFFFFF; --inverse-line: #33536F; --inverse-field: #123B5C;
-  --side: #0A4873; --side-text: #D7E5F0; --side-muted: #A9C3D8; --side-active: rgba(255,255,255,0.14); --side-line: rgba(255,255,255,0.16);
-  --chart-ok: #3D7FB8; --chart-bad: #C62828; --chart-grid: #E6ECF1;
-  --code-bg: #0F1E2C; --code-text: #D6E2EC; --code-add-bg: #12301F; --code-add: #8FE0B5; --code-del-bg: #3A1715; --code-del: #F5A39C; --code-muted: #8EA3B5;
-  --shadow: 0 1px 2px rgba(10,42,68,0.06);
-  --head: Rubik, "Segoe UI", system-ui, sans-serif;
-  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --inverse: #0A4873; --inverse-text: #FFFFFF; --inverse-line: #3E6E94; --inverse-field: #083A5D;
+  --side: #FFFFFF; --side-text: #0A4873; --side-strong: #0A4873; --side-muted: #4F6E8A; --side-active: #ECF1F5; --side-line: #D3DDE7; --side-switch: #ECF1F5; --side-switch-on: #FFFFFF;
+  --chart-ok: #1F6FAE; --chart-bad: #BB1C73; --chart-grid: #E4EAF0;
+  --code-bg: #061A46; --code-text: #DCE6F0; --code-add-bg: #0F3A2C; --code-add: #8FE0B5; --code-del-bg: #4A1230; --code-del: #F7B3D6; --code-muted: #8FA6C2;
+  --shadow: 0 1px 2px rgba(6,26,70,0.06);
+  --head: Aptos, "Aptos Display", "Segoe UI", system-ui, sans-serif;
+  --body: Aptos, "Segoe UI", system-ui, sans-serif;
+  --mono: "Aptos Mono", Consolas, ui-monospace, monospace;
 }
+/* Dark theme from the secondary Dark Blue. Pink never sits on blue, so accents turn off-white here. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ground: #0E1620; --surface: #152230; --surface-2: #1A2A3B; --line: #2A3E52; --line-soft: #213244;
-  --text: #E6EDF3; --text-2: #C3D1DD; --muted: #93A8BA;
-  --primary: #2F78B2; --primary-hover: #3A86C2; --on-primary: #FFFFFF; --link: #7CB8E6; --link-hover: #A8D0EF;
-  --brand: #E05FA0; --accent-soft: #1D3550; --accent-text: #A8D0EF;
-  --ok: #3FB97A; --ok-soft: #12301F; --ok-text: #8FE0B5;
-  --bad: #E25A55; --bad-soft: #3A1715; --bad-text: #F5A39C;
+  --ground: #061A46; --surface: #0C2456; --surface-2: #12306A; --line: #26457E; --line-soft: #1B3A72;
+  --text: #ECF1F5; --heading: #FFFFFF; --text-2: #C9D6E4; --muted: #9FB3CC;
+  --primary: #2F78B2; --primary-hover: #3A86C2; --on-primary: #FFFFFF; --link: #7CB8E6; --link-hover: #FFFFFF;
+  --brand: #ECF1F5; --on-brand: #061A46; --accent-soft: #163A78; --accent-text: #CFE2F3;
+  --ok: #3FB97A; --ok-soft: #0F3A2C; --ok-text: #8FE0B5;
+  --bad: #E25A55; --bad-soft: #3D1520; --bad-text: #F5A39C;
   --warn-soft: #3A2A10; --warn-text: #F2C47A;
-  --inverse: #0A1018; --inverse-text: #E6EDF3; --inverse-line: #2A3E52; --inverse-field: #152230;
-  --side: #0B1724; --side-text: #C3D1DD; --side-muted: #8EA3B5; --side-active: rgba(255,255,255,0.08); --side-line: rgba(255,255,255,0.08);
-  --chart-ok: #4A93CC; --chart-bad: #E25A55; --chart-grid: #24364A;
-  --code-bg: #0A1018; --shadow: none;
+  --inverse: #04122F; --inverse-text: #ECF1F5; --inverse-line: #26457E; --inverse-field: #0C2456;
+  --side: #04122F; --side-text: #C9D6E4; --side-strong: #FFFFFF; --side-muted: #9FB3CC; --side-active: rgba(255,255,255,0.08); --side-line: rgba(255,255,255,0.10); --side-switch: rgba(0,0,0,0.25); --side-switch-on: rgba(255,255,255,0.12);
+  --chart-ok: #4A8FC7; --chart-bad: #D9478F; --chart-grid: #1B3A72;
+  --code-bg: #04122F; --shadow: none;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--ground); color: var(--text); font: 14px/1.5 var(--body); }
 a { color: var(--link); } a:hover { color: var(--link-hover); }
 button, input, select { font: inherit; color: inherit; }
-h1, h2, h3 { font-family: var(--head); letter-spacing: -0.01em; }
-h1 { margin: 0; font-size: 26px; font-weight: 600; color: var(--text); }
+h1, h2, h3 { font-family: var(--head); letter-spacing: -0.01em; color: var(--heading); }
+h1 { margin: 0; font-size: 26px; font-weight: 600; color: var(--heading); }
 h2 { margin: 0; font-size: 16px; font-weight: 600; }
 h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .shell { display: flex; flex-wrap: wrap; min-height: 100vh; }
 
 /* side menu */
-.side { flex: 1 1 220px; max-width: 260px; background: var(--side); color: var(--side-text); padding: 20px 12px; display: flex; flex-direction: column; gap: 2px; }
-.brand { display: flex; align-items: center; gap: 10px; padding: 4px 12px 20px; color: #FFFFFF; font: 600 16px var(--head); }
-.logo { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #FFFFFF 0 50%, var(--brand) 50% 100%); }
+.side { flex: 1 1 220px; max-width: 260px; background: var(--side); color: var(--side-text); border-right: 1px solid var(--side-line); padding: 20px 12px; display: flex; flex-direction: column; gap: 2px; }
+/* logo top left with clear space around it; blue logo on white, white logo on the dark theme */
+.brand { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 14px 18px; color: var(--side-strong); text-decoration: none; }
+.brand img { display: block; width: 168px; height: auto; }
+.brand .logo-white { display: none; }
+:root[data-theme="dark"] .brand .logo-blue { display: none; }
+:root[data-theme="dark"] .brand .logo-white { display: block; }
+.brand .app-name { font: 600 13px var(--head); letter-spacing: 0.02em; color: var(--side-muted); }
 .side a { position: relative; display: flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 8px; color: var(--side-text); text-decoration: none; }
-.side a:hover { background: var(--side-active); color: #FFFFFF; }
-.side a.active { background: var(--side-active); color: #FFFFFF; font-weight: 600; }
+.side a:hover { background: var(--side-active); color: var(--side-strong); }
+.side a.active { background: var(--side-active); color: var(--side-strong); font-weight: 600; }
 .side a.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--brand); }
 .side-foot { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }
-.theme { display: flex; gap: 2px; background: rgba(0,0,0,0.18); border-radius: 8px; padding: 3px; margin: 0 4px; }
+.theme { display: flex; gap: 2px; background: var(--side-switch); border-radius: 8px; padding: 3px; margin: 0 4px; }
 .theme button { flex: 1; min-height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--side-muted); font-size: 12px; cursor: pointer; }
-.theme button[aria-pressed="true"] { background: var(--side-active); color: #FFFFFF; font-weight: 600; }
+.theme button[aria-pressed="true"] { background: var(--side-switch-on); color: var(--side-strong); font-weight: 600; box-shadow: 0 1px 2px rgba(6,26,70,0.12); }
 .who { padding: 12px 12px 4px; border-top: 1px solid var(--side-line); font-size: 12px; color: var(--side-muted); word-break: break-all; display: flex; flex-direction: column; gap: 2px; }
 .who a { color: var(--side-text); }
 
@@ -120,7 +128,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary)
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
-thead th { color: var(--muted); font-weight: 500; background: var(--surface-2); border-bottom-color: var(--line); white-space: nowrap; }
+thead th { color: var(--text-2); font-weight: 600; background: var(--surface-2); border-bottom-color: var(--line); white-space: nowrap; }
 th:first-child, td:first-child { padding-left: 20px; } th:last-child, td:last-child { padding-right: 20px; }
 tbody th { font-weight: 500; }
 tbody tr:hover { background: var(--surface-2); }
@@ -187,7 +195,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); 
 
 /* navigation groups and badges */
 .nav-group { margin: 14px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--side-muted); }
-.badge { margin-left: auto; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--brand); color: #FFFFFF; font-size: 11px; font-weight: 700; text-align: center; }
+.badge { margin-left: auto; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--brand); color: var(--on-brand); font-size: 11px; font-weight: 700; text-align: center; }
 
 /* environment-column tables */
 .envtable th.envcol, .envtable td.envcol { text-align: center; white-space: nowrap; border-left: 1px solid var(--line-soft); }
@@ -206,7 +214,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); 
 
 /* sign-in dialog */
 dialog.modal { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(480px, calc(100vw - 32px)); background: var(--surface); color: var(--text); box-shadow: 0 24px 60px rgba(0,0,0,0.3); }
-dialog.modal::backdrop { background: rgba(10,26,40,0.55); }
+dialog.modal::backdrop { background: rgba(6,26,70,0.55); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 0; }
 .modal-body { padding: 14px 22px 22px; display: flex; flex-direction: column; gap: 14px; }
 .devcode { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; padding: 14px 16px; }
@@ -249,7 +257,7 @@ a.envlink:hover { text-decoration: underline; color: var(--link-hover); }
 /* flyout panel from the right */
 dialog.flyout { position: fixed; inset: 0 0 0 auto; margin: 0; height: 100vh; max-height: 100vh; width: min(760px, 100vw); padding: 0; border: 0; border-left: 1px solid var(--line); background: var(--ground); color: var(--text); box-shadow: -20px 0 50px rgba(0,0,0,0.25); display: flex; flex-direction: column; }
 dialog.flyout:not([open]) { display: none; }
-dialog.flyout::backdrop { background: rgba(10,26,40,0.45); }
+dialog.flyout::backdrop { background: rgba(6,26,70,0.45); }
 dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 @keyframes flyin { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { dialog.flyout[open] { animation: none; } }
@@ -261,17 +269,17 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 .envtable th.envcol .chip { max-width: 180px; }
 
 /* in-page terminal */
-.term { background: #0B1520; border: 1px solid #1E2E40; border-radius: 12px; display: flex; flex-direction: column; min-height: 520px; max-height: calc(100vh - 160px); overflow: hidden; color: #D6E2EC; }
-.term-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 8px 16px; background: #0F1E2C; border-bottom: 1px solid #1E2E40; font: 600 12px var(--mono); color: #8EA3B5; }
+.term { background: #061A46; border: 1px solid #1B3A72; border-radius: 12px; display: flex; flex-direction: column; min-height: 520px; max-height: calc(100vh - 160px); overflow: hidden; color: #D6E2EC; }
+.term-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 8px 16px; background: #04122F; border-bottom: 1px solid #1B3A72; font: 600 12px var(--mono); color: #8EA3B5; }
 .term-bar .btn.ghost { color: #C3D1DD; border-color: #2A3E52; min-height: 28px; }
 .term-screen { flex: 1; overflow: auto; padding: 14px 16px; font: 12.5px/1.55 var(--mono); }
 .term-entry + .term-entry { margin-top: 14px; }
 .term-cmd { color: #FFFFFF; font-weight: 500; }
-.term-prompt { color: #F49AC8; }
+.term-prompt { color: #7CB8E6; }
 .term-out { margin: 4px 0 0; white-space: pre; overflow-x: auto; color: #C3D1DD; font: inherit; }
 .term-err { color: #F5A39C; }
 .term-dim { color: #8EA3B5; gap: 8px; }
-.term-line { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #1E2E40; background: #0F1E2C; font: 13px var(--mono); }
+.term-line { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #1B3A72; background: #04122F; font: 13px var(--mono); }
 .term-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #FFFFFF; font: inherit; min-height: 28px; }
 .term-input::placeholder { color: #6F8598; }
 .term .spinner { border-color: #2A3E52; border-top-color: #7CB8E6; }
@@ -285,3 +293,8 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 .envdot { width: 10px; height: 10px; border-radius: 3px; flex: none; transform: translateY(-1px); }
 .env-head > .pill { flex: none; margin-top: 1px; }
 .chip { display: inline-block; vertical-align: middle; line-height: 1.5; }
+/* the logo link is not a menu item: keep it left-aligned, no hover fill */
+.side a.brand { display: flex; flex-direction: column; align-items: flex-start; min-height: 0; padding: 10px 14px 18px; border-radius: 0; background: transparent; }
+.side a.brand:hover { background: transparent; }
+/* dark theme: outline the brand-coloured labels so dark blue ones stay visible */
+:root[data-theme="dark"] .chip, :root[data-theme="dark"] .envdot { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28); }
