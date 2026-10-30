@@ -411,6 +411,10 @@ body.ro [data-fedit]{cursor:default}
 :root:not([data-theme="light"]) .convmask{background:rgba(0,0,0,.6)} :root:not([data-theme="light"]) .erdv svg [fill="#FFFFFF"]{fill:#17212b} :root:not([data-theme="light"]) .erdv svg [fill="#E3ECF4"],:root:not([data-theme="light"]) .erdv .eyebtn:hover rect{fill:#1f3549} :root:not([data-theme="light"]) .erdv svg [fill="#F4F7FA"]{fill:#1c2731}
 :root:not([data-theme="light"]) .erdv svg [fill="#0A4873"]{fill:#a9cdee} :root:not([data-theme="light"]) .erdv svg [stroke="#0A4873"]{stroke:#86b7e3} :root:not([data-theme="light"]) .erdv svg [fill="#BB1C73"]{fill:#f08bc0} :root:not([data-theme="light"]) .erdv svg [stroke="#BB1C73"]{stroke:#f08bc0}
 }
+.envrow{display:flex;gap:10px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:var(--panel)}
+.envpage{padding:18px 24px;height:100%;display:flex;flex-direction:column;min-height:0} .envwrap{flex:1;overflow:auto;border:1px solid var(--line);border-radius:12px;min-height:0}
+.envgrid{width:100%;border-collapse:collapse} .envgrid th,.envgrid td{padding:7px 10px;border-bottom:1px solid var(--line2);text-align:left;vertical-align:top} .envgrid thead th{position:sticky;top:0;background:var(--panel2);z-index:1}
+.envgrid td.envok{color:var(--faint)} .envgrid td.envdiff{color:var(--edit);background:var(--edit-bg);font-weight:600}
 </style>
 </head>
 <body>
@@ -2796,8 +2800,12 @@ function dvHTML(sh){
      managed environment, anything created or changed directly there (unmanaged). */
 const LIVE=!RO&&location.protocol==='https:'&&(/\/webresources\//i.test(location.pathname)||(()=>{try{return !!(window.parent&&window.parent!==window&&window.parent.Xrm)}catch(e){return false}})());
 const LIVE_API=location.origin+'/api/data/v9.2/';
+// which environment dvGet reads: the page's own ('0'), or, in XrmToolBox, one of its extra connections (see inEnv)
+let DV_API=LIVE_API, DV_ENV='0';
 async function dvGet(path){
-  const url=/^https:/.test(path)?path:LIVE_API+path;
+  let url=/^https:/.test(path)?path:DV_API+path;
+  // a next-page link from another environment comes back with that environment's address: send it through the tool
+  if(DV_ENV!=='0'&&/^https:/.test(path)){const u=new URL(path); if(u.origin!==location.origin) url=location.origin+'/__dme/env/'+encodeURIComponent(DV_ENV)+u.pathname+u.search}
   let r;
   try{ r=await fetch(url,{credentials:'same-origin',headers:{'Accept':'application/json','OData-MaxVersion':'4.0','OData-Version':'4.0'}}) }
   catch(e){ throw new Error('The environment could not be reached ('+e.message+')') }
@@ -2942,6 +2950,136 @@ async function liveSetDv(main,extra){
   try{await idb.put(rec)}catch(e){}
   updateCounts(); refreshSpecial(true);
 }
+/* ---------- other environments (XrmToolBox) ----------
+   The XrmToolBox tool can hold extra connections. It lists them at /__dme/envs, opens its connection picker for
+   /__dme/envs/add, and reads one through /__dme/env/<id>/api/data/... with that connection's sign-in. Two comparisons:
+   - this workbook against every environment, side by side (the same checks as This environment);
+   - one solution across the environments: tables and columns that are missing or set differently (drift). */
+const ENV={host:false,list:[],res:null};
+async function envsLoad(){
+  try{const r=await fetch(location.origin+'/__dme/envs',{cache:'no-store'}); if(!r.ok) return; const j=await r.json(); ENV.host=true; ENV.list=j.envs||[]}catch(e){}
+}
+try{ if(window.chrome&&chrome.webview) chrome.webview.addEventListener('message',e=>{ if(e.data==='dme-envs') envsLoad().then(()=>{ if($('#dvpanel').classList.contains('open')&&LIVE) renderLive() }) }) }catch(e){}
+const envApi=id=>id==='0'?LIVE_API:location.origin+'/__dme/env/'+encodeURIComponent(id)+'/api/data/v9.2/';
+async function inEnv(id,fn){const a=DV_API,b=DV_ENV; DV_API=envApi(id); DV_ENV=id; try{return await fn()}finally{DV_API=a; DV_ENV=b}}
+async function envAction(a,id){
+  if(a==='add'){ try{await fetch(location.origin+'/__dme/envs/add',{cache:'no-store'})}catch(e){} toast('Pick the environment in XrmToolBox\'s connection window'); return }
+  if(a==='remove'){ try{await fetch(location.origin+'/__dme/envs/remove?id='+encodeURIComponent(id),{cache:'no-store'})}catch(e){} return }
+  if(a==='checkall') return envCheckAll();
+  if(a==='drift') return envDrift();
+  if(a==='results') return go('__envs');
+}
+const ENV_TAG={'dv-field-missing':'Not built','dv-table-missing':'Table missing','dv-field-undocumented':'Undocumented','dv-table-undocumented':'Undocumented','dv-nn-undocumented':'Undocumented',
+  'dv-type':'Type differs','dv-required':'Required level differs','dv-unmanaged':'Unmanaged','dv-active-layer':'Changed here','dv-rel-extra':'Relationship missing','dv-rel-missing':'Relationship not documented',
+  'dv-custom':'Custom flag differs','dv-ownership':'Ownership differs','dv-std-undocumented':'Standard fields not listed'};
+// the workbook against each environment: the checks of This environment, run once per environment and lined up
+async function envCheckAll(){
+  if(isStarter()) return toast('Open the data-model workbook first');
+  const pick=LV.sol1?(LV.sols||[]).find(s=>s.solutionid===LV.sol1):null, ents=S.sheets.filter(s=>s.kind==='entity');
+  const wbTables=[...new Set(ents.filter(s=>/^[a-z0-9_]+$/.test(s.logical||'')).map(s=>s.logical))];
+  LV.busy=true; LV.err=''; renderLive();
+  const res={mode:'check',at:Date.now(),sol:pick?pick.friendlyname:'',file:S.fileName,envs:[],rows:[]}, map=new Map(), saved=S.dv;
+  try{
+    for(const env of ENV.list){
+      const col={id:env.id,name:env.name,url:env.url,err:'',note:''}; res.envs.push(col);
+      try{
+        await inEnv(env.id,async()=>{
+          let solRec=null, solTables=null;
+          if(pick){ liveProg(env.name+': finding '+pick.friendlyname+'…'); solRec=(await liveSolutions()).find(s=>s.uniquename===pick.uniquename);
+            if(solRec) solTables=(await liveSolutionTables(solRec)).tables.map(x=>x.ln); else col.note=pick.friendlyname+' is not here: checked against the Default solution' }
+          if(solRec) col.note='Solution version '+(solRec.version||'?')+(solRec.ismanaged?' (managed)':'');
+          const names=[...new Set([...wbTables,...(solTables||[])])];
+          const defs=await liveDefs(names,false,(d,n)=>liveProg(env.name+': reading '+names.length+' table definitions: '+Math.round(d/n*100)+'%'));
+          const rec={id:'env',org:env.url,ents:parseDv([{name:'live',text:JSON.stringify({value:defs.main})}]).ents,live:true,managed:LV.managed,sol:solRec?{name:solRec.friendlyname,unique:solRec.uniquename,tables:solTables}:null};
+          if(LV.managed){ const lay=await liveLayers(rec.ents,wbTables,(d,n)=>liveProg(env.name+': looking for unmanaged changes: '+d+' of '+n)); rec.layers=lay.layers; if(lay.failed) col.note+=(col.note?' · ':'')+'layers not read' }
+          const out=[]; S.dv=rec;
+          try{ dvChecks((rule,sh,row,field,msg)=>out.push({rule,sh,row,field,msg}),ents) } finally { S.dv=saved }
+          out.forEach(i=>{
+            let table=i.sh.logical||i.sh.name, tlabel=i.sh.label||i.sh.name, field=i.field||(i.row?getVal(i.sh,i.row,'Logical Name').trim().toLowerCase():'');
+            if(i.rule==='dv-table-undocumented'){table=i.field; tlabel=i.field; field=''}
+            const k=table+'|'+field+'|'+i.rule; let r=map.get(k);
+            if(!r){ r={table,tlabel,field,what:RULES[i.rule]?RULES[i.rule][1]:i.rule,rule:i.rule,cells:{}}; map.set(k,r) }
+            r.cells[env.id]={t:ENV_TAG[i.rule]||'Differs',title:i.msg,diff:true};
+          });
+        });
+      }catch(e){ col.err=e.message }
+    }
+  }finally{ S.dv=saved; S.issues=null }
+  res.rows=[...map.values()].sort((a,b)=>a.tlabel.localeCompare(b.tlabel)||a.field.localeCompare(b.field)||a.what.localeCompare(b.what));
+  res.rows.forEach(r=>res.envs.forEach(c=>{ if(!r.cells[c.id]) r.cells[c.id]=c.err?{t:'Not read',title:c.err}:{t:'✓',title:'As the workbook'} }));
+  ENV.res=res; LV.busy=false; liveProg(''); renderLive(); go('__envs');
+}
+// one column's settings, for comparing environments
+function envColProps(a,d,m1){return {type:LIVE_TYPES[vOf(a.AttributeTypeName)]||a.AttributeType||'',req:vOf(a.RequiredLevel)||'None',label:lbl(a.DisplayName),add:liveAddl(a,d,m1)}}
+// one solution across the environments: what is missing, and what is set differently
+async function envDrift(){
+  const pick=(LV.sols||[]).find(s=>s.solutionid===LV.sol1); if(!pick) return toast('Pick a solution first');
+  LV.busy=true; LV.err=''; renderLive();
+  const res={mode:'drift',at:Date.now(),sol:pick.friendlyname,envs:[],rows:[]}, models={};
+  for(const env of ENV.list){
+    const col={id:env.id,name:env.name,url:env.url,err:'',note:''}; res.envs.push(col);
+    try{
+      await inEnv(env.id,async()=>{
+        liveProg(env.name+': finding '+pick.friendlyname+'…');
+        const s=(await liveSolutions()).find(x=>x.uniquename===pick.uniquename); if(!s){col.err=pick.friendlyname+' is not in this environment'; return}
+        col.note='Version '+(s.version||'?')+(s.ismanaged?' (managed)':' (unmanaged)');
+        const st=await liveSolutionTables(s), names=st.tables.map(x=>x.ln), whole={}; st.tables.forEach(x=>{whole[x.ln]=x.all});
+        const defs=await liveDefs(names,true,(d,n)=>liveProg(env.name+': reading '+names.length+' tables: '+Math.round(d/n*100)+'%'));
+        const m={}; defs.main.forEach(e=>{
+          const ln=String(e.LogicalName).toLowerCase(), det=defs.det[ln]||{}, pk=String(e.PrimaryIdAttribute||'').toLowerCase(), pn=String(e.PrimaryNameAttribute||'').toLowerCase();
+          const pickA=a=>whole[ln]!==false||st.attrIds.has(String(a.MetadataId).toLowerCase())||[pk,pn].includes(String(a.LogicalName).toLowerCase());
+          const t=m[ln]={label:lbl(e.DisplayName)||e.SchemaName,attrs:{}};
+          (e.Attributes||[]).filter(a=>a.LogicalName&&!a.AttributeOf&&vOf(a.AttributeTypeName)!=='VirtualType'&&pickA(a)).forEach(a=>{
+            const al=String(a.LogicalName).toLowerCase(), m1=(e.ManyToOneRelationships||[]).filter(r=>String(r.ReferencingAttribute).toLowerCase()===al&&String(r.ReferencingEntity).toLowerCase()===ln);
+            t.attrs[al]=envColProps(a,det[al],m1) });
+        });
+        models[env.id]=m;
+      });
+    }catch(e){ col.err=e.message }
+  }
+  const ok=res.envs.filter(c=>models[c.id]), tables=new Set(); ok.forEach(c=>Object.keys(models[c.id]).forEach(x=>tables.add(x)));
+  const P=[['type','Type'],['req','Required level'],['label','Display name'],['add','Settings']];
+  [...tables].sort().forEach(tl=>{
+    const label=(ok.map(c=>models[c.id][tl]).find(Boolean)||{}).label||tl, has=ok.filter(c=>models[c.id][tl]);
+    if(has.length<ok.length) res.rows.push({table:tl,tlabel:label,field:'',what:'Table',cells:Object.fromEntries(ok.map(c=>[c.id,models[c.id][tl]?{t:'✓',title:'Here'}:{t:'Missing',title:'Not in the solution here',diff:true}]))});
+    const attrs=new Set(); has.forEach(c=>Object.keys(models[c.id][tl].attrs).forEach(a=>attrs.add(a)));
+    [...attrs].sort().forEach(al=>{
+      const vals=ok.map(c=>models[c.id][tl]?models[c.id][tl].attrs[al]||null:undefined), present=vals.filter(Boolean);
+      const missing=vals.some(v=>v===null), differ=P.filter(([k])=>new Set(present.map(v=>v[k])).size>1);
+      if(!missing&&!differ.length) return;
+      const show=differ.length?differ:[P[0],P[1]];
+      res.rows.push({table:tl,tlabel:label,field:al,what:[missing?'Missing somewhere':'',...differ.map(x=>x[1]+' differs')].filter(Boolean).join(', '),
+        cells:Object.fromEntries(ok.map((c,i)=>{const v=vals[i];
+          if(v===undefined) return [c.id,{t:'(no table)',title:'The table is not here',diff:true}];
+          if(v===null) return [c.id,{t:'Missing',title:'Not on '+tl+' here',diff:true}];
+          return [c.id,{t:show.map(([k])=>k==='add'?String(v.add||'').split('\n').slice(0,3).join(' '):v[k]).join(' · '),title:P.map(([k,n])=>n+': '+(v[k]||'–')).join('\n'),diff:differ.length>0}]}))});
+    });
+  });
+  res.envs.filter(c=>!models[c.id]).forEach(c=>res.rows.forEach(r=>{r.cells[c.id]={t:'Not read',title:c.err}}));
+  ENV.res=res; LV.busy=false; liveProg(''); renderLive(); go('__envs');
+}
+function envCsv(){
+  const R=ENV.res; if(!R) return;
+  const rows=[['Table','Field',R.mode==='drift'?'What differs':'Check',...R.envs.map(c=>c.name+' ('+c.url+')')]].concat(R.rows.map(r=>[r.tlabel+(r.table!==r.tlabel?' ('+r.table+')':''),r.field,r.what,...R.envs.map(c=>{const x=r.cells[c.id]||{}; return (x.t||'')+(x.title&&x.t!==x.title&&x.t!=='✓'?' – '+x.title:'')})]));
+  download((R.mode==='drift'?'Environment drift - '+R.sol:'Environments - '+R.file)+'.csv',new Blob([csv(rows)],{type:'text/csv'}));
+}
+function renderEnvs(){
+  const R=ENV.res, main=$('#main');
+  if(!R){ main.innerHTML='<div class="readme"><article class="rwrap"><h1>Environments</h1><p class="dim">Nothing compared yet. Open This environment, add the other environments, then compare.</p></article></div>'; return }
+  const q=(ENV.q||'').trim().toLowerCase(), only=ENV.only!==false;
+  const rows=R.rows.filter(r=>(!only||R.envs.some(c=>r.cells[c.id]&&r.cells[c.id].diff))&&(!q||(r.tlabel+' '+r.table+' '+r.field+' '+r.what+' '+Object.values(r.cells).map(x=>x.t).join(' ')).toLowerCase().includes(q)));
+  const title=R.mode==='drift'?'Compare '+R.sol+' across environments':'This workbook against each environment';
+  main.innerHTML=`<div class="envpage"><div class="vhead"><h1 style="margin:0">${esc(title)}</h1>
+    <div class="dim" style="margin:4px 0 10px">${R.mode==='drift'?'Tables and columns of the solution that are missing from an environment or set differently. ':'The checks of This environment, for '+esc(R.file)+(R.sol?' and the solution '+esc(R.sol):'')+', run in each environment. ✓ means as the workbook. '}Read ${esc(new Date(R.at).toLocaleString())}.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><input type="search" id="envq" placeholder="Filter rows" value="${esc(ENV.q||'')}" style="height:32px;border:1px solid var(--line);border-radius:8px;padding:0 9px;min-width:240px;background:var(--panel)">
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="envonly" ${only?'checked':''}> Differences only</label>
+    <button class="btn" data-envcsv>Download CSV</button><span class="dim">${rows.length} of ${R.rows.length} row${R.rows.length===1?'':'s'}</span></div></div>
+    <div class="envwrap"><table class="grid envgrid"><thead><tr><th>Table</th><th>Field</th><th>${R.mode==='drift'?'What differs':'Check'}</th>${R.envs.map(c=>`<th title="${esc(c.url)}">${esc(c.name)}<small class="dim" style="display:block;font-weight:500">${esc(c.err?'Not read: '+c.err:c.note||c.url)}</small></th>`).join('')}</tr></thead>
+    <tbody>${rows.length?rows.map(r=>`<tr><td><b>${esc(r.tlabel)}</b>${r.table!==r.tlabel?`<div class="mono dim">${esc(r.table)}</div>`:''}</td><td class="mono">${esc(r.field||'–')}</td><td>${esc(r.what)}</td>${R.envs.map(c=>{const x=r.cells[c.id]||{t:''}; return `<td class="${x.diff?'envdiff':'envok'}" title="${esc(x.title||'')}">${esc(x.t)}</td>`}).join('')}</tr>`).join(''):`<tr><td colspan="${3+R.envs.length}" class="dim">${R.rows.length?'No rows match.':'No differences: every environment matches.'}</td></tr>`}</tbody></table></div></div>`;
+  const qi=$('#envq'); qi.oninput=()=>{ENV.q=qi.value; const pos=qi.selectionStart; renderEnvs(); const n=$('#envq'); n.focus(); n.setSelectionRange(pos,pos)};
+  $('#envonly').onchange=e=>{ENV.only=e.target.checked; renderEnvs()};
+  main.querySelector('[data-envcsv]').onclick=envCsv;
+}
 const LV={sols:null,user:'',busy:false,msg:'',err:'',sol1:'',managed:false,last:null};   // sol1: the solution picked ('' = the Default solution)
 function liveProg(m){LV.msg=m; const el=$('#liveprog'); if(el) el.textContent=m}
 async function liveStart(){
@@ -2949,6 +3087,7 @@ async function liveStart(){
   try{
     const who=await dvGet('WhoAmI'); try{const u=await dvGet('systemusers('+who.UserId+')?$select=fullname'); LV.user=u.fullname||''}catch(e){}
     LV.sols=await liveSolutions();
+    await envsLoad();
   }catch(e){LV.err=e.message}
   LV.busy=false; if($('#dvpanel').classList.contains('open')) renderLive();
 }
@@ -3008,6 +3147,15 @@ function renderLive(){
     <p class="dim" style="margin:2px 0 8px">${isStarter()?'Open the data-model workbook first.':'Compares <b>'+esc(S.fileName)+'</b> with what is really there: undocumented tables, fields and N:N, fields not built yet, and differences in types, required levels and relationships.'}</p>
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="livemanaged" style="width:auto;height:auto;flex:none;margin-top:3px" ${LV.managed?'checked':''} ${dis}><span>Managed environment (test or production): also find anything created or changed directly here, as unmanaged. <span class="dim">Slower: one check per custom field.</span></span></label>
     <div style="margin-top:8px"><button class="btn primary" data-live="check" ${dis||isStarter()?'disabled':''}>${liveCheckLabel()}</button></div></div>`;
+  if(ENV.host){
+    const n=ENV.list.length, sol=LV.sol1?solName(LV.sol1):'';
+    h+=`<div class="fld"><div class="k">Other environments</div>
+      <p class="dim" style="margin:2px 0 8px">Add test, production or any other environment as an extra XrmToolBox connection, then compare them side by side.</p>
+      <div class="envlist">${ENV.list.map(e=>`<div class="envrow"><div style="flex:1;min-width:0"><b>${esc(e.name)}</b><div class="mono dim">${esc(e.url)}</div></div>${e.main?'<span class="dim">this one</span>':`<button class="btn ghost" data-env="remove" data-envid="${esc(e.id)}" title="Remove ${esc(e.name)}" aria-label="Remove ${esc(e.name)}">✕</button>`}</div>`).join('')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-env="add" ${dis}>Add environment…</button>${ENV.res?'<button class="btn" data-env="results">Last comparison</button>':''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn primary" data-env="checkall" ${dis||n<2||isStarter()?'disabled':''}>Check this workbook against all ${n}</button>
+      <button class="btn primary" data-env="drift" ${dis||n<2||!LV.sol1?'disabled':''}>${sol?'Compare '+esc(sol)+' across them':'Pick a solution to compare it across them'}</button></div></div>`;
+  }
   h+=`<div id="liveprog" class="dim" style="min-height:20px">${esc(LV.msg)}</div>`;
   const L=LV.last;
   if(L&&L.kind==='check'&&S.dv&&S.dv.live){
@@ -3029,6 +3177,7 @@ function renderLive(){
       LV['sol'+w]=r.dataset.sid; list.innerHTML=solRows(w);
       const lb=d.querySelector('[data-live="load"]'), cb=d.querySelector('[data-live="check"]');
       if(lb){lb.disabled=!!LV.busy||!LV.sol1; lb.textContent=liveLoadLabel()} if(cb) cb.textContent=liveCheckLabel();
+      const db=d.querySelector('[data-env="drift"]'); if(db){db.disabled=!!LV.busy||ENV.list.length<2||!LV.sol1; db.textContent=LV.sol1?'Compare '+solName(LV.sol1)+' across them':'Pick a solution to compare it across them'}
     };
     const on=list.querySelector('.sprow.on'); if(on) list.scrollTop=on.offsetTop-list.offsetTop-60;
   });
@@ -4159,7 +4308,7 @@ function erdAction(a,btn){
   }
 }
 
-function applyAndRender(){if(S.cur==='__erd')return;if(S.cur==='__readme'){renderReadme();return}if(S.cur==='__overview'){renderOverview();return}if(S.cur==='__issues'){renderIssues();return}const v=viewFor(S.cur);S.view=v;S.filtered=filterItems(v);renderMain()}
+function applyAndRender(){if(S.cur==='__erd')return;if(S.cur==='__readme'){renderReadme();return}if(S.cur==='__envs'){renderEnvs();return}if(S.cur==='__overview'){renderOverview();return}if(S.cur==='__issues'){renderIssues();return}const v=viewFor(S.cur);S.view=v;S.filtered=filterItems(v);renderMain()}
 // each screen (a table, Overview, Checks, ERD, All fields, How it works) is a step in the browser's history, so Back,
 // Alt+Left and a mouse's back button return to the previous screen. The address stays the same.
 let navDepth=0;
@@ -4170,12 +4319,12 @@ function navRecord(fromHistory){
   try{ if(history.state&&history.state.dmeView!=null&&history.state.dmeProj===S.proj){history.pushState({dmeView:v,dmeProj:S.proj,depth:navDepth+1},''); navDepth++} else history.replaceState({dmeView:v,dmeProj:S.proj,depth:0},'') }catch(e){}
   const b=$('#btnBack'); if(b) b.disabled=navDepth<=0;
 }
-function viewExists(v){v=String(v); return /^__(erd|readme|overview|issues|all)$/.test(v)||/^\d+$/.test(v)&&!!S.sheets[+v]}
+function viewExists(v){v=String(v); return /^__(erd|readme|overview|issues|all|envs)$/.test(v)||/^\d+$/.test(v)&&!!S.sheets[+v]}
 addEventListener('popstate',e=>{const st=e.state; if(!st||st.dmeView==null) return;
   navDepth=st.depth||0; const b=$('#btnBack'); if(b) b.disabled=navDepth<=0;
   go(st.dmeProj===S.proj&&viewExists(st.dmeView)?(/^\d+$/.test(st.dmeView)?+st.dmeView:st.dmeView):'__overview',{fromHistory:true})});
 function go(id,opts={}){
-  const special={__erd:renderErdPage,__readme:renderReadme,__overview:renderOverview,__issues:renderIssues}[String(id)];
+  const special={__erd:renderErdPage,__readme:renderReadme,__overview:renderOverview,__issues:renderIssues,__envs:renderEnvs}[String(id)];
   if(special){
     S.cur=String(id);S.selIt=null;S.selItem=null;S.view=null;S.filtered=[];
     document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open'));   // a full page: no panel left on top of it
@@ -4281,6 +4430,7 @@ document.addEventListener('click',e=>{
   if((n=t.closest('[data-ii]'))){const i=S.issList&&S.issList[+n.dataset.ii];if(i){if(i.row)go(i.sh.idx,{focusRow:i.row});else go(i.sh.idx)}return}
   if(t.closest('[data-dvclose]')){$('#dvpanel').classList.remove('open');return}
   if((n=t.closest('[data-live]'))){if(n.dataset.live==='load') liveLoad(); else if(n.dataset.live==='check') liveCheck(); return}
+  if((n=t.closest('[data-env]'))&&!n.disabled){envAction(n.dataset.env,n.dataset.envid); return}
   if((n=t.closest('[data-dv]'))){
     const a=n.dataset.dv;
     if(a==='pick') $('#dvfile').click();
@@ -4344,7 +4494,7 @@ document.addEventListener('dblclick',e=>{
   startEdit(td,it,td.dataset.col);
 });
 let qt;
-$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{if(S.cur==='__readme'||S.cur==='__erd'||S.cur==='__overview')return;if(S.cur==='__issues'){S.issQ=e.target.value;issState().shown=300;renderIssues();return}const st=vstate(S.cur);st.q=e.target.value;st.shown=150;applyAndRender()},120)});
+$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{if(S.cur==='__readme'||S.cur==='__erd'||S.cur==='__overview'||S.cur==='__envs')return;if(S.cur==='__issues'){S.issQ=e.target.value;issState().shown=300;renderIssues();return}const st=vstate(S.cur);st.q=e.target.value;st.shown=150;applyAndRender()},120)});
 $('#sq').addEventListener('input',e=>{S.sideFilter=e.target.value;renderNav()});
 $('#btnChanges').onclick=()=>{$('#changes').classList.contains('open')?$('#changes').classList.remove('open'):renderChanges()};
 $('#btnExport').onclick=e=>{e.stopPropagation();exportMenu(e.currentTarget)};

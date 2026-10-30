@@ -6,7 +6,7 @@
   "scripts": {
     "build": "python3 build.py",
     "pretest": "npm run build",
-    "test": "node tests/smoke.js && node tests/roundtrip.js && node tests/checks.js && node tests/ui.js && node tests/solution.js && node tests/addrows.js && node tests/save.js && node tests/insertrows.js && node tests/longtext.js && node tests/erd.js && node tests/prefixes.js && node tests/solutionzip.js && node tests/navigation.js && node tests/theme.js && node tests/readonly.js && node tests/live.js && node tests/livelong.js && node tests/webresource.js && node tests/webfiles.js",
+    "test": "node tests/smoke.js && node tests/roundtrip.js && node tests/checks.js && node tests/ui.js && node tests/solution.js && node tests/addrows.js && node tests/save.js && node tests/insertrows.js && node tests/longtext.js && node tests/erd.js && node tests/prefixes.js && node tests/solutionzip.js && node tests/navigation.js && node tests/theme.js && node tests/readonly.js && node tests/live.js && node tests/livelong.js && node tests/envs.js && node tests/webresource.js && node tests/webfiles.js",
     "webresource": "python3 tools/make-webresource-solution.py"
   },
   "dependencies": {
