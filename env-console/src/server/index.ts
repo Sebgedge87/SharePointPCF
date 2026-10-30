@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { findEnv, type PcxConfig } from "../core/config.js";
+import { ConfigError, findEnv, validateConfig, type PcxConfig } from "../core/config.js";
 import { readActions } from "../core/actionLog.js";
-import { AuthError } from "../core/auth.js";
+import { AuthError, TokenCache, type TokenProvider } from "../core/auth.js";
 import { changeState, listComponents, PolicyError, type ComponentKind } from "../core/components.js";
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, listSolutions, publisherCounts, type Solution } from "../core/solutions.js";
@@ -62,9 +62,18 @@ export interface ServerOptions {
   /** Address to listen on. Local mode always uses 127.0.0.1. */
   listenHost?: string;
   publicDir?: string;
+  /** Local mode: lets the page sign in and out, and add or remove environments. */
+  account?: LocalAccount;
   /** Kept for older callers and tests: same as mode {kind:"local", key, workspace}. */
   key?: string;
   workspace?: Workspace;
+}
+
+/** What the local dashboard needs to sign in and change the environment list. */
+export interface LocalAccount {
+  provider: TokenProvider;
+  /** Saves the config after the environment list or tenant changes. */
+  save(config: PcxConfig): void;
 }
 
 export interface RunningServer {
@@ -132,6 +141,10 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const localKey = mode.kind === "local" ? mode.key ?? randomBytes(24).toString("base64url") : "";
   const localWs = mode.kind === "local" ? mode.workspace ?? new Workspace(cfg) : undefined;
   const hostedWs = new WeakMap<Session, Workspace>();
+  let loginRun: Promise<void> | undefined;
+  const clearTokens = () => {
+    if (localWs?.tokens instanceof TokenCache) localWs.tokens.clear();
+  };
   let port = opts.port;
 
   const teamsWebhook = () => (mode.kind === "hosted" ? process.env.PCX_TEAMS_WEBHOOK : cfg.alerts?.teamsWebhook);
@@ -161,11 +174,58 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
     if (req.method === "GET" && url.pathname === "/api/config") {
       return {
         mode: mode.kind,
+        canManage: mode.kind === "local" && !!opts.account,
+        tenantId: cfg.tenantId ?? null,
         provider: mode.kind === "hosted" ? "entra" : cfg.auth.provider,
         user: who.user,
         name: who.name,
         environments: cfg.environments.map((e) => ({ name: e.name, url: e.url, managed: e.managed }))
       };
+    }
+    // ---- sign-in and environment list (local mode only)
+    if (url.pathname.startsWith("/api/account/")) {
+      if (mode.kind !== "local" || !opts.account) throw new HttpError(403, "Sign-in and environments are managed by the site in hosted mode.");
+      const acct = opts.account;
+      if (req.method === "POST" && url.pathname === "/api/account/login") {
+        // One sign-in at a time; it opens the browser on this machine.
+        loginRun ??= acct.provider.login(cfg.tenantId, false).finally(() => (loginRun = undefined));
+        await loginRun;
+        clearTokens();
+        return { ok: true };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/logout") {
+        await acct.provider.logout();
+        clearTokens();
+        return { ok: true };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/env") {
+        const body = await readJson(req);
+        const name = String(body.name ?? "").trim();
+        if (cfg.environments.some((e) => e.name.toUpperCase() === name.toUpperCase())) throw new HttpError(400, `${name} already exists`);
+        const next = validateConfig({ ...cfg, environments: [...cfg.environments, { name, url: String(body.url ?? ""), managed: body.managed !== false }] });
+        acct.save(next);
+        cfg.environments = next.environments;
+        return { environments: cfg.environments };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/env/remove") {
+        const body = await readJson(req);
+        const env = findEnv(cfg, String(body.name ?? ""));
+        const next = { ...cfg, environments: cfg.environments.filter((e) => e !== env) };
+        acct.save(next);
+        cfg.environments = next.environments;
+        return { environments: cfg.environments };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/tenant") {
+        const body = await readJson(req);
+        const tenant = String(body.tenant ?? "").trim();
+        const next = validateConfig({ ...cfg, tenantId: tenant || undefined });
+        acct.save(next);
+        if (next.tenantId) cfg.tenantId = next.tenantId;
+        else delete cfg.tenantId;
+        if (localWs?.tokens instanceof TokenCache) localWs.tokens.setTenant(cfg.tenantId);
+        return { tenantId: cfg.tenantId ?? null };
+      }
+      throw new HttpError(404, "Not found");
     }
     if (req.method === "GET" && url.pathname === "/api/status") {
       return envStatus(ws, findEnv(cfg, url.searchParams.get("env") ?? ""), true);
@@ -381,7 +441,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
     throw new HttpError(404, "Not found");
   };
 
-  const server = createServer((req, res) => {
+  const server = createServer({ requestTimeout: 10 * 60_000 }, (req, res) => {
     const handle = async () => {
       // Only answer requests addressed to the name we expect (blocks DNS rebinding).
       const host = req.headers.host ?? "";
@@ -419,7 +479,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       if (e instanceof HttpError) {
         status = e.status;
         extra = e.extra;
-      } else if (e instanceof PolicyError) status = 400;
+      } else if (e instanceof PolicyError || e instanceof ConfigError) status = 400;
       else if (e instanceof AuthError && e.needsLogin && mode.kind === "hosted") {
         status = 401;
         extra = { login: "/auth/login" };

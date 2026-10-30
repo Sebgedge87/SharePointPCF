@@ -60,6 +60,7 @@ test("token cache reuses tokens until five minutes before expiry and shares in-f
   const provider: TokenProvider = {
     name: "azps",
     login: async () => {},
+    logout: async () => {},
     getToken: async () => {
       calls++;
       await new Promise((r) => setTimeout(r, 5));

@@ -166,6 +166,83 @@ function noEnvScreen() {
     h("p", {}, h("code", {}, "pcx env add PROD https://<org>.crm.dynamics.com"))));
 }
 
+// ------------------------------------------------------------------ sign-in and environment list
+
+const acctState = { busy: false, notice: null, user: null };
+async function signIn() {
+  acctState.busy = true;
+  acctState.notice = { kind: "info", text: "A Microsoft sign-in window has opened in your browser. Pick your work account there; this page refreshes when you're done." };
+  overview();
+  try {
+    await api("/api/account/login", {});
+    acctState.notice = { kind: "ok", text: "Signed in." };
+  } catch (err) { acctState.notice = { kind: "bad", text: `Sign-in didn't finish: ${err.message}` }; }
+  acctState.busy = false;
+  overview();
+}
+async function signOut() {
+  if (!confirm("Sign out? The dashboard can't read any environment until you sign in again.")) return;
+  try { await api("/api/account/logout", {}); acctState.notice = { kind: "info", text: "Signed out." }; acctState.user = null; document.getElementById("who").textContent = "Not signed in"; }
+  catch (err) { acctState.notice = { kind: "bad", text: err.message }; }
+  overview();
+}
+async function reloadConfig() {
+  config = await api("/api/config");
+  solState.data = null;
+}
+function accountBar() {
+  if (config.mode === "hosted") {
+    return h("section", { class: "card row between", "aria-label": "Account" },
+      h("div", {}, h("strong", {}, `Signed in as ${config.user}`), h("div", { class: "small muted" }, "Each environment is read as you, with your own security roles.")),
+      h("div", { class: "row" }, h("a", { class: "btn", href: "/auth/login?returnTo=%2F%23%2Foverview" }, "Sign in again"), h("a", { class: "btn", href: "/auth/logout" }, "Sign out")));
+  }
+  const via = config.provider === "azps" ? "PowerShell (Connect-AzAccount)" : "Azure CLI (az login)";
+  return h("section", { class: "card row between", "aria-label": "Account" },
+    h("div", {}, h("strong", {}, acctState.user ? `Signed in as ${acctState.user}` : "Sign-in"),
+      h("div", { class: "small muted" }, `Uses your ${via} sign-in${config.tenantId ? ` · tenant ${config.tenantId}` : ""}.`)),
+    config.canManage ? h("div", { class: "row" },
+      h("button", { type: "button", class: "btn primary", disabled: acctState.busy, onclick: signIn }, acctState.busy ? "Waiting for sign-in…" : acctState.user ? "Sign in again" : "Sign in"),
+      acctState.user ? h("button", { type: "button", class: "btn", disabled: acctState.busy, onclick: signOut }, "Sign out") : null) : null);
+}
+function manageEnvironments() {
+  if (!config.canManage) return null;
+  const name = h("input", { class: "input", placeholder: "e.g. UAT", maxlength: 32, "aria-label": "Name" });
+  const url = h("input", { class: "input", placeholder: "https://contoso-uat.crm11.dynamics.com", style: "min-width:320px", "aria-label": "Environment URL" });
+  const unmanaged = h("input", { type: "checkbox" });
+  const tenant = h("input", { class: "input", placeholder: "Leave empty for your default tenant", value: config.tenantId || "", style: "min-width:320px", "aria-label": "Tenant" });
+  const status = h("div", { role: "status", class: "small" });
+  const fail = (err) => { status.textContent = err.message; status.style.color = "var(--bad-text)"; };
+  const add = async (ev) => {
+    ev.preventDefault();
+    try { await api("/api/account/env", { name: name.value.trim(), url: url.value.trim(), managed: !unmanaged.checked }); await reloadConfig(); overview(); }
+    catch (err) { fail(err); }
+  };
+  const remove = async (n) => {
+    if (!confirm(`Remove ${n} from the console? Nothing changes in the environment itself.`)) return;
+    try { await api("/api/account/env/remove", { name: n }); await reloadConfig(); overview(); } catch (err) { fail(err); }
+  };
+  const saveTenant = async () => {
+    try { await api("/api/account/tenant", { tenant: tenant.value.trim() }); await reloadConfig(); status.textContent = "Tenant saved. Sign in again if your environments live in that tenant."; status.style.color = ""; }
+    catch (err) { fail(err); }
+  };
+  return h("details", { class: "card", open: config.environments.length === 0 ? true : null },
+    h("summary", { style: "cursor:pointer;font:600 15px var(--head)" }, `Manage environments (${config.environments.length})`),
+    h("div", { class: "stack", style: "margin-top:14px" },
+      config.environments.length ? h("div", { class: "scroll" }, h("table", {},
+        h("thead", {}, h("tr", {}, ["Name", "URL", "Type", ""].map((t) => h("th", { scope: "col" }, t)))),
+        h("tbody", {}, config.environments.map((e) => h("tr", {}, h("td", {}, chip(e.name)), h("td", { class: "mono" }, e.url), h("td", {}, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
+          h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, "Remove"))))))) : null,
+      h("form", { class: "row", style: "align-items:flex-end", onsubmit: add },
+        h("label", { class: "field" }, h("span", {}, "Name"), name),
+        h("label", { class: "field", style: "flex:1" }, h("span", {}, "Environment URL (Power Platform admin center › Environments)"), url),
+        h("label", { class: "check" }, unmanaged, "Unmanaged (DEV)"),
+        h("button", { type: "submit", class: "btn primary" }, "Add environment")),
+      h("div", { class: "row", style: "align-items:flex-end" },
+        h("label", { class: "field", style: "flex:1" }, h("span", {}, "Tenant (only if your account can sign in to several)"), tenant),
+        h("button", { type: "button", class: "btn", onclick: saveTenant }, "Save tenant")),
+      status));
+}
+
 // ------------------------------------------------------------------ overview
 
 async function overview() {
@@ -180,7 +257,8 @@ async function overview() {
   }
   const via = config.mode === "hosted" ? `signed in as ${config.user}` : `signed in through ${config.provider === "azps" ? "PowerShell" : "Azure CLI"}`;
   const alertBox = h("section", { class: "card row between", "aria-label": "Alerts" }, h("span", { class: "muted" }, "Checking for alerts…"));
-  mount(header("Overview", "Environments", `${config.environments.length} environments · ${via}`, ...reportButtons(), h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")), alertBox, grid);
+  mount(header("Overview", "Environments", `${config.environments.length} environments · ${via}`, ...reportButtons(), h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")),
+    acctState.notice ? notice(acctState.notice.kind, acctState.notice.text) : null, accountBar(), alertBox, grid, manageEnvironments());
   api("/api/alerts").then((d) => {
     alertState.data = d;
     const c = (sv) => d.alerts.filter((a) => a.severity === sv).length;
@@ -195,7 +273,10 @@ async function overview() {
     let st;
     try { st = await api(`/api/status?env=${encodeURIComponent(e.name)}`); } catch (err) { st = { connected: false, error: err.message }; }
     if (st.needsLogin) anyLogin = true;
-    if (st.connected && st.user && config.mode !== "hosted") document.getElementById("who").textContent = `Signed in as ${st.user}`;
+    if (st.connected && st.user && config.mode !== "hosted") {
+      document.getElementById("who").textContent = `Signed in as ${st.user}`;
+      if (acctState.user !== st.user) { acctState.user = st.user; main().querySelector("[aria-label=Account]")?.replaceWith(accountBar()); }
+    }
     const q = `?env=${encodeURIComponent(e.name)}`;
     const body = st.connected
       ? [h("div", { class: "row small" }, h("span", { class: "dot ok" }), h("strong", {}, "Connected"), h("span", { class: "muted" }, st.version ? `v${st.version}` : "")),
@@ -205,10 +286,11 @@ async function overview() {
            h("div", {}, h("dt", {}, "Plugin steps on"), h("dd", {}, st.pluginStepsTotal !== undefined ? `${st.pluginStepsOn} / ${st.pluginStepsTotal}` : "—"))),
          st.error ? h("div", { class: "small muted" }, st.error) : null,
          h("div", { class: "row small" }, h("a", { href: "#/components" }, "Flows & plugins"), h("a", { href: `#/runs${q}` }, "Run history"), h("a", { href: "#/jobs" }, "Background jobs"))]
-      : [h("div", { class: "row small" }, h("span", { class: "dot bad" }), h("strong", {}, st.needsLogin ? "Sign-in needed" : "Not reachable")), h("div", { class: "small muted" }, st.error || "")];
+      : [h("div", { class: "row small" }, h("span", { class: "dot bad" }), h("strong", {}, st.needsLogin ? "Sign-in needed" : "Not reachable")), h("div", { class: "small muted" }, st.needsLogin && config.canManage ? "You're not signed in, or the sign-in has expired." : st.error || ""),
+         config.canManage ? h("button", { type: "button", class: "btn sm primary", disabled: acctState.busy, onclick: signIn }, "Sign in") : config.mode === "hosted" ? h("a", { class: "btn sm", href: "/auth/login?returnTo=%2F%23%2Foverview" }, "Sign in again") : null];
     card.replaceChildren(card.children[0], card.children[1], ...body.filter(Boolean));
   }));
-  if (anyLogin && config.mode !== "hosted") main().insertBefore(notice("warn", "Some environments need you to sign in. In a terminal run ", h("code", {}, "pcx auth login"), ", then press Refresh."), grid);
+  if (anyLogin && !config.canManage && config.mode !== "hosted") main().insertBefore(notice("warn", "Some environments need you to sign in. In a terminal run ", h("code", {}, "pcx auth login"), ", then press Refresh."), grid);
 }
 
 // ------------------------------------------------------------------ solutions
@@ -1339,7 +1421,7 @@ async function route() {
     a.classList.toggle("active", a.dataset.route === name);
     a.dataset.route === name ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
-  if (config.environments.length === 0) return noEnvScreen();
+  if (config.environments.length === 0) return config.canManage ? mount(header("Overview", "Environments", "Add your first environment to get started."), accountBar(), manageEnvironments()) : noEnvScreen();
   await ROUTES[name](new URLSearchParams(query || ""));
 }
 window.addEventListener("hashchange", route);

@@ -12,6 +12,8 @@ export interface TokenProvider {
   getToken(resource: string, tenantId?: string): Promise<AccessToken>;
   /** Signs in interactively in this terminal. */
   login(tenantId?: string, deviceCode?: boolean): Promise<void>;
+  /** Signs out of the borrowed session. */
+  logout(): Promise<void>;
 }
 
 export class AuthError extends Error {
@@ -57,6 +59,13 @@ $t = Get-AzAccessToken @p -WarningAction SilentlyContinue
 $tok = $t.Token
 if ($tok -is [System.Security.SecureString]) { $tok = [System.Net.NetworkCredential]::new('', $tok).Password }
 [pscustomobject]@{ token = $tok; expiresOn = $t.ExpiresOn.UtcDateTime.ToString('o') } | ConvertTo-Json -Compress
+`;
+
+const PS_LOGOUT = `
+$ErrorActionPreference = 'SilentlyContinue'
+Import-Module Az.Accounts
+Disconnect-AzAccount | Out-Null
+Clear-AzContext -Force | Out-Null
 `;
 
 const PS_LOGIN = `
@@ -113,6 +122,13 @@ export class PowerShellTokenProvider implements TokenProvider {
     throw new AuthError("PowerShell 7 (pwsh) was not found. Install it, or set auth.provider to \"azcli\".");
   }
 
+  async logout(): Promise<void> {
+    for (const shell of this.shells) {
+      const r = await this.run(shell, ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", encodePs(PS_LOGOUT)]);
+      if (!r.notFound) return;
+    }
+  }
+
   async login(tenantId?: string, deviceCode = false): Promise<void> {
     checkTenant(tenantId);
     const env = { ...process.env, PCX_TENANT: tenantId ?? "", PCX_DEVICE: deviceCode ? "1" : "0" };
@@ -158,6 +174,10 @@ export class AzureCliTokenProvider implements TokenProvider {
     return { token: j.accessToken, expiresOn: isNaN(exp.getTime()) ? new Date(Date.now() + 30 * 60_000) : exp };
   }
 
+  async logout(): Promise<void> {
+    await this.run(this.cmd, ["logout"]);
+  }
+
   async login(tenantId?: string, deviceCode = false): Promise<void> {
     checkTenant(tenantId);
     const args = ["login", "--allow-no-subscriptions"];
@@ -187,9 +207,15 @@ export class TokenCache implements TokenSource {
 
   constructor(
     private readonly provider: TokenProvider,
-    private readonly tenantId?: string,
+    private tenantId?: string,
     private readonly now: () => number = Date.now
   ) {}
+
+  /** Switch tenant (e.g. after the tenant setting changes); drops cached tokens. */
+  setTenant(tenantId?: string): void {
+    this.tenantId = tenantId;
+    this.cache.clear();
+  }
 
   async token(resource: string): Promise<string> {
     const key = normaliseEnvUrl(resource);

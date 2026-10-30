@@ -756,7 +756,7 @@ export async function main(argv: string[]): Promise<number> {
         if (process.env.PCX_MODE === "hosted") return await serveHosted(config);
         const port = o.port ? Number(o.port) : 4820;
         if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new UsageError("--port must be 1024-65535");
-        const s = await startServer({ config, port });
+        const s = await startServer({ config, port, account: { provider: createProvider(config.auth.provider), save: (next) => saveConfig(next, configPath) } });
         out(`Dashboard running. Open this link (it carries a one-time key):\n\n  ${c.bold(s.url)}\n\nPress Ctrl+C to stop.`);
         if (o.open) openBrowser(s.url);
         return await new Promise<number>(() => {});
