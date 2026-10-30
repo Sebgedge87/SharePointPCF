@@ -9,6 +9,11 @@ import { changeState, checkPolicy, listComponents, selectComponents, type Compon
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, filterMatrix, listSolutions, type Solution } from "../core/solutions.js";
 import { startServer } from "../server/index.js";
+import { compareSolution } from "../core/compare.js";
+import { getTraceSetting, runReport, setTraceSetting, type TraceSetting } from "../core/runs.js";
+import { getSystemAudit, listAuditEntries, listColumnAudit, listTableAudit, setAudit } from "../core/audit.js";
+import { applyUserSettings, listUserSettings, planApply, REGIONS, validateSettings, type UserScope } from "../core/usersettings.js";
+import { sinceDate } from "../core/util.js";
 import { HostedAuth, loadHostedSettings } from "../server/hosted.js";
 import { c, table } from "./format.js";
 
@@ -28,11 +33,31 @@ Environments
 Solutions
   pcx solution list [--env NAME]... [--publisher P]... [--include-microsoft]
                     [--diff-only] [--search TEXT] [--json]
+  pcx solution diff <UniqueName> --from ENV --to ENV [--show-same] [--json]
+                                        Component-by-component compare (exit 1 on differences)
 
 Flows, business rules and plugin steps
-  pcx flows|rules|plugins list --env NAME [--off] [--json]
+  pcx flows|rules|plugins list --env NAME [--off] [--include-system] [--json]
   pcx flows|rules|plugins on|off --env NAME (<name-or-id>... | --filter TEXT | --all)
                     [--reason TEXT] [--dry-run] [--yes]
+
+Run history
+  pcx runs list --env NAME [--since 24h|7d] [--failed] [--json]
+  pcx runs trace --env NAME [--set off|exceptions|all --reason TEXT]
+
+Audit
+  pcx audit status --env NAME
+  pcx audit tables --env NAME [--off] [--json]
+  pcx audit columns --env NAME --table T
+  pcx audit log --env NAME --table T [--column C] [--since 7d]
+  pcx audit set on|off --env NAME --table T [--table T2]... [--column C]... --reason TEXT
+
+User settings
+  pcx usersettings show --env NAME [--role R | --team T | --bu B]
+  pcx usersettings apply --env NAME [--region en-GB] [--date-format dd/MM/yyyy]
+                    [--time-format HH:mm] [--timezone 85] [--language 1033] [--paging 50]
+                    [--role R | --team T | --bu B] [--overwrite] [--new-users]
+                    [--dry-run] [--yes] [--reason TEXT]
 
 Dashboard
   pcx serve [--port 4820] [--open]      Start the dashboard on this machine (--open opens the browser)
@@ -69,6 +94,26 @@ function opts(argv: string[]) {
       unmanaged: { type: "boolean" },
       port: { type: "string" },
       open: { type: "boolean" },
+      "include-system": { type: "boolean" },
+      from: { type: "string" },
+      to: { type: "string" },
+      since: { type: "string" },
+      failed: { type: "boolean" },
+      set: { type: "string" },
+      table: { type: "string", multiple: true },
+      column: { type: "string", multiple: true },
+      region: { type: "string" },
+      "date-format": { type: "string" },
+      "time-format": { type: "string" },
+      timezone: { type: "string" },
+      language: { type: "string" },
+      paging: { type: "string" },
+      overwrite: { type: "boolean" },
+      "new-users": { type: "boolean" },
+      role: { type: "string" },
+      team: { type: "string" },
+      bu: { type: "string" },
+      "show-same": { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" }
     }
@@ -149,8 +194,9 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
   throw new UsageError("Usage: pcx env list|add|remove");
 }
 
-async function cmdSolution(sub: string | undefined, o: Opts, config: PcxConfig): Promise<number> {
-  if (sub !== "list") throw new UsageError("Usage: pcx solution list [options]");
+async function cmdSolution(sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {
+  if (sub === "diff") return cmdSolutionDiff(pos, o, config);
+  if (sub !== "list") throw new UsageError("Usage: pcx solution list [options] | pcx solution diff <UniqueName> --from ENV --to ENV");
   const envs = envsFrom(config, o.env);
   const ws = new Workspace(config);
   const perEnv: Record<string, Solution[]> = {};
@@ -203,12 +249,12 @@ async function cmdComponents(group: string, sub: string | undefined, pos: string
   const env = oneEnv(config, o);
   const ws = new Workspace(config);
   const client = ws.client(env);
-  const all = await listComponents(client, kind);
+  const all = await listComponents(client, kind, { includeSystem: !!o["include-system"] });
   if (sub === "list") {
     const rows = o.off ? all.filter((x) => !x.on) : all;
     if (o.json) return out(JSON.stringify(rows, null, 2)), 0;
-    out(table(["STATE", "NAME", "TARGET", "ID"], rows.map((r) => [r.on ? c.green("on") : c.dim("off"), r.name, r.target, c.dim(r.id)])));
-    out(c.dim(`${rows.length} ${NOUN[kind]}s in ${env.name}`));
+    out(table(["STATE", "NAME", "TARGET", "SOLUTION", "ID"], rows.map((r) => [r.on ? c.green("on") : c.dim("off"), r.custom ? r.name : `${r.name} ${c.dim("(Microsoft/system)")}`, r.target, r.solution ?? "", c.dim(r.id)])));
+    out(c.dim(`${rows.length} ${NOUN[kind]}s in ${env.name}${o["include-system"] ? "" : " (custom only; add --include-system for Microsoft and system items)"}`));
     return 0;
   }
   if (sub !== "on" && sub !== "off") throw new UsageError(`Usage: pcx ${group} list|on|off --env NAME`);
@@ -259,6 +305,169 @@ async function serveHosted(fileConfig: PcxConfig): Promise<number> {
   const s = await startServer({ config, port, mode: { kind: "hosted", auth: new HostedAuth(settings, config) } });
   out(`Env Console (hosted) listening on port ${s.port} for ${settings.publicUrl} · ${config.environments.length} environments`);
   return await new Promise<number>(() => {});
+}
+
+const STATUS_LABEL: Record<string, (s: string) => string> = {
+  layer: (s) => c.yellow(s),
+  different: (s) => c.blue(s),
+  onlyA: (s) => c.red(s),
+  onlyB: (s) => c.red(s),
+  present: (s) => c.dim(s),
+  same: (s) => c.green(s)
+};
+
+async function cmdSolutionDiff(pos: string[], o: Opts, config: PcxConfig): Promise<number> {
+  const name = pos[0];
+  if (!name || !o.from || !o.to) throw new UsageError("Usage: pcx solution diff <UniqueName> --from ENV --to ENV [--show-same] [--json]");
+  const ws = new Workspace(config);
+  const a = findEnv(config, o.from);
+  const b = findEnv(config, o.to);
+  const r = await compareSolution(ws.client(a), ws.client(b), name);
+  const differs = r.rows.some((x) => ["different", "layer", "onlyA", "onlyB"].includes(x.status));
+  if (o.json) return out(JSON.stringify(r, null, 2)), differs ? 1 : 0;
+  out(`${c.bold(name)}  ${a.name} ${r.a.version ?? "not installed"}  →  ${b.name} ${r.b.version ?? "not installed"}`);
+  const names: Record<string, string> = { layer: "UNMANAGED CHANGE", different: "DIFFERENT", onlyA: `ONLY IN ${a.name}`, onlyB: `ONLY IN ${b.name}`, present: "IN BOTH", same: "SAME" };
+  const rows = r.rows.filter((x) => o["show-same"] || (x.status !== "same" && x.status !== "present"));
+  out(table(["STATUS", "TYPE", "NAME", "TABLE"], rows.map((x) => [STATUS_LABEL[x.status]!(names[x.status] ?? x.status), x.typeName, x.name, x.parent ?? ""])));
+  out(c.dim(`${r.counts.same} same · ${r.counts.different} different · ${r.counts.layer} unmanaged changes · ${r.counts.onlyA} only in ${a.name} · ${r.counts.onlyB} only in ${b.name} · ${r.counts.present} in both (not compared)`));
+  return differs ? 1 : 0;
+}
+
+const firstLine = (s: string | undefined, n = 80) => (s ?? "").split("\n")[0]!.slice(0, n);
+const when = (iso: string) => iso.replace("T", " ").slice(0, 16);
+
+async function cmdRuns(sub: string | undefined, o: Opts, config: PcxConfig): Promise<number> {
+  const env = oneEnv(config, o);
+  const client = new Workspace(config).client(env);
+  if (sub === "trace") {
+    if (!o.set) {
+      const t = await getTraceSetting(client);
+      out(`Plugin trace log in ${env.name}: ${c.bold(t.setting)}`);
+      return 0;
+    }
+    if (!["off", "exceptions", "all"].includes(o.set)) throw new UsageError("--set must be off, exceptions or all");
+    const actor = await whoAmI(client).then((x) => x.user, () => undefined);
+    await setTraceSetting(client, o.set as TraceSetting, o.reason, actor, "cli");
+    out(`${c.green("✓")} Plugin trace log in ${env.name} set to ${o.set}`);
+    return 0;
+  }
+  if (sub !== "list") throw new UsageError("Usage: pcx runs list --env NAME [--since 7d] [--failed] [--json] | pcx runs trace --env NAME [--set off|exceptions|all --reason TEXT]");
+  const r = await runReport(client, env, sinceDate(o.since ?? "24h"));
+  if (o.json) return out(JSON.stringify(r, null, 2)), 0;
+  out(c.bold(`Flows: ${r.totals.flowRuns} runs, ${r.totals.flowFailed} failed`));
+  if (!r.flows.available) out(c.yellow(r.flows.error ?? "Flow run history is not available"));
+  const flows = o.failed ? r.flows.runs.filter((x) => x.status === "failed") : r.flows.runs;
+  out(table(["WHEN", "STATUS", "FLOW", "ERROR"], flows.slice(0, 50).map((x) => [when(x.start), x.status === "failed" ? c.red("failed") : x.status === "succeeded" ? c.green("ok") : x.status, x.flowName, `${x.errorCode ?? ""} ${firstLine(x.errorMessage)}`.trim()])));
+  out("");
+  out(c.bold(`Plugins: ${r.totals.pluginFailed} errors · trace log ${r.plugins.setting ?? "unknown"}`));
+  if (r.plugins.setting === "off") out(c.yellow(`Plugin tracing is off, so plugin errors are not recorded. Turn it on: pcx runs trace --env ${env.name} --set exceptions --reason "..."`));
+  if (r.plugins.error) out(c.yellow(r.plugins.error));
+  const logs = o.failed ? r.plugins.logs.filter((x) => x.failed) : r.plugins.logs;
+  out(table(["WHEN", "STATUS", "PLUGIN", "MESSAGE", "ERROR"], logs.slice(0, 50).map((x) => [when(x.at), x.failed ? c.red("failed") : c.green("ok"), x.typeName, `${x.table ?? ""} ${x.message}`.trim(), firstLine(x.exception)])));
+  if (r.top.length) {
+    out("");
+    out(c.bold("Most failures"));
+    out(table(["FAILURES", "OF", "KIND", "NAME"], r.top.slice(0, 10).map((g) => [String(g.failures), String(g.total), g.kind, g.name])));
+  }
+  return 0;
+}
+
+async function cmdAudit(sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {
+  const env = oneEnv(config, o);
+  const client = new Workspace(config).client(env);
+  if (sub === "status") {
+    const s = await getSystemAudit(client);
+    out(
+      table(["SETTING", "VALUE"], [
+        ["Auditing", s.auditEnabled ? c.green("on") : c.red("off")],
+        ["User sign-in logging", s.userAccessAudit ? "on" : "off"],
+        ["Retention", s.retentionDays === undefined ? "?" : s.retentionDays < 0 ? "forever" : `${s.retentionDays} days`]
+      ])
+    );
+    return 0;
+  }
+  if (sub === "tables") {
+    const t = await listTableAudit(client);
+    const rows = o.off ? t.filter((x) => !x.auditEnabled) : t;
+    if (o.json) return out(JSON.stringify(rows, null, 2)), 0;
+    out(table(["AUDIT", "TABLE", "LOGICAL NAME"], rows.map((x) => [x.auditEnabled ? c.green("on") : c.dim("off"), x.displayName, x.logicalName])));
+    return 0;
+  }
+  const tableName = o.table?.[0];
+  if (sub === "columns") {
+    if (!tableName) throw new UsageError("Usage: pcx audit columns --env NAME --table LOGICALNAME");
+    const cols = await listColumnAudit(client, tableName);
+    if (o.json) return out(JSON.stringify(cols, null, 2)), 0;
+    out(table(["AUDIT", "COLUMN", "LOGICAL NAME", "TYPE"], cols.map((x) => [x.auditEnabled ? c.green("on") : c.dim("off"), x.displayName, x.logicalName, x.type])));
+    return 0;
+  }
+  if (sub === "log") {
+    if (!tableName) throw new UsageError("Usage: pcx audit log --env NAME --table LOGICALNAME [--column NAME] [--since 7d]");
+    const entries = await listAuditEntries(client, tableName, sinceDate(o.since ?? "7d"), { column: o.column?.[0] });
+    if (o.json) return out(JSON.stringify(entries, null, 2)), 0;
+    out(table(["WHEN", "WHO", "ACTION", "RECORD", "CHANGES"], entries.slice(0, 100).map((e) => [when(e.at), e.user, e.action, e.record, e.changes.map((x) => `${x.column}: ${x.old || "∅"} → ${x.new || "∅"}`).join("; ").slice(0, 100)])));
+    return 0;
+  }
+  if (sub === "set") {
+    const state = pos[0];
+    if (state !== "on" && state !== "off") throw new UsageError("Usage: pcx audit set on|off --env NAME --table T [--table T2]... [--column C]... --reason TEXT");
+    const tables = o.table ?? [];
+    if (!tables.length) throw new UsageError("Name at least one --table");
+    if (o.column?.length && tables.length > 1) throw new UsageError("Use one --table when naming columns");
+    const changes = o.column?.length ? o.column.map((col) => ({ table: tables[0]!, column: col, on: state === "on" })) : tables.map((t) => ({ table: t, on: state === "on" }));
+    const actor = await whoAmI(client).then((x) => x.user, () => undefined);
+    const results = await setAudit(client, changes, o.reason, actor, "cli");
+    for (const r of results) out(`${r.ok ? c.green("✓") : c.red("✗")} ${r.column ? `${r.table}.${r.column}` : r.table} → ${r.on ? "on" : "off"}${r.error ? c.red(` — ${r.error}`) : ""}`);
+    return results.every((r) => r.ok) ? 0 : 1;
+  }
+  throw new UsageError("Usage: pcx audit status|tables|columns|log|set --env NAME");
+}
+
+async function cmdUserSettings(sub: string | undefined, o: Opts, config: PcxConfig): Promise<number> {
+  const env = oneEnv(config, o);
+  const client = new Workspace(config).client(env);
+  const scope: UserScope = o.role ? { kind: "role", name: o.role } : o.team ? { kind: "team", name: o.team } : o.bu ? { kind: "businessunit", name: o.bu } : { kind: "all" };
+  if (sub === "show") {
+    const users = await listUserSettings(client, scope);
+    if (o.json) return out(JSON.stringify(users, null, 2)), 0;
+    out(
+      table(
+        ["USER", "LOCALE", "DATE", "TIME", "TIME ZONE", "PAGE", "OWN CHANGES"],
+        users.map((u) => [u.name, String(u.settings.localeid ?? ""), u.settings.dateformatstring ?? "", u.settings.timeformatstring ?? "", String(u.settings.timezonecode ?? ""), String(u.settings.paginglimit ?? ""), u.onDefaults ? "" : "yes"])
+      )
+    );
+    return 0;
+  }
+  if (sub !== "apply") throw new UsageError("Usage: pcx usersettings show|apply --env NAME [--role R | --team T | --bu B]");
+  const region = o.region ? REGIONS[o.region] : undefined;
+  if (o.region && !region) throw new UsageError(`Unknown --region. Choose: ${Object.keys(REGIONS).join(", ")}`);
+  const regionSettings: Record<string, unknown> = { ...(region ?? {}) };
+  delete regionSettings.label;
+  const target = validateSettings({
+    ...regionSettings,
+    ...(o["date-format"] ? { dateformatstring: o["date-format"] } : {}),
+    ...(o["time-format"] ? { timeformatstring: o["time-format"] } : {}),
+    ...(o.timezone ? { timezonecode: Number(o.timezone) } : {}),
+    ...(o.language ? { uilanguageid: Number(o.language), helplanguageid: Number(o.language) } : {}),
+    ...(o.paging ? { paginglimit: Number(o.paging) } : {})
+  });
+  if (!Object.keys(target).length) throw new UsageError("Give at least one of --region, --date-format, --time-format, --timezone, --language, --paging");
+  const plan = planApply(await listUserSettings(client, scope, target), target, !!o.overwrite);
+  out(`${plan.users.length} users in scope · ${c.bold(String(plan.toChange.length))} to change · ${plan.alreadyMatching} already match · ${plan.skippedPersonalised} kept because they changed their own settings (--overwrite to include them)`);
+  if (o["dry-run"]) {
+    plan.toChange.slice(0, 50).forEach((u) => out(`  ${u.name} ${c.dim(u.login)}`));
+    return 0;
+  }
+  checkPolicy(env, o.reason);
+  if (env.managed && plan.toChange.length > 1 && !o.yes) {
+    out(c.yellow(`Re-run with --yes to change ${plan.toChange.length} users in ${env.name}.`));
+    return 2;
+  }
+  const actor = await whoAmI(client).then((x) => x.user, () => undefined);
+  const res = await applyUserSettings(client, plan, { setOrgDefaults: !!o["new-users"], reason: o.reason, actor, source: "cli" });
+  out(`${c.green("✓")} ${res.changed} users updated${res.orgDefaultsUpdated ? ", and set as the default for new users" : ""}`);
+  for (const f of res.failed) out(c.red(`✗ ${f.name}: ${f.error}`));
+  return res.failed.length ? 1 : 0;
 }
 
 function cmdConfig(sub: string | undefined, pos: string[], config: PcxConfig, configPath: string): number {
@@ -317,7 +526,13 @@ export async function main(argv: string[]): Promise<number> {
         return await cmdEnv(sub, rest, o, config, configPath);
       case "solution":
       case "solutions":
-        return await cmdSolution(sub, o, config);
+        return await cmdSolution(sub, rest, o, config);
+      case "runs":
+        return await cmdRuns(sub, o, config);
+      case "audit":
+        return await cmdAudit(sub, rest, o, config);
+      case "usersettings":
+        return await cmdUserSettings(sub, o, config);
       case "flows":
       case "rules":
       case "plugins":

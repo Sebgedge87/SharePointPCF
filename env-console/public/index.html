@@ -4,25 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Env Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/app.css">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
 <div class="shell">
   <nav class="side" aria-label="Primary">
-    <div class="brand"><span class="logo" aria-hidden="true"></span>Env Console</div>
+    <div class="brand"><span class="logo" aria-hidden="true"></span><span>Env Console</span></div>
     <a href="#/overview" data-route="overview">Overview</a>
     <a href="#/solutions" data-route="solutions">Solutions</a>
+    <a href="#/compare" data-route="compare">Solution compare</a>
     <a href="#/components" data-route="components">Flows &amp; plugins</a>
+    <a href="#/runs" data-route="runs">Run history</a>
+    <a href="#/audit" data-route="audit">Audit</a>
+    <a href="#/usersettings" data-route="usersettings">User settings</a>
     <a href="#/activity" data-route="activity">Activity</a>
-    <div class="soon-label">Coming next</div>
-    <span class="soon">Solution compare</span>
-    <span class="soon">Run history</span>
-    <span class="soon">Audit</span>
-    <span class="soon">User settings</span>
-    <div class="who" id="who">Not connected</div>
+    <div class="side-foot">
+      <div class="theme" role="group" aria-label="Theme">
+        <button type="button" data-theme-choice="light">Light</button>
+        <button type="button" data-theme-choice="dark">Dark</button>
+        <button type="button" data-theme-choice="system">System</button>
+      </div>
+      <div class="who" id="who">Not connected</div>
+    </div>
   </nav>
   <main id="main" class="main" tabindex="-1"></main>
 </div>
+<div id="tip" class="tip" role="tooltip" hidden></div>
 </body>
 </html>

@@ -15,7 +15,12 @@ It runs in one of two ways:
 - **Activity:** a log of every change made through pcx (dashboard or CLI), with who, when and why.
 - **CLI:** the same features as `pcx …` commands, for terminals and pipelines.
 
-**Planned next** (designed, not built yet): solution compare (component-level diff), run history with flow and plugin errors, audit settings and audit log, and global user settings.
+- **Solution compare:** one solution between two environments, component by component. It shows what is missing, what differs (with a line-by-line diff of forms, views, flows, web resources, plugin steps and environment variables), and what was changed directly in a managed environment.
+- **Run history:** cloud flow runs and plugin errors per environment, with daily charts, failure rates, the components that fail most, and each run's error, trace and Power Automate link. You can switch plugin trace logging on or off.
+- **Audit:** system, table and column auditing, switched on or off one at a time or in bulk, plus who changed what (old and new values).
+- **User settings:** set regional formats, time zone, language and records per page for all users, or for a security role, team or business unit. It can keep users' own changes and set the defaults for new users.
+- **Microsoft and system items** are hidden by default on Flows & plugins; one switch shows them.
+- **Brand and themes:** FormusPro navy and magenta with Rubik and IBM Plex Sans, in a light theme and a dark theme (Light / Dark / follow the system).
 
 ## Requirements
 

@@ -1,6 +1,7 @@
 import type { EnvConfig } from "./config.js";
 import { assertGuid, type DataverseClient } from "./dataverse.js";
 import { appendAction } from "./actionLog.js";
+import { isMicrosoftPublisher } from "./solutions.js";
 
 export type ComponentKind = "flow" | "rule" | "plugin";
 
@@ -12,6 +13,11 @@ export interface ComponentItem {
   /** Table (or message and table for plugin steps). */
   target: string;
   modifiedOn?: string;
+  /** Built by your organisation, not shipped by Microsoft or the platform. */
+  custom: boolean;
+  /** Name of the solution that owns it (the managed solution, or "Active" for unmanaged). */
+  solution?: string;
+  managed?: boolean;
 }
 
 interface RawWorkflow {
@@ -20,6 +26,8 @@ interface RawWorkflow {
   statecode: number;
   primaryentity?: string;
   modifiedon?: string;
+  ismanaged?: boolean;
+  solutionid?: string;
 }
 
 interface RawStep {
@@ -29,6 +37,9 @@ interface RawStep {
   stage: number;
   mode: number;
   modifiedon?: string;
+  ismanaged?: boolean;
+  solutionid?: string;
+  customizationlevel?: number;
   sdkmessageid?: { name?: string } | null;
   sdkmessagefilterid?: { primaryobjecttypecode?: string } | null;
 }
@@ -37,29 +48,83 @@ interface RawStep {
 const WORKFLOW_CATEGORY: Record<"flow" | "rule", number> = { flow: 5, rule: 2 };
 const STAGE: Record<number, string> = { 10: "Pre-validation", 20: "Pre-operation", 40: "Post-operation" };
 
-export async function listComponents(client: DataverseClient, kind: ComponentKind): Promise<ComponentItem[]> {
-  if (kind === "plugin") {
-    // customizationlevel 1 = custom steps; hidden steps are platform internals.
-    const rows = await client.getAll<RawStep>(
-      "sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,statecode,stage,mode,modifiedon" +
-        "&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode)" +
-        "&$filter=customizationlevel eq 1 and ishidden/Value eq false&$orderby=name"
+interface OwnerInfo {
+  name: string;
+  microsoft: boolean;
+}
+
+/** Which solutions belong to Microsoft or the platform, keyed by solution ID. */
+async function solutionOwners(client: DataverseClient): Promise<Map<string, OwnerInfo>> {
+  const m = new Map<string, OwnerInfo>();
+  try {
+    const rows = await client.getAll<{ solutionid: string; friendlyname: string; uniquename: string; publisherid?: { uniquename?: string; friendlyname?: string; customizationprefix?: string } | null }>(
+      "solutions?$select=solutionid,friendlyname,uniquename&$expand=publisherid($select=uniquename,friendlyname,customizationprefix)"
     );
-    return rows.map((r) => ({
-      id: r.sdkmessageprocessingstepid,
-      kind,
-      name: r.name,
-      on: r.statecode === 0,
-      target: [r.sdkmessagefilterid?.primaryobjecttypecode || "any", r.sdkmessageid?.name ?? "", STAGE[r.stage] ?? `stage ${r.stage}`, r.mode === 1 ? "async" : "sync"]
-        .filter(Boolean)
-        .join(" · "),
-      modifiedOn: r.modifiedon
-    }));
+    for (const r of rows) {
+      const pub = { uniqueName: r.publisherid?.uniquename ?? "", friendlyName: r.publisherid?.friendlyname ?? "", prefix: r.publisherid?.customizationprefix ?? "" };
+      // "System" and "Active" are platform solutions; Active holds unmanaged (your own) work.
+      const system = r.uniquename === "System" || /^microsoft/i.test(pub.uniqueName) || isMicrosoftPublisher(pub);
+      m.set(r.solutionid.toLowerCase(), { name: r.friendlyname, microsoft: system && r.uniquename !== "Active" && r.uniquename !== "Default" });
+    }
+  } catch {
+    /* without the map everything counts as custom */
   }
-  const rows = await client.getAll<RawWorkflow>(
-    `workflows?$select=workflowid,name,statecode,primaryentity,modifiedon&$filter=category eq ${WORKFLOW_CATEGORY[kind]} and type eq 1&$orderby=name`
-  );
-  return rows.map((r) => ({ id: r.workflowid, kind, name: r.name, on: r.statecode === 1, target: r.primaryentity && r.primaryentity !== "none" ? r.primaryentity : "—", modifiedOn: r.modifiedon }));
+  return m;
+}
+
+export interface ListOptions {
+  /** Include items shipped by Microsoft or the platform. Default: custom only. */
+  includeSystem?: boolean;
+}
+
+export async function listComponents(client: DataverseClient, kind: ComponentKind, opts: ListOptions = {}): Promise<ComponentItem[]> {
+  const owners = await solutionOwners(client);
+  const owner = (id?: string) => (id ? owners.get(id.toLowerCase()) : undefined);
+  let items: ComponentItem[];
+  if (kind === "plugin") {
+    // Hidden steps are platform internals and never shown. customizationlevel 0 = system step.
+    const levelFilter = opts.includeSystem ? "" : "customizationlevel eq 1 and ";
+    const rows = await client.getAll<RawStep>(
+      "sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,statecode,stage,mode,modifiedon,ismanaged,solutionid,customizationlevel" +
+        "&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode)" +
+        `&$filter=${levelFilter}ishidden/Value eq false&$orderby=name`
+    );
+    items = rows.map((r) => {
+      const o = owner(r.solutionid);
+      return {
+        id: r.sdkmessageprocessingstepid,
+        kind,
+        name: r.name,
+        on: r.statecode === 0,
+        target: [r.sdkmessagefilterid?.primaryobjecttypecode || "any", r.sdkmessageid?.name ?? "", STAGE[r.stage] ?? `stage ${r.stage}`, r.mode === 1 ? "async" : "sync"]
+          .filter(Boolean)
+          .join(" · "),
+        modifiedOn: r.modifiedon,
+        custom: r.customizationlevel !== 0 && !o?.microsoft,
+        solution: o?.name,
+        managed: r.ismanaged
+      };
+    });
+  } else {
+    const rows = await client.getAll<RawWorkflow>(
+      `workflows?$select=workflowid,name,statecode,primaryentity,modifiedon,ismanaged,solutionid&$filter=category eq ${WORKFLOW_CATEGORY[kind]} and type eq 1&$orderby=name`
+    );
+    items = rows.map((r) => {
+      const o = owner(r.solutionid);
+      return {
+        id: r.workflowid,
+        kind,
+        name: r.name,
+        on: r.statecode === 1,
+        target: r.primaryentity && r.primaryentity !== "none" ? r.primaryentity : "—",
+        modifiedOn: r.modifiedon,
+        custom: !o?.microsoft,
+        solution: o?.name,
+        managed: r.ismanaged
+      };
+    });
+  }
+  return opts.includeSystem ? items : items.filter((i) => i.custom);
 }
 
 /** The state/status pair that turns a component on or off. */

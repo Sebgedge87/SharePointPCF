@@ -10,6 +10,11 @@ import { changeState, listComponents, PolicyError, type ComponentKind } from "..
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, listSolutions, publisherCounts, type Solution } from "../core/solutions.js";
 import { isGuid, type ClientOptions } from "../core/dataverse.js";
+import { compareSolution, diffComponent } from "../core/compare.js";
+import { runReport, setTraceSetting, type TraceSetting } from "../core/runs.js";
+import { getSystemAudit, listAuditEntries, listColumnAudit, listTableAudit, setAudit, setSystemAudit } from "../core/audit.js";
+import { applyUserSettings, LANGUAGES, listUserSettings, planApply, REGIONS, TIME_ZONES, validateSettings, type FormatSettings, type UserScope } from "../core/usersettings.js";
+import { sinceDate } from "../core/util.js";
 import type { HostedAuth, Session } from "./hosted.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../../../public/", import.meta.url));
@@ -21,7 +26,7 @@ const STATIC: Record<string, { file: string; type: string }> = {
 };
 
 const SECURITY_HEADERS: Record<string, string> = {
-  "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store"
@@ -167,7 +172,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       const env = findEnv(cfg, url.searchParams.get("env") ?? "");
       const kind = url.searchParams.get("kind") as ComponentKind;
       if (!KINDS.has(kind)) throw new HttpError(400, "kind must be flow, rule or plugin");
-      return { env: env.name, managed: env.managed, items: await listComponents(ws.client(env), kind) };
+      return { env: env.name, managed: env.managed, items: await listComponents(ws.client(env), kind, { includeSystem: url.searchParams.get("all") === "1" }) };
     }
     if (req.method === "POST" && url.pathname === "/api/components/state") {
       const body = await readJson(req);
@@ -182,7 +187,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       const reason = typeof body.reason === "string" ? body.reason.slice(0, 500) : undefined;
       const client = ws.client(env);
       // Only act on IDs that really are components of this kind in this environment.
-      const known = new Map((await listComponents(client, kind)).map((c) => [c.id.toLowerCase(), c]));
+      const known = new Map((await listComponents(client, kind, { includeSystem: true })).map((c) => [c.id.toLowerCase(), c]));
       const items = (ids as string[]).map((id) => known.get(id.toLowerCase()));
       if (items.some((i) => !i)) throw new HttpError(400, `Some IDs are not ${kind} components in ${env.name}`);
       let actor = who.user;
@@ -196,6 +201,82 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       const results = await changeState(client, { kind, items: items.map((i) => ({ id: i!.id, name: i!.name })), on: body.on, reason, actor, source: "dashboard" });
       return { results };
     }
+    const q = (k: string) => url.searchParams.get(k) ?? "";
+    const actorFor = async (client: ReturnType<Workspace["client"]>) => who.user ?? (await whoAmI(client).then((x) => x.user, () => undefined));
+    const reasonOf = (b: Record<string, unknown>) => (typeof b.reason === "string" ? b.reason.slice(0, 500) : undefined);
+
+    // ---- solution compare
+    if (req.method === "GET" && url.pathname === "/api/compare") {
+      const solution = q("solution");
+      if (!/^[A-Za-z0-9_]{1,100}$/.test(solution)) throw new HttpError(400, "Choose a solution");
+      return compareSolution(ws.client(findEnv(cfg, q("a"))), ws.client(findEnv(cfg, q("b"))), solution);
+    }
+    if (req.method === "GET" && url.pathname === "/api/compare/diff") {
+      const type = Number(q("type"));
+      if (!Number.isInteger(type) || !isGuid(q("id"))) throw new HttpError(400, "Bad component");
+      return diffComponent(ws.client(findEnv(cfg, q("a"))), ws.client(findEnv(cfg, q("b"))), type, q("id"));
+    }
+
+    // ---- run history
+    if (req.method === "GET" && url.pathname === "/api/runs") {
+      const env = findEnv(cfg, q("env"));
+      return runReport(ws.client(env), env, sinceDate(q("since") || "7d"));
+    }
+    if (req.method === "POST" && url.pathname === "/api/runs/trace") {
+      const body = await readJson(req);
+      const env = findEnv(cfg, String(body.env ?? ""));
+      const setting = body.setting as TraceSetting;
+      if (!["off", "exceptions", "all"].includes(setting)) throw new HttpError(400, "setting must be off, exceptions or all");
+      const client = ws.client(env);
+      await setTraceSetting(client, setting, reasonOf(body), await actorFor(client), "dashboard");
+      return { ok: true };
+    }
+
+    // ---- audit
+    if (req.method === "GET" && url.pathname === "/api/audit/system") return getSystemAudit(ws.client(findEnv(cfg, q("env"))));
+    if (req.method === "POST" && url.pathname === "/api/audit/system") {
+      const body = await readJson(req);
+      const client = ws.client(findEnv(cfg, String(body.env ?? "")));
+      const change: { auditEnabled?: boolean; userAccessAudit?: boolean } = {};
+      if (typeof body.auditEnabled === "boolean") change.auditEnabled = body.auditEnabled;
+      if (typeof body.userAccessAudit === "boolean") change.userAccessAudit = body.userAccessAudit;
+      await setSystemAudit(client, change, reasonOf(body), await actorFor(client), "dashboard");
+      return getSystemAudit(client);
+    }
+    if (req.method === "GET" && url.pathname === "/api/audit/tables") return { tables: await listTableAudit(ws.client(findEnv(cfg, q("env")))) };
+    if (req.method === "GET" && url.pathname === "/api/audit/columns") return { columns: await listColumnAudit(ws.client(findEnv(cfg, q("env"))), q("table")) };
+    if (req.method === "POST" && url.pathname === "/api/audit/set") {
+      const body = await readJson(req);
+      const client = ws.client(findEnv(cfg, String(body.env ?? "")));
+      const changes = body.changes;
+      if (!Array.isArray(changes) || changes.length === 0 || changes.length > 300) throw new HttpError(400, "changes must be a list of 1-300 items");
+      const list = changes.map((c: Record<string, unknown>) => {
+        if (typeof c.table !== "string" || typeof c.on !== "boolean" || (c.column !== undefined && typeof c.column !== "string")) throw new HttpError(400, "Each change needs table, on and optional column");
+        return { table: c.table, column: c.column as string | undefined, on: c.on };
+      });
+      return { results: await setAudit(client, list, reasonOf(body), await actorFor(client), "dashboard") };
+    }
+    if (req.method === "GET" && url.pathname === "/api/audit/log") {
+      return { entries: await listAuditEntries(ws.client(findEnv(cfg, q("env"))), q("table"), sinceDate(q("since") || "7d"), { column: q("column") || undefined }) };
+    }
+
+    // ---- user settings
+    if (req.method === "GET" && url.pathname === "/api/usersettings/options") return { regions: REGIONS, timeZones: TIME_ZONES, languages: LANGUAGES };
+    if (req.method === "POST" && (url.pathname === "/api/usersettings/preview" || url.pathname === "/api/usersettings/apply")) {
+      const body = await readJson(req);
+      const client = ws.client(findEnv(cfg, String(body.env ?? "")));
+      const target = validateSettings((body.target ?? {}) as FormatSettings);
+      if (Object.keys(target).length === 0) throw new HttpError(400, "Choose at least one setting");
+      const sc = (body.scope ?? { kind: "all" }) as Record<string, unknown>;
+      if (!["all", "role", "team", "businessunit"].includes(String(sc.kind)) || (sc.kind !== "all" && (typeof sc.name !== "string" || !sc.name))) throw new HttpError(400, "Bad scope");
+      const scope = (sc.kind === "all" ? { kind: "all" } : { kind: sc.kind, name: sc.name }) as UserScope;
+      const plan = planApply(await listUserSettings(client, scope, target), target, body.overwrite === true);
+      if (url.pathname.endsWith("/preview")) {
+        return { inScope: plan.users.length, toChange: plan.toChange.length, skippedPersonalised: plan.skippedPersonalised, alreadyMatching: plan.alreadyMatching, sample: plan.toChange.slice(0, 200).map((u) => ({ name: u.name, login: u.login })) };
+      }
+      return applyUserSettings(client, plan, { setOrgDefaults: body.setOrgDefaults === true, reason: reasonOf(body), actor: await actorFor(client), source: "dashboard" });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/actions") {
       return { actions: readActions(200) };
     }

@@ -24,8 +24,8 @@ test("flows are read from workflows with category 5; plugin steps describe table
   });
   const client = new DataverseClient(DEV, fakeTokens, { fetchImpl: f.fn });
   const flows = await listComponents(client, "flow");
-  assert.match(decodeURIComponent(f.calls[0]!.url), /category eq 5 and type eq 1/);
-  assert.deepEqual(flows[0], { id: ID1, kind: "flow", name: "SAP order sync", on: true, target: "salesorder", modifiedOn: undefined });
+  assert.ok(f.calls.some((c) => /category eq 5 and type eq 1/.test(decodeURIComponent(c.url))));
+  assert.deepEqual(flows[0], { id: ID1, kind: "flow", name: "SAP order sync", on: true, target: "salesorder", modifiedOn: undefined, custom: true, solution: undefined, managed: undefined });
   const steps = await listComponents(client, "plugin");
   assert.equal(steps[0]!.on, false);
   assert.equal(steps[0]!.target, "account · Update · Pre-operation · sync");
@@ -60,9 +60,9 @@ test("unmanaged DEV needs no reason", async () => {
 
 test("selection by name, ID, filter or all", () => {
   const all: ComponentItem[] = [
-    { id: ID1, kind: "flow", name: "SAP order sync", on: true, target: "" },
-    { id: ID2, kind: "flow", name: "SAP invoice sync", on: true, target: "" },
-    { id: "33333333-3333-3333-3333-333333333333", kind: "flow", name: "Digest", on: true, target: "" }
+    { id: ID1, kind: "flow", name: "SAP order sync", on: true, target: "", custom: true },
+    { id: ID2, kind: "flow", name: "SAP invoice sync", on: true, target: "", custom: true },
+    { id: "33333333-3333-3333-3333-333333333333", kind: "flow", name: "Digest", on: true, target: "", custom: true }
   ];
   assert.equal(selectComponents(all, { filter: "sap" }).length, 2);
   assert.equal(selectComponents(all, { names: ["digest"] })[0]!.name, "Digest");
