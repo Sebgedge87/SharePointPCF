@@ -22,7 +22,7 @@ import { changeJobs, listProblemJobs } from "../core/jobs.js";
 import { listRoles, listUserRoles } from "../core/security.js";
 import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configdata.js";
 import { runProcess } from "../core/proc.js";
-import { addDiscovered } from "../core/envlist.js";
+import { addDiscovered, chooseEnvironments, resolveUnsaved } from "../core/envlist.js";
 import { getAccess, PERMISSION_LABEL, requireAccess } from "../core/access.js";
 import { createInterface } from "node:readline";
 import { createBody, createEnvironment, ENV_TYPES, REGIONS as ENV_REGIONS, validateNewEnvironment } from "../core/provision.js";
@@ -40,8 +40,10 @@ Sign-in
   pcx auth status                       Check sign-in against every environment
 
 Environments
-  Every environment your account can reach is found automatically (Discovery service),
-  next to the ones you saved. --env takes the short name, the display name or the URL.
+  The console works with the environments you choose (pcx env select). --env also reaches
+  any other environment you can access: give its display name or URL.
+  pcx env select [<name-or-URL>...]     Choose which environments to use (a numbered list
+                                        of every one you can reach; nothing is loaded otherwise)
   pcx env list [--json]                 Health, version, solutions, flows and plugin steps
   pcx env discover [--json]             List every environment your account can reach
   pcx env add <URL> [--unmanaged]       Save one (name and short name are looked up for you)
@@ -111,7 +113,7 @@ Other
   pcx config set tenant <id-or-domain>  Sign in to a specific tenant (empty to clear)
   pcx config set provider azps|azcli    Sign in with PowerShell (default) or Azure CLI
   pcx config set teams-webhook <url>    Teams channel for alerts (empty to remove)
-  pcx config set discovery on|off       Find environments automatically (default on)
+  pcx config set discovery on|off       Load every reachable environment instead of choosing (default off)
   --config FILE                         Use this config file (any command)
 
 Every change shows what it will do and asks "Go ahead? [y/N]" first. In scripts, add --yes
@@ -311,7 +313,49 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
     return 0;
   }
   if (sub === "create") return cmdEnvCreate(o, config, configPath);
-  throw new UsageError("Usage: pcx env list|discover|add|remove|unhide|create");
+  if (sub === "select") return cmdEnvSelect(pos, config, configPath);
+  throw new UsageError("Usage: pcx env list|select|discover|add|remove|unhide|create");
+}
+
+/**
+ * Choose which environments the console works with, from the ones your account can reach.
+ * Interactive: a numbered list. In scripts: pcx env select <name-or-URL>...
+ */
+async function cmdEnvSelect(pos: string[], config: PcxConfig, configPath: string): Promise<number> {
+  const found = (await discoverEnvironments(new Workspace(config).tokens)).filter((f) => f.enabled);
+  if (!found.length) throw new Error("Your account can't reach any environments in this tenant.");
+  const saved = new Set(config.environments.filter((e) => !e.discovered).map((e) => e.url));
+  let picks: Set<string>;
+  if (pos.length) {
+    picks = new Set();
+    for (const p of pos) {
+      const w = p.toLowerCase();
+      const f = found.find((x) => x.friendlyName.toLowerCase() === w || x.url === w.replace(/\/+$/, "") || new URL(x.url).hostname === w || x.uniqueName.toLowerCase() === w);
+      if (!f) throw new UsageError(`Not found among your environments: ${p}`);
+      picks.add(f.url);
+    }
+  } else {
+    if (!(process.stdin.isTTY && process.stdout.isTTY)) throw new UsageError("Name the environments: pcx env select <name-or-URL>...");
+    found.forEach((f, i) => out(`${String(i + 1).padStart(3)}. ${saved.has(f.url) ? c.green("[x]") : "[ ]"} ${f.friendlyName} ${c.dim(f.url)}`));
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((r) => rl.question("Numbers to use, e.g. 1,3,5-7 (Enter keeps the current choice): ", r));
+    rl.close();
+    if (!answer.trim()) return out("Nothing changed."), 0;
+    picks = new Set();
+    for (const part of answer.split(/[,\s]+/).filter(Boolean)) {
+      const m = /^(\d+)(?:-(\d+))?$/.exec(part);
+      if (!m) throw new UsageError(`Not a number or range: ${part}`);
+      for (let i = Number(m[1]); i <= Number(m[2] ?? m[1]); i++) {
+        const f = found[i - 1];
+        if (!f) throw new UsageError(`No environment number ${i}`);
+        picks.add(f.url);
+      }
+    }
+  }
+  const next = chooseEnvironments(config, found.filter((f) => picks.has(f.url)).map((f) => ({ url: f.url, label: f.friendlyName })));
+  saveConfig({ ...config, environments: next }, configPath);
+  out(`${c.green("✓")} Using ${next.length} environment${next.length === 1 ? "" : "s"}: ${next.map((e) => `${e.label ?? e.name} (${e.name})`).join(", ")}`);
+  return 0;
 }
 
 async function cmdEnvCreate(o: Opts, config: PcxConfig, configPath: string): Promise<number> {
@@ -727,8 +771,6 @@ async function cmdAlerts(sub: string | undefined, o: Opts, config: PcxConfig, co
     if (!hook) throw new UsageError("No Teams webhook set. Run: pcx config set teams-webhook <url>");
     const toPost = o.all ? alerts : newAlerts(alerts);
     if (toPost.length) {
-      out(`Will post ${toPost.length} alert${toPost.length === 1 ? "" : "s"} to the Teams channel.`);
-      if (!(await confirmChange(o))) return NOT_CONFIRMED;
       await postToTeams(hook, toPost);
       rememberPosted(toPost);
       out(`${c.green("✓")} Posted ${toPost.length} alert${toPost.length === 1 ? "" : "s"} to Teams`);
@@ -919,10 +961,16 @@ export async function main(argv: string[]): Promise<number> {
   try {
     const config = loadConfig(configPath);
     // Find every environment the account can reach, except for commands that only manage the config.
-    const noLookup = ["auth", "config", "serve"].includes(cmd) || (cmd === "env" && ["add", "discover", "create", "unhide"].includes(sub ?? ""));
+    const noLookup = ["auth", "config", "serve"].includes(cmd) || (cmd === "env" && ["add", "discover", "create", "unhide", "select"].includes(sub ?? ""));
     if (!noLookup && !o["saved-only"]) {
-      const d = await addDiscovered(config, new Workspace(config).tokens);
-      if (d.error && !o.json) process.stderr.write(c.dim(`Couldn't look up your environments (${d.error.split("\n")[0]}); using the saved ones.\n`));
+      const tokens = new Workspace(config).tokens;
+      // Only when switched on (pcx config set discovery on): load every reachable environment.
+      const d = await addDiscovered(config, tokens);
+      if (d.error && !o.json) process.stderr.write(c.dim(`Couldn't look up your environments (${d.error.split("\n")[0]}); using the chosen ones.\n`));
+      // --env/--from/--to can name any environment you can reach, chosen or not.
+      const wanted = [...(o.env ?? []), o.from, o.to].filter((x): x is string => !!x);
+      const r = await resolveUnsaved(config, wanted, tokens);
+      if (r.error && !o.json) process.stderr.write(c.dim(`Couldn't look up ${wanted.join(", ")} (${r.error.split("\n")[0]}).\n`));
     }
     switch (cmd) {
       case "auth":

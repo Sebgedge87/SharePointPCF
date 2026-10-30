@@ -26,7 +26,10 @@ export interface PcxConfig {
   allowedHostSuffixes?: string[];
   /** Where `pcx alerts run --post` sends new alerts. */
   alerts?: { teamsWebhook?: string };
-  /** List every environment the signed-in user can reach (Discovery service). On unless set to false. */
+  /**
+   * true: load every environment the signed-in user can reach (Discovery service).
+   * Default (off): only the environments you chose; others are reachable by --env on demand.
+   */
   discovery?: boolean;
   /** Discovered environments the user chose to hide (their URLs). */
   hiddenEnvironments?: string[];
@@ -136,7 +139,7 @@ export function validateConfig(input: unknown): PcxConfig {
     if (u.protocol !== "https:") throw new ConfigError("alerts.teamsWebhook must use https");
     out.alerts = { teamsWebhook: u.toString() };
   }
-  if (c.discovery === false) out.discovery = false;
+  if (c.discovery === true) out.discovery = true;
   if (c.hiddenEnvironments !== undefined) {
     if (!Array.isArray(c.hiddenEnvironments)) throw new ConfigError("hiddenEnvironments must be a list of URLs");
     out.hiddenEnvironments = [...new Set((c.hiddenEnvironments as unknown[]).map((u) => normaliseEnvUrl(String(u), suffixes)))];

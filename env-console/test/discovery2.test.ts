@@ -5,13 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request } from "node:http";
 import { findEnv, saveConfig, type PcxConfig } from "../src/core/config.js";
-import { mergeDiscovered } from "../src/core/envlist.js";
+import { chooseEnvironments, mergeDiscovered, resolveUnsaved } from "../src/core/envlist.js";
 import type { DiscoveredEnv } from "../src/core/discovery.js";
 import { BAP_HOST, BAP_RESOURCE, createBody, createEnvironment, validateNewEnvironment } from "../src/core/provision.js";
 import { startServer } from "../src/server/index.js";
 import { Workspace } from "../src/core/environments.js";
 import type { TokenProvider } from "../src/core/auth.js";
-import { DEV, fakeFetch } from "./helpers.js";
+import { DEV, fakeFetch, fakeTokens } from "./helpers.js";
 
 const found = (friendlyName: string, url: string, extra: Partial<DiscoveredEnv> = {}): DiscoveredEnv => ({
   friendlyName, uniqueName: "", url, enabled: true, suggestedName: "", suggestedManaged: !/dev/i.test(friendlyName), ...extra
@@ -111,8 +111,8 @@ function call(port: number, key: string, method: string, path: string, body?: un
   });
 }
 
-test("the dashboard lists found environments, hides removed ones, and refuses changes without the role", async () => {
-  const config: PcxConfig = { auth: { provider: "azps" }, environments: [{ ...DEV }] };
+test("with discovery on, the dashboard lists found environments, hides removed ones, and refuses changes without the role", async () => {
+  const config: PcxConfig = { auth: { provider: "azps" }, environments: [{ ...DEV }], discovery: true };
   const saved: PcxConfig[] = [];
   const provider: TokenProvider = { name: "azps", login: async () => {}, logout: async () => {}, getToken: async () => ({ token: "t", expiresOn: new Date(Date.now() + 3_600_000) }) };
   const UNI = "https://orgc98ad8b7.crm4.dynamics.com";
@@ -191,4 +191,54 @@ test("the CLI never changes anything without a yes: no --yes in a script means e
     process.stdout.write = write;
     delete process.env.PCX_CONFIG;
   }
+});
+
+test("by default nothing extra is loaded: you choose the environments, and that choice is saved", async () => {
+  const config: PcxConfig = { auth: { provider: "azps" }, environments: [{ ...DEV, label: "Dev" }] };
+  const saved: PcxConfig[] = [];
+  const provider: TokenProvider = { name: "azps", login: async () => {}, logout: async () => {}, getToken: async () => ({ token: "t", expiresOn: new Date(Date.now() + 3_600_000) }) };
+  const UNI = "https://orgc98ad8b7.crm4.dynamics.com";
+  const LIVE = "https://formusprolive.crm11.dynamics.com";
+  let lookups = 0;
+  const ws = new Workspace(config, { token: async () => "t" }, { fetchImpl: fakeFetch(() => undefined).fn });
+  const srv = await startServer({ config, port: 0, key: "k".repeat(32), workspace: ws, account: { provider, save: (c) => void saved.push(c), discover: async () => (lookups++, [found("Dev", DEV.url), found("Seb G's Uni Project", UNI), found("FormusProLive", LIVE)]) } });
+  try {
+    const cfg = await call(srv.port, srv.key, "GET", "/api/config");
+    assert.deepEqual(cfg.body.environments.map((e: { url: string }) => e.url), [DEV.url], "only the chosen one is loaded");
+    assert.equal(lookups, 0, "no lookup on load");
+    const list = await call(srv.port, srv.key, "GET", "/api/account/discover");
+    assert.deepEqual(list.body.environments.map((e: { added: boolean }) => e.added), [true, false, false], "the picker shows what's already chosen");
+    const pick = await call(srv.port, srv.key, "POST", "/api/account/envs/select", { environments: [{ url: DEV.url }, { url: LIVE, label: "FormusProLive" }] });
+    assert.equal(pick.status, 200);
+    const last = saved[saved.length - 1]!;
+    assert.deepEqual(last.environments.map((e) => e.url), [DEV.url, LIVE]);
+    assert.equal(last.environments[0]!.label, "Dev", "an environment already chosen keeps its settings");
+    const bad = await call(srv.port, srv.key, "POST", "/api/account/envs/select", { environments: [{ url: "https://evil.example.com" }] });
+    assert.equal(bad.status, 400);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("chosen environments keep their settings; new ones get a short name and type", () => {
+  const config: PcxConfig = { auth: { provider: "azps" }, environments: [{ name: "DEV", label: "Dev", url: DEV.url, managed: false }] };
+  const next = chooseEnvironments(config, [{ url: DEV.url }, { url: "https://orgc98ad8b7.crm4.dynamics.com", label: "Seb G's Uni Project" }, { url: "https://x.crm4.dynamics.com", label: "Sandbox Dev" }]);
+  assert.deepEqual(next[0], { name: "DEV", label: "Dev", url: DEV.url, managed: false });
+  assert.equal(next[1]!.name, "SEB-G-S-UNI-PROJECT");
+  assert.equal(next[2]!.managed, false, "DEV-like names are suggested as unmanaged");
+});
+
+test("--env can name an environment you didn't choose; only that one is looked up and added", async () => {
+  const config: PcxConfig = { auth: { provider: "azps" }, environments: [{ ...DEV }] };
+  const f = fakeFetch((c) => (c.url.includes("globaldisco") ? { body: { value: [
+    { FriendlyName: "Seb G's Uni Project", UniqueName: "unq1", Url: "https://orgc98ad8b7.crm4.dynamics.com", State: 0 },
+    { FriendlyName: "Other", UniqueName: "unq2", Url: "https://other.crm4.dynamics.com", State: 0 }
+  ] } } : undefined));
+  const none = await resolveUnsaved(config, ["DEV"], fakeTokens, f.fn as never);
+  assert.deepEqual(none.added, []);
+  assert.equal(f.calls.length, 0, "no lookup when the name is already known");
+  const r = await resolveUnsaved(config, ["Seb G's Uni Project"], fakeTokens, f.fn as never);
+  assert.deepEqual(r.added.map((e) => e.label), ["Seb G's Uni Project"]);
+  assert.equal(config.environments.length, 2, "the others are not loaded");
+  assert.equal(findEnv(config, "seb g's uni project").discovered, true);
 });

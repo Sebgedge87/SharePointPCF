@@ -337,7 +337,12 @@ function signIn() {
     show(h("div", { class: "row" }, h("span", { class: "dot ok" }), h("strong", {}, "Signed in")), h("p", { class: "muted", style: "margin:0" }, "Loading your environments…"));
     acctState.user = null;
     accessData = null;
-    setTimeout(async () => { dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." }; try { await reloadConfig(); } catch { /* keep the old list */ } overview(); refreshAlertBadge(); }, 900);
+    setTimeout(async () => {
+      dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." };
+      try { await reloadConfig(); } catch { /* keep the old list */ }
+      if (!config.environments.length) { route(); chooseEnvironmentsDialog(); return; }
+      overview(); refreshAlertBadge();
+    }, 900);
   };
   const failed = (msg, output) => {
     stop();
@@ -391,7 +396,6 @@ function signIn() {
   startCode();
 }
 async function signOut() {
-  if (!(await confirmDialog({ title: "Sign out?", message: "The console can't read any environment until you sign in again.", confirmText: "Sign out" }))) return;
   try { await api("/api/account/logout", {}); acctState.notice = { kind: "info", text: "Signed out." }; acctState.user = null; document.getElementById("who").textContent = "Not signed in"; }
   catch (err) { acctState.notice = { kind: "bad", text: err.message }; }
   overview();
@@ -437,18 +441,13 @@ function manageEnvironments() {
       overview();
     } catch (err) { fail(err); addBtn.disabled = false; addBtn.textContent = "Add environment"; }
   };
+  // Only changes the console's own list, so no confirmation.
   const remove = async (n) => {
-    const found = config.environments.find((e) => e.name === n)?.discovered;
-    const ok = found
-      ? await confirmDialog({ title: `Hide ${envLabel(n)}?`, message: `${envLabel(n)} won't be listed here any more. Nothing changes in the environment itself. Show it again with: pcx env unhide <its URL>.`, confirmText: "Hide" })
-      : await confirmDialog({ title: `Remove ${envLabel(n)}?`, message: `${envLabel(n)} is removed from the console only. Nothing changes in the environment itself, and you can add it back at any time.`, confirmText: "Remove", danger: true });
-    if (!ok) return;
     try { await api("/api/account/env/remove", { name: n }); await reloadConfig(); overview(); } catch (err) { fail(err); }
   };
   const saveTenant = async () => {
     const next = tenant.value.trim();
     if ((next || "") === (config.tenantId || "")) return;
-    if (!(await confirmChange({ title: "Change tenant?", message: next ? `Sign-in will use the ${next} tenant. You may need to sign in again.` : "Sign-in will use your default tenant. You may need to sign in again.", confirmText: "Change tenant" }))) return;
     try { await api("/api/account/tenant", { tenant: tenant.value.trim() }); await reloadConfig(); status.textContent = "Tenant saved. Sign in again if your environments live in that tenant."; status.style.color = ""; }
     catch (err) { fail(err); }
   };
@@ -462,12 +461,11 @@ function manageEnvironments() {
               h("button", { type: "button", class: "btn", onclick: async () => { try { await reloadConfig(true); accessData = null; overview(); } catch (err) { fail(err); } } }, "Refresh list"),
               config.canCreate ? h("button", { type: "button", class: "btn primary", onclick: createEnvironmentDialog }, "Create environment") : null))
         : h("div", { class: "row between" },
-            h("div", { class: "small muted" }, "Pick from the environments your account can reach, or paste a URL below."),
+            h("div", { class: "small muted" }, "Choose from the environments your account can reach, or paste a URL below."),
             h("div", { class: "row" },
-              h("button", { type: "button", class: "btn primary", disabled: acctState.finding, onclick: findEnvironments }, acctState.finding ? "Looking…" : "Find my environments"),
+              h("button", { type: "button", class: "btn primary", onclick: chooseEnvironmentsDialog }, "Choose environments"),
               config.canCreate ? h("button", { type: "button", class: "btn", onclick: createEnvironmentDialog }, "Create environment") : null)),
       config.discoveryError ? notice("warn", `Couldn't list your environments automatically: ${config.discoveryError}`) : null,
-      config.discovery ? null : foundTable(),
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, ["Display name", "Short name (for pcx --env)", "URL", "Type", "Source", ""].map((t) => h("th", { scope: "col" }, t)))),
         h("tbody", {}, config.environments.map((e) => {
@@ -494,6 +492,75 @@ function manageEnvironments() {
       status));
   details.addEventListener("toggle", () => { acctState.open = details.open; });
   return details;
+}
+
+/**
+ * Pick which environments the console works with, from every one the account can reach.
+ * Nothing is ticked except the ones already in use; only the ticked ones are loaded.
+ */
+async function chooseEnvironmentsDialog() {
+  if (document.querySelector("dialog.choose-envs")) return;
+  const body = h("div", { class: "modal-body" }, h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "Looking up the environments your account can reach…"));
+  const dlg = h("dialog", { class: "modal choose-envs", "aria-labelledby": "choose-title" },
+    h("div", { class: "modal-head" }, h("h2", { id: "choose-title" }, "Choose environments"), h("button", { type: "button", class: "iconbtn", "aria-label": "Close", onclick: () => dlg.close() }, "×")),
+    body);
+  dlg.addEventListener("close", () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  let found;
+  try { found = (await api("/api/account/discover")).environments.filter((f) => f.enabled || f.added); }
+  catch (err) {
+    body.replaceChildren(notice("bad", err.message), h("p", { class: "small muted", style: "margin:0" }, "Sign in first, or add an environment by its URL under Manage environments."),
+      h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, "Close")));
+    return;
+  }
+  if (!found.length) {
+    body.replaceChildren(notice("info", "Your account can't reach any environments in this tenant. Check the tenant under Manage environments, or sign in with another account."),
+      h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, "Close")));
+    return;
+  }
+  const chosen = new Set(found.filter((f) => f.added).map((f) => f.url));
+  let q = "";
+  const search = h("input", { type: "search", placeholder: "Search by name or URL", "aria-label": "Search environments" });
+  const count = h("span", { class: "small muted", role: "status" });
+  const list = h("ul", { class: "pick-list", "aria-label": "Environments" });
+  const useBtn = h("button", { type: "button", class: "btn primary" });
+  const shown = () => found.filter((f) => !q || `${f.friendlyName} ${f.url}`.toLowerCase().includes(q));
+  const draw = () => {
+    list.replaceChildren(...shown().map((f) => {
+      const box = h("input", { type: "checkbox", "aria-label": f.friendlyName });
+      box.checked = chosen.has(f.url);
+      box.addEventListener("change", () => { box.checked ? chosen.add(f.url) : chosen.delete(f.url); draw(); });
+      return h("li", { class: chosen.has(f.url) ? "sel" : "" }, h("label", { class: "pick-row" }, box,
+        h("span", { class: "pick-name" }, h("strong", {}, f.friendlyName), h("span", { class: "mono muted small truncate" }, f.url.replace(/^https:\/\//, ""))),
+        f.region ? h("span", { class: "pill" }, f.region) : null));
+    }));
+    if (!list.children.length) list.append(h("li", { class: "muted small", style: "padding:12px" }, "No environments match."));
+    count.textContent = `${chosen.size} of ${found.length} chosen`;
+    useBtn.textContent = chosen.size ? `Use ${chosen.size} environment${chosen.size === 1 ? "" : "s"}` : "Choose at least one";
+    useBtn.disabled = chosen.size === 0;
+  };
+  search.addEventListener("input", () => { q = search.value.trim().toLowerCase(); draw(); });
+  useBtn.addEventListener("click", async () => {
+    useBtn.disabled = true; useBtn.textContent = "Saving…";
+    try {
+      await api("/api/account/envs/select", { environments: found.filter((f) => chosen.has(f.url)).map((f) => ({ url: f.url, label: f.friendlyName })) });
+      await reloadConfig(); accessData = null;
+      dlg.close();
+      acctState.notice = { kind: "ok", text: `Using ${chosen.size} environment${chosen.size === 1 ? "" : "s"}.` };
+      location.hash = "#/overview"; route(); refreshAlertBadge();
+    } catch (err) { body.prepend(notice("bad", err.message)); draw(); }
+  });
+  body.replaceChildren(
+    h("p", { class: "small muted", style: "margin:0" }, `Your account can reach ${found.length} environments. Tick the ones to work with; only those are loaded.`),
+    h("label", { class: "search", style: "max-width:none" }, search),
+    h("div", { class: "row between" }, count, h("span", { class: "row", style: "gap:4px" },
+      h("button", { type: "button", class: "btn link", onclick: () => { shown().forEach((f) => chosen.add(f.url)); draw(); } }, "Select all shown"),
+      h("button", { type: "button", class: "btn link", onclick: () => { chosen.clear(); draw(); } }, "Clear"))),
+    list,
+    h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, "Cancel"), useBtn));
+  draw();
+  search.focus();
 }
 
 /** "Your access" line on an environment card. */
@@ -594,7 +661,9 @@ async function overview() {
   }
   const via = config.mode === "hosted" ? `signed in as ${config.user}` : `signed in through ${config.provider === "azps" ? "PowerShell" : "Azure CLI"}`;
   const alertBox = h("section", { class: "card row between", "aria-label": "Alerts" }, h("span", { class: "muted" }, "Checking for alerts…"));
-  mount(header("Overview", "Environments", `${config.environments.length} environments · ${via}`, ...reportButtons(), h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")),
+  mount(header("Overview", "Environments", `${config.environments.length} environments · ${via}`, ...reportButtons(),
+      config.canManage ? h("button", { class: "btn", type: "button", onclick: chooseEnvironmentsDialog }, "Choose environments") : null,
+      h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")),
     acctState.notice ? notice(acctState.notice.kind, acctState.notice.text) : null, accountBar(), alertBox, grid, manageEnvironments());
   api("/api/alerts").then((d) => {
     alertState.data = d;
@@ -917,7 +986,6 @@ function renderAlerts() {
   const head = header("Monitoring", "Alerts", "Problems across every environment in the last 24 hours: failures, things not set up, and settings that need attention.",
     ...reportButtons(),
     d?.teams ? h("button", { type: "button", class: "btn", onclick: async () => {
-      if (!(await confirmChange({ title: "Send alerts to Teams?", message: `Alerts not posted before are sent to the Teams channel (${d.alerts.length} current alerts).`, confirmText: "Send" }))) return;
       try { const r = await api("/api/alerts/teams", {}); alertState.notice = { kind: "ok", text: `Posted ${r.posted} alerts to Teams.` }; } catch (err) { alertState.notice = { kind: "bad", text: err.message }; }
       renderAlerts();
     } }, "Send to Teams") : null);
@@ -1795,7 +1863,8 @@ const CLI_COMMANDS = [
     ["env unhide <URL> | --all", "Show hidden environments again", "env unhide --all"],
     ["env create --name <N> --region <R>", "Create an environment (add --yes to go ahead; --dry-run to preview)", "env create --name \"FormusPro UAT 2\" --region unitedkingdom --dry-run"],
     ["access", "Your roles in every environment and what they let you change", "access"],
-    ["config set discovery on|off", "Find environments automatically (on by default)", "config set discovery on"],
+    ["env select <name-or-URL>...", "Choose which environments to work with", "env select FormusProLive"],
+    ["config set discovery on|off", "Load every reachable environment instead of choosing (off by default)", "config set discovery off"],
     ["config path", "Which config file is in use", "config path"],
     ["config set tenant <id-or-domain>", "Sign in to a specific tenant", "config set tenant contoso.onmicrosoft.com"]
   ] },
@@ -1951,7 +2020,10 @@ async function route() {
     a.classList.toggle("active", a.dataset.route === name);
     a.dataset.route === name ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
-  if (config.environments.length === 0) return config.canManage ? mount(header("Overview", "Environments", "Add your first environment to get started."), accountBar(), manageEnvironments()) : noEnvScreen();
+  if (config.environments.length === 0) return config.canManage ? mount(header("Overview", "Environments", "Sign in, then choose the environments to work with."), accountBar(),
+    h("section", { class: "card row between" }, h("div", {}, h("strong", {}, "No environments chosen yet"), h("div", { class: "small muted" }, "Only the environments you choose are loaded. You can change the choice at any time.")),
+      h("button", { type: "button", class: "btn primary", onclick: chooseEnvironmentsDialog }, "Choose environments")),
+    manageEnvironments()) : noEnvScreen();
   await ROUTES[name](new URLSearchParams(query || ""));
 }
 window.addEventListener("hashchange", route);

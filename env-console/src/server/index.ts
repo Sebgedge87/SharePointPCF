@@ -24,7 +24,7 @@ import { removeUnmanagedLayer } from "../core/compare.js";
 import { evaluateAlerts, postToTeams } from "../core/alerts.js";
 import { buildReport, renderReportCsv, renderReportHtml } from "../core/report.js";
 import { discoverEnvironments, type DiscoveredEnv } from "../core/discovery.js";
-import { mergeDiscovered } from "../core/envlist.js";
+import { chooseEnvironments, mergeDiscovered } from "../core/envlist.js";
 import { AccessError, clearAccessCache, getAccess } from "../core/access.js";
 import { createEnvironment, ENV_TYPES, REGIONS as ENV_REGIONS, validateNewEnvironment, type CreatedEnvironment } from "../core/provision.js";
 import { appendAction } from "../core/actionLog.js";
@@ -184,7 +184,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   let discoveryError: string | undefined;
   let discovering: Promise<void> | undefined;
   const refreshDiscovered = async (force = false): Promise<void> => {
-    if (mode.kind !== "local" || !opts.account || cfg.discovery === false) return;
+    if (mode.kind !== "local" || !opts.account || cfg.discovery !== true) return;
     if (!force && Date.now() - discoveredAt < 10 * 60_000) return;
     const acct = opts.account;
     discovering ??= (async () => {
@@ -233,7 +233,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
     if (req.method === "GET" && url.pathname === "/api/config") {
       await refreshDiscovered(url.searchParams.get("refresh") === "1");
       return {
-        discovery: mode.kind === "local" && !!opts.account && cfg.discovery !== false,
+        discovery: mode.kind === "local" && !!opts.account && cfg.discovery === true,
         discoveryError: discoveryError ?? null,
         canCreate: mode.kind === "local" && !!opts.account,
         mode: mode.kind,
@@ -310,6 +310,22 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         const list = body.environments;
         if (!Array.isArray(list) || list.length === 0 || list.length > 50) throw new HttpError(400, "environments must be a list of 1-50 items");
         const next = validateConfig({ ...cfg, environments: [...cfg.environments, ...list.map((e: Record<string, unknown>) => ({ name: String(e.name ?? "").trim(), label: typeof e.label === "string" ? e.label : undefined, url: String(e.url ?? ""), managed: e.managed !== false }))] });
+        acct.save(next);
+        cfg.environments = next.environments;
+        return { environments: cfg.environments };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/envs/select") {
+        // The environments the console works with, chosen from the ones the account can reach.
+        const body = await readJson(req);
+        const list = body.environments;
+        if (!Array.isArray(list) || list.length > 200) throw new HttpError(400, "environments must be a list of up to 200 items");
+        let chosen;
+        try {
+          chosen = chooseEnvironments(cfg, list.map((e: Record<string, unknown>) => ({ url: String(e.url ?? ""), label: typeof e.label === "string" && e.label.trim() ? e.label.trim().slice(0, 100) : undefined, managed: typeof e.managed === "boolean" ? e.managed : undefined })));
+        } catch (e) {
+          throw new HttpError(400, (e as Error).message);
+        }
+        const next = validateConfig({ ...cfg, environments: [...chosen, ...cfg.environments.filter((e) => e.discovered && !chosen.some((c) => c.url === e.url))] });
         acct.save(next);
         cfg.environments = next.environments;
         return { environments: cfg.environments };

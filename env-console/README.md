@@ -114,14 +114,15 @@ Tokens are kept in memory and reused until five minutes before they expire. To s
 
 Tokens are only requested for, and sent to, Dataverse hosts (`*.dynamics.com` and the sovereign-cloud equivalents). Any other URL is refused when you add the environment. The one exception is creating environments, which uses a token for the Power Platform admin API (`https://service.powerapps.com/`) that is only ever sent to `api.bap.microsoft.com`.
 
-## Which environments are listed
+## Choosing environments
 
-Every environment your account can reach is found automatically through the Dataverse Discovery service, so you don't have to add them one by one. They sit next to any you saved in the config:
+The console only loads the environments you choose, so signing in doesn't pull in everything your account can reach.
 
-- **Found** environments are looked up fresh each time and never written to the config file. Their short name comes from their display name, and `--env` also accepts the display name or the URL.
-- **Save** one (dashboard: Manage environments › Save, or `pcx env add <URL>`) to fix its short name and type (managed or unmanaged).
-- **Hide** the ones you don't need (dashboard: Hide, or `pcx env remove <NAME>`). `pcx env unhide <URL>` or `--all` shows them again.
-- `pcx config set discovery off` switches the lookup off; `--saved-only` skips it for one command.
+- **Dashboard:** after you sign in for the first time, a **Choose environments** list opens with every environment your account can reach (through the Dataverse Discovery service). It has search, and nothing is ticked except what you already use. Change the choice at any time with **Choose environments** on the Overview page. The choice is saved in your config.
+- **CLI:** `pcx env select` shows the same list, numbered. Type the numbers to use (`1,3,5-7`). In scripts: `pcx env select "FormusProLive" https://org9b818508.crm4.dynamics.com`.
+- **One-off use:** `--env` can also name an environment you haven't chosen, by its display name or URL. Only that one is looked up, and it isn't saved.
+- `pcx env add <URL>` adds one environment by its address.
+- To load every reachable environment instead of choosing, run `pcx config set discovery on` (and `off` to go back).
 
 ## Roles: who can change what
 
@@ -176,7 +177,7 @@ pcx reads `./pcx.config.json` if it exists, then `~/.pcx/config.json`, or the fi
 | `auth.provider` | `azps` (PowerShell, the default) or `azcli`. |
 | `environments[].managed` | `true` means every change needs a reason. Defaults to `true`. |
 | `allowedHostSuffixes` | Optional extra host endings for sovereign clouds, for example `[".crm.microsoftdynamics.us"]`. |
-| `discovery` | `false` turns off finding environments automatically. On by default. |
+| `discovery` | `true` loads every reachable environment instead of only the chosen ones. Off by default. |
 | `hiddenEnvironments` | URLs of found environments you've hidden. |
 | `roles` | Extra role names that may make changes: `{ "customize": [...], "admin": [...] }`. |
 
@@ -198,6 +199,7 @@ pcx serve [--port 4820] [--open]
 pcx config set tenant <id-or-domain>
 pcx config set provider azps|azcli
 pcx config set discovery on|off
+pcx env select [<name-or-URL>...]
 pcx config path
 ```
 

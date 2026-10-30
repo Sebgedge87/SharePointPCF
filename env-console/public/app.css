@@ -317,3 +317,13 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 /* confirmation dialogs: the list of what will change */
 .confirm-list { margin: 0; padding: 8px 12px 8px 28px; max-height: 260px; overflow: auto; background: var(--surface-2); border-radius: 8px; font-size: 13px; color: var(--text); display: flex; flex-direction: column; gap: 3px; }
 .confirm-list li { overflow-wrap: anywhere; }
+
+/* choose environments */
+dialog.choose-envs { width: min(640px, calc(100vw - 32px)); }
+.pick-list { list-style: none; margin: 0; padding: 0; max-height: min(52vh, 480px); overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.pick-list li + li { border-top: 1px solid var(--line-soft); }
+.pick-list li.sel { background: var(--accent-soft); }
+.pick-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-height: 48px; cursor: pointer; }
+.pick-name { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+dialog.choose-envs .search { flex: none; max-width: none; }
+dialog.choose-envs { max-height: calc(100vh - 32px); }
