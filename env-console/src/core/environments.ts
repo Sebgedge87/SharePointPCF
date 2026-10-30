@@ -8,6 +8,8 @@ export interface EnvStatus {
   managed: boolean;
   connected: boolean;
   needsLogin?: boolean;
+  /** The environment's display name in Dataverse. */
+  displayName?: string;
   error?: string;
   user?: string;
   version?: string;
@@ -62,12 +64,14 @@ export async function envStatus(ws: Workspace, env: EnvConfig, detail = true): P
   if (!detail) return base;
   const settled = await Promise.allSettled([
     client.get<{ Version: string }>("RetrieveVersion"),
+    client.get<{ Detail?: { FriendlyName?: string } }>("RetrieveCurrentOrganization(AccessType=@p)?@p=Microsoft.Dynamics.CRM.EndpointAccessType'Default'"),
     client.getAll<{ solutionid: string }>("solutions?$select=solutionid&$filter=isvisible eq true"),
     client.getAll<{ statecode: number }>("workflows?$select=statecode&$filter=category eq 5 and type eq 1"),
     client.getAll<{ statecode: number }>("sdkmessageprocessingsteps?$select=statecode&$filter=customizationlevel eq 1 and ishidden/Value eq false")
   ]);
-  const [ver, sols, flows, steps] = settled;
+  const [ver, org, sols, flows, steps] = settled;
   if (ver.status === "fulfilled") base.version = ver.value.Version;
+  if (org.status === "fulfilled" && org.value.Detail?.FriendlyName) base.displayName = org.value.Detail.FriendlyName;
   if (sols.status === "fulfilled") base.solutions = sols.value.length;
   if (flows.status === "fulfilled") {
     base.flowsTotal = flows.value.length;
@@ -77,7 +81,8 @@ export async function envStatus(ws: Workspace, env: EnvConfig, detail = true): P
     base.pluginStepsTotal = steps.value.length;
     base.pluginStepsOn = steps.value.filter((s) => s.statecode === 0).length;
   }
-  const failed = settled.find((s) => s.status === "rejected") as PromiseRejectedResult | undefined;
+  // The display-name lookup is a nice-to-have; only real data failures are reported.
+  const failed = settled.filter((_, i) => i !== 1).find((s) => s.status === "rejected") as PromiseRejectedResult | undefined;
   if (failed) base.error = `Some details could not be read: ${(failed.reason as Error).message}`;
   return base;
 }

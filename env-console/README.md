@@ -25,6 +25,8 @@ It runs in one of two ways:
 - **Background jobs:** failed, suspended, long-waiting and long-running system jobs, with bulk cancel and resume.
 - **Security:** users and their roles (direct and through teams) in every environment, users with no roles, which roles exist where, and a privilege-by-privilege comparison of a role.
 - **Connections & variables:** environment variable values in every environment (edit them in place; secrets are never shown) and whether each connection reference has a connection.
+- **Real environment names:** environments show their Dataverse display name everywhere (picked up automatically, or from the environment lookup, and editable under Manage environments). Each also has a short name, such as `UAT`, for `pcx --env`.
+- **CLI page:** a terminal in the dashboard that runs `pcx` commands (on your own machine only), next to a reference of every command with examples you can click to use.
 - **Remove unmanaged changes:** from Solution compare, with a reason and confirmation.
 - **Microsoft and system items** are hidden by default on Flows & plugins; one switch shows them.
 - **Brand and themes:** FormusPro navy and magenta with Rubik and IBM Plex Sans, in a light theme and a dark theme (Light / Dark / follow the system).

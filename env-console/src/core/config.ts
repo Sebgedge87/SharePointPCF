@@ -5,8 +5,10 @@ import { dirname, join, resolve } from "node:path";
 export type AuthProviderName = "azps" | "azcli";
 
 export interface EnvConfig {
-  /** Short name shown everywhere, e.g. DEV, UAT, PROD. */
+  /** Short name used in commands (--env UAT): letters, digits, _ and - only. */
   name: string;
+  /** The environment's real display name, e.g. "FormusPro UAT". Shown in the dashboard. */
+  label?: string;
   /** Environment URL, normalised to its origin: https://org.crm11.dynamics.com */
   url: string;
   /** Managed environments (everything after DEV) require a reason for every change. */
@@ -94,7 +96,13 @@ export function validateConfig(input: unknown): PcxConfig {
     if (seen.has(key)) throw new ConfigError(`Duplicate environment name: ${r.name}`);
     seen.add(key);
     if (typeof r.url !== "string") throw new ConfigError(`environments[${i}].url is required`);
-    return { name: r.name, url: normaliseEnvUrl(r.url, suffixes), managed: r.managed === undefined ? true : r.managed === true };
+    const env: EnvConfig = { name: r.name, url: normaliseEnvUrl(r.url, suffixes), managed: r.managed === undefined ? true : r.managed === true };
+    if (r.label !== undefined && r.label !== null && r.label !== "") {
+      // eslint-disable-next-line no-control-regex
+      if (typeof r.label !== "string" || r.label.length > 100 || /[\u0000-\u001f]/.test(r.label)) throw new ConfigError(`environments[${i}].label must be text of up to 100 characters`);
+      env.label = r.label.trim();
+    }
+    return env;
   });
   const out: PcxConfig = { auth: { provider }, environments };
   const alertsIn = c.alerts as Record<string, unknown> | undefined;

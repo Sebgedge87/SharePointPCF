@@ -80,12 +80,19 @@ function setAttrs(el, attrs) {
 }
 
 let config = null;
+/** The name people see: the environment's real display name, or its short name. */
+function envLabel(name) {
+  return (config && config.environments.find((e) => e.name === name)?.label) || name;
+}
+const STAGE_WORDS = [[/\b(pre[-_ ]?prod|preprod|staging)\b/i, "PREPROD"], [/\b(uat|acceptance)\b/i, "UAT"], [/\b(test|qa|sit)\b/i, "TEST"], [/\b(dev|development|sandbox)\b/i, "DEV"], [/\b(prod|production|live)\b/i, "PROD"]];
 function envColor(name) {
   if (KNOWN_COLORS[name.toUpperCase()]) return KNOWN_COLORS[name.toUpperCase()];
+  const label = envLabel(name);
+  for (const [re, stage] of STAGE_WORDS) if (re.test(label)) return KNOWN_COLORS[stage];
   const i = config ? config.environments.findIndex((e) => e.name === name) : 0;
   return PALETTE[Math.max(0, i) % PALETTE.length];
 }
-const chip = (name) => h("span", { class: "chip", style: `background:${envColor(name)}` }, name);
+const chip = (name) => h("span", { class: "chip", style: `background:${envColor(name)}`, title: envLabel(name) !== name ? `${envLabel(name)} (pcx --env ${name})` : null }, envLabel(name));
 const envOf = (name) => config.environments.find((e) => e.name === name);
 const main = () => document.getElementById("main");
 const mount = (...nodes) => main().replaceChildren(...nodes.flat().filter(Boolean));
@@ -105,7 +112,7 @@ function envPicker(current, onPick, opts = {}) {
   return h("div", { class: "row envpick", role: "group", "aria-label": opts.label || "Environment" },
     config.environments.map((e) => {
       const on = e.name === current;
-      return h("button", { type: "button", "aria-pressed": on ? "true" : "false", style: on ? `background:${envColor(e.name)};border-color:${envColor(e.name)};color:#FFFFFF` : "", onclick: () => onPick(e.name) }, e.name);
+      return h("button", { type: "button", "aria-pressed": on ? "true" : "false", style: on ? `background:${envColor(e.name)};border-color:${envColor(e.name)};color:#FFFFFF` : "", onclick: () => onPick(e.name), title: e.label ? `pcx --env ${e.name}` : null }, envLabel(e.name));
     }));
 }
 function seg(options, current, onPick, label, role = "group") {
@@ -230,7 +237,7 @@ async function findEnvironments() {
       let n = f.suggestedName, i = 2;
       while (used.has(n.toUpperCase())) n = `${f.suggestedName}-${i++}`.slice(0, 32);
       used.add(n.toUpperCase());
-      acctState.picks.set(f.url, { on: false, name: n, managed: f.suggestedManaged });
+      acctState.picks.set(f.url, { on: false, name: n, label: f.friendlyName, managed: f.suggestedManaged });
     }
     acctState.found = environments;
   } catch (err) { acctState.findError = err.message; }
@@ -241,10 +248,10 @@ async function addPicked() {
   const list = acctState.found.filter((f) => acctState.picks.get(f.url)?.on).map((f) => ({ url: f.url, ...acctState.picks.get(f.url) }));
   if (!list.length) return;
   try {
-    await api("/api/account/envs", { environments: list.map(({ url, name, managed }) => ({ url, name, managed })) });
+    await api("/api/account/envs", { environments: list.map(({ url, name, label, managed }) => ({ url, name, label, managed })) });
     await reloadConfig();
     acctState.found = null;
-    acctState.notice = { kind: "ok", text: `Added ${list.map((e) => e.name).join(", ")}.` };
+    acctState.notice = { kind: "ok", text: `Added ${list.map((e) => e.label || e.name).join(", ")}.` };
   } catch (err) { acctState.findError = err.message; }
   overview();
 }
@@ -256,7 +263,7 @@ function foundTable() {
   const chosen = [...acctState.picks.values()].filter((p) => p.on).length;
   return h("div", { class: "stack" },
     h("div", { class: "scroll" }, h("table", {},
-      h("thead", {}, h("tr", {}, ["", "Environment", "URL", "Region", "Name in the console", "Unmanaged (DEV)"].map((t) => h("th", { scope: "col" }, t)))),
+      h("thead", {}, h("tr", {}, ["", "Environment", "URL", "Region", "Short name (for pcx --env)", "Unmanaged (DEV)"].map((t) => h("th", { scope: "col" }, t)))),
       h("tbody", {}, acctState.found.map((f) => {
         const p = acctState.picks.get(f.url);
         if (!p) return h("tr", {}, h("td", {}, h("span", { class: "pill ok" }, "Added")), h("th", { scope: "row" }, f.friendlyName), h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}), h("td", {}));
@@ -402,9 +409,15 @@ function manageEnvironments() {
         h("button", { type: "button", class: "btn primary", disabled: acctState.finding, onclick: findEnvironments }, acctState.finding ? "Looking…" : "Find my environments")),
       foundTable(),
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
-        h("thead", {}, h("tr", {}, ["Name", "URL", "Type", ""].map((t) => h("th", { scope: "col" }, t)))),
-        h("tbody", {}, config.environments.map((e) => h("tr", {}, h("td", {}, chip(e.name)), h("td", { style: "max-width:360px" }, envLink(e.url)), h("td", {}, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
-          h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, "Remove"))))))) : null,
+        h("thead", {}, h("tr", {}, ["Display name", "Short name (for pcx --env)", "URL", "Type", ""].map((t) => h("th", { scope: "col" }, t)))),
+        h("tbody", {}, config.environments.map((e) => {
+          const label = h("input", { class: "input", value: e.label || "", placeholder: e.name, maxlength: 100, "aria-label": `Display name for ${e.name}`, style: "min-width:200px" });
+          label.addEventListener("change", async () => {
+            try { await api("/api/account/env/label", { name: e.name, label: label.value }); await reloadConfig(); overview(); } catch (err) { fail(err); }
+          });
+          return h("tr", {}, h("td", {}, label), h("td", {}, h("span", { class: "chip", style: `background:${envColor(e.name)}` }, e.name)), h("td", { style: "max-width:320px" }, envLink(e.url)), h("td", { class: "small" }, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
+            h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, "Remove")));
+        })))) : null,
       h("form", { class: "row", style: "align-items:flex-end", onsubmit: add },
         h("label", { class: "field" }, h("span", {}, "Name"), name),
         h("label", { class: "field", style: "flex:1" }, h("span", {}, "Environment URL (Power Platform admin center › Environments)"), url),
@@ -448,11 +461,13 @@ async function overview() {
       h("a", { class: "btn sm", href: "#/alerts" }, "View alerts"));
   }, () => alertBox.remove());
   let anyLogin = false;
+  let learned = false;
   await Promise.all(config.environments.map(async (e) => {
     const card = cards.get(e.name);
     let st;
     try { st = await api(`/api/status?env=${encodeURIComponent(e.name)}`); } catch (err) { st = { connected: false, error: err.message }; }
     if (st.needsLogin) anyLogin = true;
+    if (st.labelLearned) learned = true;
     if (st.connected && st.user && config.mode !== "hosted") {
       document.getElementById("who").textContent = `Signed in as ${st.user}`;
       if (acctState.user !== st.user) { acctState.user = st.user; main().querySelector("[aria-label=Account]")?.replaceWith(accountBar()); }
@@ -470,6 +485,7 @@ async function overview() {
          config.canManage ? h("button", { type: "button", class: "btn sm primary", disabled: acctState.busy, onclick: signIn }, "Sign in") : config.mode === "hosted" ? h("a", { class: "btn sm", href: "/auth/login?returnTo=%2F%23%2Foverview" }, "Sign in again") : null];
     card.replaceChildren(card.children[0], card.children[1], ...body.filter(Boolean));
   }));
+  if (learned) { await reloadConfig(); return overview(); }
   if (anyLogin && !config.canManage && config.mode !== "hosted") main().insertBefore(notice("warn", "Some environments need you to sign in. In a terminal run ", h("code", {}, "pcx auth login"), ", then press Refresh."), grid);
 }
 
@@ -686,7 +702,7 @@ function envChecks(state, names = envNames()) {
   state.targets ??= new Set(names);
   return h("div", { class: "envchecks", role: "group", "aria-label": "Apply to environments" },
     h("span", { class: "small" }, "Apply to"),
-    names.map((n) => checkbox(n, state.targets.has(n), (v) => { v ? state.targets.add(n) : state.targets.delete(n); })));
+    names.map((n) => checkbox(envLabel(n), state.targets.has(n), (v) => { v ? state.targets.add(n) : state.targets.delete(n); })));
 }
 async function download(path) {
   const res = await fetch(path, { headers: { "x-pcx-request": "1", ...(key() ? { "x-pcx-key": key() } : {}) } });
@@ -993,7 +1009,7 @@ function renderRuns() {
     h("section", { class: "card flush", "aria-label": "Runs" },
       h("div", { class: "row between", style: "padding:12px 20px" },
         seg([["flows", `Flow runs (${allFlows.length})`], ["plugins", `Plugin log (${allLogs.length})`]], runState.tab, (v) => { runState.tab = v; runState.open = null; renderRuns(); }, "Run list", "tablist"),
-        h("div", { class: "row" }, seg([["all", "All environments"], ...names.map((n) => [n, n])], pick, (v) => { runState.envFilter = v; renderRuns(); }, "Environment"),
+        h("div", { class: "row" }, seg([["all", "All environments"], ...names.map((n) => [n, envLabel(n)])], pick, (v) => { runState.envFilter = v; renderRuns(); }, "Environment"),
           checkbox("Failures only", runState.failedOnly, (v) => { runState.failedOnly = v; renderRuns(); }))),
       runState.tab === "flows" ? runTable(allFlows) : pluginTable(allLogs)));
 }
@@ -1110,7 +1126,7 @@ function renderJobs() {
     h("section", { class: "card flush", "aria-label": "Jobs" },
       h("div", { class: "row between", style: "padding:12px 20px" },
         seg([["all", "All"], ...Object.entries(PROBLEM).map(([k, [l]]) => [k, l])], jobState.problem, (v) => { jobState.problem = v; renderJobs(); }, "Problem"),
-        seg([["all", "All environments"], ...names.map((n) => [n, n])], jobState.envFilter, (v) => { jobState.envFilter = v; renderJobs(); }, "Environment")),
+        seg([["all", "All environments"], ...names.map((n) => [n, envLabel(n)])], jobState.envFilter, (v) => { jobState.envFilter = v; renderJobs(); }, "Environment")),
       rows.length === 0 ? h("div", { class: "empty" }, "No background jobs need attention.") :
       h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, h("th", { scope: "col", style: "width:44px" }, allBox), ["Env", "Problem", "Job", "Type", "Created", "Message"].map((t) => h("th", { scope: "col" }, t)))),
@@ -1570,6 +1586,124 @@ function renderUserSettings() {
       !p ? h("p", { class: "small muted", style: "margin:0;padding:0 20px 14px" }, "Press Preview to count users in each environment. Changing other users' settings needs the System Administrator role.") : null));
 }
 
+// ------------------------------------------------------------------ CLI (terminal + command reference)
+
+const CLI_COMMANDS = [
+  { group: "Sign-in and environments", items: [
+    ["auth status", "Check sign-in against every environment", "auth status"],
+    ["env list", "Health, version, solutions, flows and plugin steps per environment", "env list"],
+    ["env discover", "Every environment your account can reach", "env discover"],
+    ["env add <NAME> <URL> [--unmanaged]", "Add an environment by URL", "env add UAT https://contoso-uat.crm4.dynamics.com"],
+    ["env remove <NAME>", "Remove an environment from the console", "env remove UAT"],
+    ["config path", "Which config file is in use", "config path"],
+    ["config set tenant <id-or-domain>", "Sign in to a specific tenant", "config set tenant contoso.onmicrosoft.com"]
+  ] },
+  { group: "Solutions", items: [
+    ["solution list", "Installed solutions and versions in every environment", "solution list --diff-only"],
+    ["solution list --publisher <P>", "Only one publisher's solutions", "solution list --publisher fp"],
+    ["solution diff <UniqueName> --from <ENV> --to <ENV>", "Component-by-component compare", "solution diff CoreCase --from UAT --to PROD"],
+    ["vars list", "Environment variable values in every environment", "vars list"],
+    ["vars set --env <ENV> <schema> <value> --reason <TEXT>", "Set a variable's value", "vars set --env UAT fp_Region UK --reason \"go-live config\""],
+    ["connections list", "Connection references and whether they're connected", "connections list"]
+  ] },
+  { group: "Flows, business rules and plugins", items: [
+    ["flows list", "Every cloud flow, one column per environment", "flows list"],
+    ["rules list / plugins list", "Business rules or plugin steps the same way", "plugins list --off"],
+    ["flows list --env <ENV> --include-system", "One environment, including Microsoft and system items", "flows list --env DEV --include-system"],
+    ["flows on|off --env <ENV> <name>… --reason <TEXT>", "Switch named items on or off", "flows off --env UAT \"SAP order sync\" --reason \"SAP outage\""],
+    ["flows off --env <ENV> --filter <TEXT> --dry-run", "Preview a bulk change without making it", "flows off --env UAT --filter SAP --dry-run"]
+  ] },
+  { group: "Monitoring", items: [
+    ["runs list --env <ENV> [--since 7d] [--failed]", "Flow runs and plugin errors", "runs list --env PROD --since 7d --failed"],
+    ["runs trace --env <ENV> [--set exceptions --reason <TEXT>]", "Read or change plugin trace logging", "runs trace --env PROD"],
+    ["jobs list [--since 7d]", "Failed, suspended or stuck background jobs", "jobs list --since 7d"],
+    ["alerts list", "Current problems across every environment", "alerts list"],
+    ["alerts run --post", "Post new alerts to Teams", "alerts run --post"],
+    ["report [--days 7] [--format html|csv|json]", "Save a health and drift report", "report --days 7 --format html"]
+  ] },
+  { group: "Governance", items: [
+    ["audit status --env <ENV>", "System auditing settings", "audit status --env PROD"],
+    ["audit tables --env <ENV> [--off]", "Tables and whether they're audited", "audit tables --env PROD --off"],
+    ["audit log --env <ENV> --table <T> [--column <C>]", "Who changed what", "audit log --env PROD --table account --since 7d"],
+    ["audit set on|off --env <ENV> --table <T> [--column <C>]", "Turn auditing on or off", "audit set on --env PROD --table account --column creditlimit --reason \"finance request\""],
+    ["security users [--diff-only]", "Users and roles in every environment", "security users --diff-only"],
+    ["security roles", "Which roles exist where", "security roles"],
+    ["usersettings show --env <ENV>", "Users' format, time zone and language settings", "usersettings show --env UAT"],
+    ["usersettings apply --env <ENV> --region en-GB --dry-run", "Preview applying settings to users", "usersettings apply --env UAT --region en-GB --dry-run"]
+  ] }
+];
+
+const cliState = { entries: [], history: [], pos: -1, draft: "", busy: false };
+
+/** Splits a command line into arguments, honouring "double" and 'single' quotes. */
+function splitArgs(line) {
+  const out = [];
+  let cur = "", quote = null, any = false;
+  for (const ch of line) {
+    if (quote) { if (ch === quote) quote = null; else cur += ch; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; any = true; continue; }
+    if (/\s/.test(ch)) { if (cur || any) out.push(cur); cur = ""; any = false; continue; }
+    cur += ch;
+  }
+  if (cur || any) out.push(cur);
+  return out;
+}
+
+async function runCli(line) {
+  let args = splitArgs(line.trim());
+  if (args[0] === "pcx") args = args.slice(1);
+  if (!args.length) return;
+  cliState.history.unshift(line.trim());
+  cliState.pos = -1;
+  const entry = { cmd: `pcx ${line.trim().replace(/^pcx\s+/, "")}`, output: "", code: null };
+  cliState.entries.push(entry);
+  cliState.busy = true;
+  renderCli();
+  try { const r = await api("/api/cli/run", { args }); entry.output = r.output; entry.code = r.code; }
+  catch (err) { entry.output = err.message; entry.code = 1; }
+  cliState.busy = false;
+  renderCli();
+}
+
+function cli() { renderCli(); }
+function renderCli() {
+  const local = config.mode !== "hosted" && config.canManage;
+  const input = h("input", { type: "text", class: "term-input", "aria-label": "pcx command", placeholder: local ? "Type a command, e.g. env list, then press Enter" : "", autocomplete: "off", spellcheck: "false", value: cliState.draft, disabled: !local || cliState.busy });
+  input.addEventListener("input", () => { cliState.draft = input.value; });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); const line = input.value; cliState.draft = ""; runCli(line); }
+    else if (ev.key === "ArrowUp" && cliState.history.length) { ev.preventDefault(); cliState.pos = Math.min(cliState.pos + 1, cliState.history.length - 1); input.value = cliState.draft = cliState.history[cliState.pos]; }
+    else if (ev.key === "ArrowDown") { ev.preventDefault(); cliState.pos = Math.max(cliState.pos - 1, -1); input.value = cliState.draft = cliState.pos < 0 ? "" : cliState.history[cliState.pos]; }
+  });
+  const screen = h("div", { class: "term-screen", role: "log", "aria-live": "polite", "aria-label": "Terminal output" },
+    cliState.entries.length === 0 ? h("div", { class: "term-dim" }, local ? "Run any pcx command here. Pick one from the list on the right to start. ↑ and ↓ go through earlier commands." : "The terminal runs on your own machine only. Install pcx and use these commands in PowerShell.") : null,
+    cliState.entries.map((e) => h("div", { class: "term-entry" },
+      h("div", { class: "term-cmd" }, h("span", { class: "term-prompt" }, "› "), e.cmd),
+      e.code === null ? h("div", { class: "term-dim row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "Running…") : h("pre", { class: e.code === 0 ? "term-out" : "term-out term-err" }, e.output || "(no output)"))));
+  mount(
+    header("Tools", "CLI", local ? "Run pcx commands here, or copy them for PowerShell and pipelines. Commands that change things still need --reason outside DEV." : "Every pcx command, for PowerShell and pipelines."),
+    h("div", { class: "cols" },
+      h("section", { class: "term", style: "flex:3 1 560px", "aria-label": "Terminal" },
+        h("div", { class: "term-bar" }, h("span", {}, "pcx"), h("button", { type: "button", class: "btn sm ghost", onclick: () => { cliState.entries = []; renderCli(); } }, "Clear")),
+        screen,
+        h("label", { class: "term-line" }, h("span", { class: "term-prompt", "aria-hidden": "true" }, "pcx ›"), input)),
+      h("section", { class: "card stack", style: "flex:2 1 380px;max-height:calc(100vh - 160px);overflow:auto", "aria-label": "Command reference" },
+        h("h2", {}, "Commands"),
+        h("p", { class: "small muted", style: "margin:0" }, `Use the short names with --env: ${config.environments.map((e) => e.label ? `${e.name} (${e.label})` : e.name).join(", ") || "add environments first"}.`),
+        CLI_COMMANDS.map((g) => h("div", { class: "stack", style: "gap:6px" },
+          h("h3", { class: "eyebrow", style: "margin:8px 0 0" }, g.group),
+          g.items.map(([cmd, desc, example]) => h("div", { class: "cmd-ref" },
+            h("code", { class: "cmd-syntax" }, `pcx ${cmd}`),
+            h("div", { class: "small muted" }, desc),
+            h("button", { type: "button", class: "cmd-example", title: local ? "Put this in the terminal" : "Copy", onclick: async () => {
+              if (local) { cliState.draft = example; renderCli(); const el = main().querySelector(".term-input"); el.focus(); el.setSelectionRange(example.length, example.length); }
+              else { try { await navigator.clipboard.writeText(`pcx ${example}`); } catch { /* ignore */ } }
+            } }, `pcx ${example}`))))))));
+  const scr = main().querySelector(".term-screen");
+  scr.scrollTop = scr.scrollHeight;
+  if (local && !cliState.busy) main().querySelector(".term-input").focus();
+}
+
 // ------------------------------------------------------------------ activity
 
 async function activity() {
@@ -1593,7 +1727,7 @@ async function activity() {
 
 // ------------------------------------------------------------------ router
 
-const ROUTES = { overview, alerts, solutions, compare, config: configPage, components, runs, jobs, audit, security, usersettings, activity };
+const ROUTES = { overview, alerts, solutions, compare, config: configPage, components, runs, jobs, audit, security, usersettings, activity, cli };
 async function route() {
   hideTip();
   if (!config) {

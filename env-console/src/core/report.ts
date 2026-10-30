@@ -26,6 +26,8 @@ export interface HealthReport {
   generatedAt: string;
   days: number;
   environments: string[];
+  /** Display names, keyed by short name. */
+  labels?: Record<string, string>;
   health: Record<string, EnvHealth>;
   solutions: MatrixRow[];
   drift: MatrixRow[];
@@ -67,6 +69,7 @@ export async function buildReport(ws: Workspace, config: PcxConfig, days = 7, no
     generatedAt: now.toISOString(),
     days,
     environments: names,
+    labels: Object.fromEntries(envs.map((e) => [e.name, e.label || e.name])),
     health: Object.fromEntries(names.map((n) => [n, health.results[n] ?? { status: { name: n, url: "", managed: true, connected: false, error: health.errors[n] }, topFailures: [] }])),
     solutions: matrix,
     drift: matrix.filter((r) => r.differs),
@@ -83,7 +86,8 @@ const num = (v: number | undefined) => (v === undefined ? "—" : String(v));
 /** A self-contained, printable HTML report (save as PDF from the browser if needed). */
 export function renderReportHtml(r: HealthReport): string {
   const envs = r.environments;
-  const th = envs.map((e) => `<th>${esc(e)}</th>`).join("");
+  const label = (e: string) => r.labels?.[e] ?? e;
+  const th = envs.map((e) => `<th>${esc(label(e))}</th>`).join("");
   const row = (label: string, f: (h: EnvHealth) => string) => `<tr><th scope="row">${esc(label)}</th>${envs.map((e) => `<td>${f(r.health[e]!)}</td>`).join("")}</tr>`;
   const bad = (n: number | undefined) => (n ? `<span class="bad">${n}</span>` : num(n));
   const sev = { critical: "Critical", warning: "Warning", info: "Info" };
@@ -147,10 +151,10 @@ ${row("Most failures", (h) => h.topFailures.map((f) => `${esc(f.name)} <span cla
 </tbody></table>
 
 <h2>Alerts (last 24 hours)</h2>
-${r.alerts.length === 0 ? "<p class='muted'>No alerts.</p>" : `<table><thead><tr><th>Severity</th><th>Environment</th><th>Alert</th><th>Detail</th></tr></thead><tbody>${r.alerts.map((a) => `<tr><td><span class="sev ${a.severity}">${sev[a.severity]}</span></td><td>${esc(a.env)}</td><td>${esc(a.title)}</td><td class="muted">${esc(a.detail ?? "")}</td></tr>`).join("")}</tbody></table>`}
+${r.alerts.length === 0 ? "<p class='muted'>No alerts.</p>" : `<table><thead><tr><th>Severity</th><th>Environment</th><th>Alert</th><th>Detail</th></tr></thead><tbody>${r.alerts.map((a) => `<tr><td><span class="sev ${a.severity}">${sev[a.severity]}</span></td><td>${esc(label(a.env))}</td><td>${esc(a.title)}</td><td class="muted">${esc(a.detail ?? "")}</td></tr>`).join("")}</tbody></table>`}
 
 <h2>Solution drift (${r.drift.length})</h2>
-<p class="muted">Solutions whose version differs between environments, or that are missing from one. Highlighted versions differ from ${esc(envs[envs.length - 1] ?? "")}.</p>
+<p class="muted">Solutions whose version differs between environments, or that are missing from one. Highlighted versions differ from ${esc(label(envs[envs.length - 1] ?? ""))}.</p>
 ${solTable(r.drift)}
 
 <h2>All solutions (${r.solutions.length})</h2>

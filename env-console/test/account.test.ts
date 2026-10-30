@@ -110,3 +110,17 @@ test("sign-in with a code: start shows the code, status follows it, cancel stops
   assert.equal(deviceCancelled, true);
   assert.equal((await get("/api/account/device/status")).state, "cancelled");
 });
+
+test("the in-page terminal runs pcx commands and refuses ones that don't belong there", async () => {
+  const help = await post("/api/cli/run", { args: ["help"] });
+  assert.equal(help.status, 200);
+  assert.equal(help.body.code, 0);
+  assert.match(help.body.output, /pcx .* Power Platform environment console/);
+  const bad = await post("/api/cli/run", { args: ["nonsense"] });
+  assert.equal(bad.body.code, 2);
+  assert.match(bad.body.output, /Unknown command/);
+  assert.match((await post("/api/cli/run", { args: ["serve"] })).body.output, /already running/);
+  assert.match((await post("/api/cli/run", { args: ["auth", "login"] })).body.output, /Sign in button/);
+  assert.match((await post("/api/cli/run", { args: ["env", "list", "--config", "x.json"] })).body.output, /can't be changed/);
+  assert.equal((await post("/api/cli/run", { args: [] })).status, 400);
+});

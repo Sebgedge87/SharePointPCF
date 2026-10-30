@@ -256,3 +256,26 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 .flyout-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 24px 8px; }
 .flyout > .row { padding: 0 24px 8px; }
 .flyout-body { flex: 1; overflow: auto; padding: 4px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
+/* real environment names can be long */
+.chip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.01em; }
+.envtable th.envcol .chip { max-width: 180px; }
+
+/* in-page terminal */
+.term { background: #0B1520; border: 1px solid #1E2E40; border-radius: 12px; display: flex; flex-direction: column; min-height: 520px; max-height: calc(100vh - 160px); overflow: hidden; color: #D6E2EC; }
+.term-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 8px 16px; background: #0F1E2C; border-bottom: 1px solid #1E2E40; font: 600 12px var(--mono); color: #8EA3B5; }
+.term-bar .btn.ghost { color: #C3D1DD; border-color: #2A3E52; min-height: 28px; }
+.term-screen { flex: 1; overflow: auto; padding: 14px 16px; font: 12.5px/1.55 var(--mono); }
+.term-entry + .term-entry { margin-top: 14px; }
+.term-cmd { color: #FFFFFF; font-weight: 500; }
+.term-prompt { color: #F49AC8; }
+.term-out { margin: 4px 0 0; white-space: pre; overflow-x: auto; color: #C3D1DD; font: inherit; }
+.term-err { color: #F5A39C; }
+.term-dim { color: #8EA3B5; gap: 8px; }
+.term-line { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #1E2E40; background: #0F1E2C; font: 13px var(--mono); }
+.term-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #FFFFFF; font: inherit; min-height: 28px; }
+.term-input::placeholder { color: #6F8598; }
+.term .spinner { border-color: #2A3E52; border-top-color: #7CB8E6; }
+.cmd-ref { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.cmd-syntax { background: transparent; padding: 0; font-weight: 600; color: var(--text); white-space: normal; }
+.cmd-example { align-self: flex-start; border: 1px solid var(--line); background: var(--surface-2); color: var(--link); font: 12px var(--mono); padding: 4px 8px; border-radius: 6px; cursor: pointer; text-align: left; }
+.cmd-example:hover { border-color: var(--link); }

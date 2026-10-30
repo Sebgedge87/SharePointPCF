@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -83,6 +84,25 @@ export interface LocalAccount {
   save(config: PcxConfig): void;
   /** Lists reachable environments; defaults to the Global Discovery Service. */
   discover?: () => Promise<DiscoveredEnv[]>;
+  /** Config file the in-page terminal's pcx commands use. */
+  configPath?: string;
+}
+
+const CLI_PATH = fileURLToPath(new URL("../cli/index.js", import.meta.url));
+
+/** Runs one pcx command for the in-page terminal (local mode only). No shell is involved. */
+function runPcx(args: string[], configPath: string | undefined): Promise<{ code: number; output: string }> {
+  return new Promise((resolveRun) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1" };
+    if (configPath) env.PCX_CONFIG = configPath;
+    execFile(process.execPath, [CLI_PATH, ...args], { env, timeout: 10 * 60_000, maxBuffer: 2 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+      const e = err as (NodeJS.ErrnoException & { code?: number | string; killed?: boolean }) | null;
+      const code = !e ? 0 : typeof e.code === "number" ? e.code : 1;
+      let output = `${stdout}${stderr}`;
+      if (e?.killed) output += "\n(stopped after 10 minutes)";
+      resolveRun({ code, output: output.length > 500_000 ? output.slice(0, 500_000) + "\n… (output cut short)" : output });
+    });
+  });
 }
 
 export interface RunningServer {
@@ -189,7 +209,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         provider: mode.kind === "hosted" ? "entra" : cfg.auth.provider,
         user: who.user,
         name: who.name,
-        environments: cfg.environments.map((e) => ({ name: e.name, url: e.url, managed: e.managed }))
+        environments: cfg.environments.map((e) => ({ name: e.name, label: e.label ?? null, url: e.url, managed: e.managed }))
       };
     }
     // ---- sign-in and environment list (local mode only)
@@ -256,7 +276,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         const body = await readJson(req);
         const list = body.environments;
         if (!Array.isArray(list) || list.length === 0 || list.length > 50) throw new HttpError(400, "environments must be a list of 1-50 items");
-        const next = validateConfig({ ...cfg, environments: [...cfg.environments, ...list.map((e: Record<string, unknown>) => ({ name: String(e.name ?? "").trim(), url: String(e.url ?? ""), managed: e.managed !== false }))] });
+        const next = validateConfig({ ...cfg, environments: [...cfg.environments, ...list.map((e: Record<string, unknown>) => ({ name: String(e.name ?? "").trim(), label: typeof e.label === "string" ? e.label : undefined, url: String(e.url ?? ""), managed: e.managed !== false }))] });
         acct.save(next);
         cfg.environments = next.environments;
         return { environments: cfg.environments };
@@ -265,7 +285,16 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         const body = await readJson(req);
         const name = String(body.name ?? "").trim();
         if (cfg.environments.some((e) => e.name.toUpperCase() === name.toUpperCase())) throw new HttpError(400, `${name} already exists`);
-        const next = validateConfig({ ...cfg, environments: [...cfg.environments, { name, url: String(body.url ?? ""), managed: body.managed !== false }] });
+        const next = validateConfig({ ...cfg, environments: [...cfg.environments, { name, label: typeof body.label === "string" ? body.label : undefined, url: String(body.url ?? ""), managed: body.managed !== false }] });
+        acct.save(next);
+        cfg.environments = next.environments;
+        return { environments: cfg.environments };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/env/label") {
+        const body = await readJson(req);
+        const env = findEnv(cfg, String(body.name ?? ""));
+        const label = String(body.label ?? "").trim();
+        const next = validateConfig({ ...cfg, environments: cfg.environments.map((e) => (e === env ? { ...e, label: label || undefined } : e)) });
         acct.save(next);
         cfg.environments = next.environments;
         return { environments: cfg.environments };
@@ -290,8 +319,26 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       }
       throw new HttpError(404, "Not found");
     }
+    if (req.method === "POST" && url.pathname === "/api/cli/run") {
+      if (mode.kind !== "local" || !opts.account) throw new HttpError(403, "The terminal only runs on your own machine (pcx serve), not on the hosted site.");
+      const body = await readJson(req);
+      const args = body.args;
+      if (!Array.isArray(args) || args.length === 0 || args.length > 60 || !args.every((a) => typeof a === "string" && a.length <= 2000)) throw new HttpError(400, "Type a pcx command, e.g. env list");
+      if (args[0] === "serve") return { code: 2, output: "The dashboard is already running. Use the other commands here." };
+      if (args[0] === "auth" && args[1] === "login") return { code: 2, output: "Use the Sign in button on the Overview page to sign in from here." };
+      if (args.includes("--config")) return { code: 2, output: "--config can't be changed from the dashboard terminal." };
+      return runPcx(args as string[], opts.account.configPath);
+    }
     if (req.method === "GET" && url.pathname === "/api/status") {
-      return envStatus(ws, findEnv(cfg, url.searchParams.get("env") ?? ""), true);
+      const env = findEnv(cfg, url.searchParams.get("env") ?? "");
+      const st = await envStatus(ws, env, true);
+      // First time we learn the environment's real name, remember it as its display name.
+      if (!env.label && st.displayName) {
+        env.label = st.displayName;
+        if (mode.kind === "local" && opts.account) opts.account.save(cfg);
+        return { ...st, labelLearned: true };
+      }
+      return st;
     }
     if (req.method === "GET" && url.pathname === "/api/solutions") {
       const perEnv: Record<string, Solution[]> = {};
