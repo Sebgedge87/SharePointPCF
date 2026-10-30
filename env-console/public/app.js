@@ -172,6 +172,27 @@ function confirmDialog({ title, message, confirmText = "OK", cancelText = "Cance
 }
 const messageDialog = (title, message) => confirmDialog({ title, message, confirmText: "OK", cancelText: null });
 
+/** A panel that slides in from the right over the page. Returns a handle to update or close it. */
+function openFlyout({ title, subtitle, onClose }) {
+  const body = h("div", { class: "flyout-body" });
+  const tools = h("div", { class: "row" });
+  const dlg = h("dialog", { class: "flyout", "aria-labelledby": "flyout-title" },
+    h("div", { class: "flyout-head" },
+      h("div", { style: "min-width:0" }, subtitle ? h("div", { class: "eyebrow" }, subtitle) : null, h("h2", { id: "flyout-title" }, title)),
+      h("button", { type: "button", class: "iconbtn", "aria-label": "Close", onclick: () => dlg.close() }, "×")),
+    tools, body);
+  dlg.addEventListener("click", (ev) => { if (ev.target === dlg) dlg.close(); });
+  dlg.addEventListener("close", () => { dlg.remove(); onClose?.(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  return {
+    set: (...nodes) => body.replaceChildren(...nodes.flat().filter(Boolean)),
+    tools: (...nodes) => tools.replaceChildren(...nodes.flat().filter(Boolean)),
+    isOpen: () => dlg.open,
+    close: () => dlg.close()
+  };
+}
+
 // ------------------------------------------------------------------ screens shared state
 
 const shared = { env: null };
@@ -1265,11 +1286,36 @@ async function security() {
   } catch (err) { secState.error = err.message; }
   renderSecurity();
 }
+/** Opens the privilege comparison for one role in a flyout beside the role list. */
 async function loadPrivileges(role) {
-  secState.privRole = role; secState.priv = null; renderSecurity();
-  try { secState.priv = await api(`/api/security/privileges?role=${encodeURIComponent(role)}`); } catch (err) { secState.priv = { error: err.message }; }
+  secState.privRole = role; secState.priv = null;
   renderSecurity();
-  document.getElementById("priv-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  const names = secState.roles.environments.filter((n) => secState.roles.results[n]);
+  const fly = openFlyout({ title: role, subtitle: "Privileges by environment", onClose: () => { secState.privRole = null; renderSecurity(); } });
+  const draw = () => {
+    const p = secState.priv;
+    fly.tools(checkbox("Only differences", secState.privDiff, (v) => { secState.privDiff = v; draw(); }),
+      h("span", { class: "small muted" }, "Access level the role grants for each privilege."));
+    if (!p) return fly.set(loading("privileges from every environment"));
+    if (p.error) return fly.set(notice("bad", p.error));
+    const pn = p.environments.filter((n) => p.results[n] !== undefined);
+    const m = new Map();
+    for (const n of pn) for (const x of p.results[n] || []) { if (!m.has(x.name)) m.set(x.name, {}); m.get(x.name)[n] = x.depth; }
+    const all = [...m.entries()].map(([name, cells]) => ({ name, cells, differs: new Set(pn.map((n) => cells[n] || "-")).size > 1 }));
+    const rows = all.filter((r) => !secState.privDiff || r.differs).sort((a, b) => a.name.localeCompare(b.name));
+    const missing = names.filter((n) => p.results[n] === null);
+    fly.set(
+      h("div", { class: "small muted" }, `${all.length} privileges · ${all.filter((r) => r.differs).length} differ between environments`),
+      missing.length ? notice("warn", `This role doesn't exist in ${missing.join(", ")}.`) : null,
+      rows.length === 0 ? notice("ok", secState.privDiff ? "This role grants the same privileges at the same level everywhere." : "No privileges.") :
+      h("div", { class: "scroll card flush" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Privilege"), envHeads(names))),
+        h("tbody", {}, rows.map((r) => h("tr", {}, h("th", { scope: "row", class: "mono" }, r.name),
+          names.map((n) => h("td", { class: `envcol small${r.differs ? " differs" : ""}` }, p.results[n] === null ? h("span", { class: "muted" }, "role missing") : r.cells[n] || h("span", { class: "muted" }, "none")))))))));
+  };
+  draw();
+  try { secState.priv = await api(`/api/security/privileges?role=${encodeURIComponent(role)}`); } catch (err) { secState.priv = { error: err.message }; }
+  if (fly.isOpen() && secState.privRole === role) draw();
 }
 function renderSecurity() {
   const head = header("Governance", "Security", "Who has which roles in every environment, and how roles differ between environments.");
@@ -1313,14 +1359,6 @@ function renderSecurity() {
 }
 function renderRoles(head, tabs, names) {
   const rows = toMatrix(secState.roles.results, names, (r) => r.name, (r) => ({ name: r.name, managed: r.managed })).sort((a, b) => a.name.localeCompare(b.name));
-  const p = secState.priv;
-  let privRows = [];
-  if (p && !p.error) {
-    const pn = p.environments.filter((n) => p.results[n] !== undefined);
-    const m = new Map();
-    for (const n of pn) for (const x of p.results[n] || []) { if (!m.has(x.name)) m.set(x.name, {}); m.get(x.name)[n] = x.depth; }
-    privRows = [...m.entries()].map(([name, cells]) => ({ name, cells, differs: new Set(pn.map((n) => cells[n] || "-")).size > 1 })).filter((r) => !secState.privDiff || r.differs).sort((a, b) => a.name.localeCompare(b.name));
-  }
   mount(head, tabs, errorsNotice(secState.roles.errors),
     h("section", { class: "card flush", "aria-label": "Roles" },
       h("div", { class: "scroll" }, h("table", { class: "envtable" },
@@ -1328,15 +1366,7 @@ function renderRoles(head, tabs, names) {
         h("tbody", {}, rows.map((r) => h("tr", { class: secState.privRole === r.name ? "sel" : "" },
           h("th", { scope: "row" }, r.name, r.managed ? h("span", { class: "pill", style: "margin-left:8px" }, "Managed") : null),
           names.map((n) => h("td", { class: "envcol" }, r.cells[n] ? `${r.cells[n].users} user${r.cells[n].users === 1 ? "" : "s"}` : h("span", { class: "pill warn" }, "Missing"))),
-          h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => loadPrivileges(r.name) }, "Compare privileges")))))))),
-    secState.privRole ? h("section", { id: "priv-panel", class: "card flush", "aria-label": "Privileges" },
-      h("div", { class: "row between", style: "padding:14px 20px" }, h("h2", {}, `Privileges · ${secState.privRole}`), checkbox("Only differences", secState.privDiff, (v) => { secState.privDiff = v; renderSecurity(); })),
-      !p ? h("div", { class: "empty" }, "Loading privileges from every environment…") : p.error ? h("div", { style: "padding:16px" }, notice("bad", p.error)) :
-      privRows.length === 0 ? h("div", { class: "empty" }, secState.privDiff ? "This role grants the same privileges at the same level everywhere." : "No privileges.") :
-      h("div", { class: "scroll", style: "max-height:560px;overflow:auto" }, h("table", { class: "envtable" },
-        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Privilege"), envHeads(names))),
-        h("tbody", {}, privRows.map((r) => h("tr", {}, h("th", { scope: "row", class: "mono" }, r.name),
-          names.map((n) => h("td", { class: `envcol small${r.differs ? " differs" : ""}` }, p.results[n] === null ? h("span", { class: "muted" }, "role missing") : r.cells[n] || h("span", { class: "muted" }, "none"))))))))) : null);
+          h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", "aria-haspopup": "dialog", onclick: () => loadPrivileges(r.name) }, "Compare privileges")))))))));
 }
 
 // ------------------------------------------------------------------ connections & environment variables

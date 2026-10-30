@@ -245,3 +245,14 @@ a.envlink:hover { text-decoration: underline; color: var(--link-hover); }
 .brand { padding-bottom: 14px; }
 .side a { min-height: 36px; }
 .nav-group { margin-top: 10px; }
+
+/* flyout panel from the right */
+dialog.flyout { position: fixed; inset: 0 0 0 auto; margin: 0; height: 100vh; max-height: 100vh; width: min(760px, 100vw); padding: 0; border: 0; border-left: 1px solid var(--line); background: var(--ground); color: var(--text); box-shadow: -20px 0 50px rgba(0,0,0,0.25); display: flex; flex-direction: column; }
+dialog.flyout:not([open]) { display: none; }
+dialog.flyout::backdrop { background: rgba(10,26,40,0.45); }
+dialog.flyout[open] { animation: flyin 0.18s ease-out; }
+@keyframes flyin { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { dialog.flyout[open] { animation: none; } }
+.flyout-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 24px 8px; }
+.flyout > .row { padding: 0 24px 8px; }
+.flyout-body { flex: 1; overflow: auto; padding: 4px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
