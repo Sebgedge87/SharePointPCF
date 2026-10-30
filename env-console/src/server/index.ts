@@ -5,10 +5,12 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { findEnv, type PcxConfig } from "../core/config.js";
 import { readActions } from "../core/actionLog.js";
+import { AuthError } from "../core/auth.js";
 import { changeState, listComponents, PolicyError, type ComponentKind } from "../core/components.js";
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, listSolutions, publisherCounts, type Solution } from "../core/solutions.js";
-import { isGuid } from "../core/dataverse.js";
+import { isGuid, type ClientOptions } from "../core/dataverse.js";
+import type { HostedAuth, Session } from "./hosted.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../../../public/", import.meta.url));
 const STATIC: Record<string, { file: string; type: string }> = {
@@ -18,25 +20,36 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/app.css": { file: "app.css", type: "text/css; charset=utf-8" }
 };
 
-const SECURITY_HEADERS = {
+const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store"
 };
 
+export type ServerMode =
+  /** Runs on one person's machine; API calls carry a one-time key; tokens come from PowerShell/Azure CLI. */
+  | { kind: "local"; key?: string; workspace?: Workspace }
+  /** Hosted for a team; everyone signs in with Entra ID and Dataverse is called as them. */
+  | { kind: "hosted"; auth: HostedAuth; clientOptions?: ClientOptions };
+
 export interface ServerOptions {
   config: PcxConfig;
   port: number;
-  workspace?: Workspace;
-  /** Fixed key for tests; a random one otherwise. */
-  key?: string;
+  /** Defaults to local mode. */
+  mode?: ServerMode;
+  /** Address to listen on. Local mode always uses 127.0.0.1. */
+  listenHost?: string;
   publicDir?: string;
+  /** Kept for older callers and tests: same as mode {kind:"local", key, workspace}. */
+  key?: string;
+  workspace?: Workspace;
 }
 
 export interface RunningServer {
   url: string;
   port: number;
+  /** Local mode only. */
   key: string;
   server: Server;
   close(): Promise<void>;
@@ -45,7 +58,8 @@ export interface RunningServer {
 class HttpError extends Error {
   constructor(
     readonly status: number,
-    message: string
+    message: string,
+    readonly extra: Record<string, unknown> = {}
   ) {
     super(message);
   }
@@ -83,16 +97,53 @@ function keyMatches(given: string | string[] | undefined, key: string): boolean 
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+interface Caller {
+  ws: Workspace;
+  /** Known up front in hosted mode; looked up with WhoAmI in local mode. */
+  user?: string;
+  name?: string;
+}
+
 export function startServer(opts: ServerOptions): Promise<RunningServer> {
-  const ws = opts.workspace ?? new Workspace(opts.config);
-  const key = opts.key ?? randomBytes(24).toString("base64url");
+  const mode: ServerMode = opts.mode ?? { kind: "local", key: opts.key, workspace: opts.workspace };
+  const cfg = opts.config;
   const publicDir = opts.publicDir ?? PUBLIC_DIR;
+  const localKey = mode.kind === "local" ? mode.key ?? randomBytes(24).toString("base64url") : "";
+  const localWs = mode.kind === "local" ? mode.workspace ?? new Workspace(cfg) : undefined;
+  const hostedWs = new WeakMap<Session, Workspace>();
   let port = opts.port;
 
-  const api = async (req: IncomingMessage, url: URL): Promise<unknown> => {
-    const cfg = opts.config;
+  const allowedHosts = (): string[] => (mode.kind === "hosted" ? [new URL(mode.auth.settings.publicUrl).host] : [`127.0.0.1:${port}`, `localhost:${port}`]);
+  const allowedOrigins = (): string[] => (mode.kind === "hosted" ? [mode.auth.settings.publicUrl] : [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
+
+  /** Works out who is calling, or refuses. */
+  const caller = (req: IncomingMessage): Caller => {
+    if (mode.kind === "local") {
+      if (!keyMatches(req.headers["x-pcx-key"], localKey)) throw new HttpError(401, "Missing or wrong dashboard key. Open the link printed by pcx serve.");
+      return { ws: localWs! };
+    }
+    // Custom header: a cross-site form or image request cannot add it.
+    if (req.headers["x-pcx-request"] !== "1") throw new HttpError(403, "Missing request header");
+    const s = mode.auth.session(req);
+    if (!s) throw new HttpError(401, "Sign in to continue.", { login: "/auth/login" });
+    let ws = hostedWs.get(s);
+    if (!ws) {
+      ws = new Workspace(cfg, mode.auth.tokensFor(s), mode.clientOptions);
+      hostedWs.set(s, ws);
+    }
+    return { ws, user: s.user, name: s.name };
+  };
+
+  const api = async (req: IncomingMessage, url: URL, who: Caller): Promise<unknown> => {
+    const { ws } = who;
     if (req.method === "GET" && url.pathname === "/api/config") {
-      return { provider: cfg.auth.provider, environments: cfg.environments.map((e) => ({ name: e.name, url: e.url, managed: e.managed })) };
+      return {
+        mode: mode.kind,
+        provider: mode.kind === "hosted" ? "entra" : cfg.auth.provider,
+        user: who.user,
+        name: who.name,
+        environments: cfg.environments.map((e) => ({ name: e.name, url: e.url, managed: e.managed }))
+      };
     }
     if (req.method === "GET" && url.pathname === "/api/status") {
       return envStatus(ws, findEnv(cfg, url.searchParams.get("env") ?? ""), true);
@@ -134,55 +185,76 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       const known = new Map((await listComponents(client, kind)).map((c) => [c.id.toLowerCase(), c]));
       const items = (ids as string[]).map((id) => known.get(id.toLowerCase()));
       if (items.some((i) => !i)) throw new HttpError(400, `Some IDs are not ${kind} components in ${env.name}`);
-      let actor: string | undefined;
-      try {
-        actor = (await whoAmI(client)).user;
-      } catch {
-        /* logged without actor */
+      let actor = who.user;
+      if (!actor) {
+        try {
+          actor = (await whoAmI(client)).user;
+        } catch {
+          /* logged without actor */
+        }
       }
       const results = await changeState(client, { kind, items: items.map((i) => ({ id: i!.id, name: i!.name })), on: body.on, reason, actor, source: "dashboard" });
       return { results };
     }
     if (req.method === "GET" && url.pathname === "/api/actions") {
-      return { actions: readActions(100) };
+      return { actions: readActions(200) };
     }
     throw new HttpError(404, "Not found");
   };
 
   const server = createServer((req, res) => {
     const handle = async () => {
-      // Only answer requests addressed to this machine by name we expect (blocks DNS rebinding).
+      // Only answer requests addressed to the name we expect (blocks DNS rebinding).
       const host = req.headers.host ?? "";
-      if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) throw new HttpError(421, "Unexpected host");
+      if (!allowedHosts().includes(host)) throw new HttpError(421, "Unexpected host");
       const url = new URL(req.url ?? "/", `http://${host}`);
+      if (mode.kind === "hosted" && url.pathname.startsWith("/auth/")) {
+        if (await mode.auth.route(req, res, url)) return;
+      }
+      if (url.pathname === "/healthz") {
+        send(res, 200, { ok: true });
+        return;
+      }
       if (url.pathname.startsWith("/api/")) {
-        if (!keyMatches(req.headers["x-pcx-key"], key)) throw new HttpError(401, "Missing or wrong dashboard key. Open the link printed by pcx serve.");
         const origin = req.headers.origin;
-        if (req.method !== "GET" && origin && origin !== `http://127.0.0.1:${port}` && origin !== `http://localhost:${port}`) throw new HttpError(403, "Cross-site request refused");
-        send(res, 200, await api(req, url));
+        if (req.method !== "GET" && origin && !allowedOrigins().includes(origin)) throw new HttpError(403, "Cross-site request refused");
+        const who = caller(req);
+        send(res, 200, await api(req, url, who));
         return;
       }
       const s = STATIC[url.pathname];
       if (!s || req.method !== "GET") throw new HttpError(404, "Not found");
-      res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": s.type });
+      const headers: Record<string, string> = { ...SECURITY_HEADERS, "Content-Type": s.type };
+      if (mode.kind === "hosted" && mode.auth.secure) headers["Strict-Transport-Security"] = "max-age=31536000";
+      res.writeHead(200, headers);
       res.end(readFileSync(publicDir + s.file));
     };
     handle().catch((e: unknown) => {
       const err = e as Error;
-      const status = e instanceof HttpError ? e.status : e instanceof PolicyError ? 400 : /Unknown environment/.test(err.message) ? 404 : 502;
-      if (!res.headersSent) send(res, status, { error: err.message });
+      let status = 502;
+      let extra: Record<string, unknown> = {};
+      if (e instanceof HttpError) {
+        status = e.status;
+        extra = e.extra;
+      } else if (e instanceof PolicyError) status = 400;
+      else if (e instanceof AuthError && e.needsLogin && mode.kind === "hosted") {
+        status = 401;
+        extra = { login: "/auth/login" };
+      } else if (/Unknown environment/.test(err.message)) status = 404;
+      if (!res.headersSent) send(res, status, { error: err.message, ...extra });
       else res.end();
     });
   });
 
+  const listenHost = mode.kind === "local" ? "127.0.0.1" : opts.listenHost ?? "0.0.0.0";
   return new Promise((resolveStart, reject) => {
     server.once("error", reject);
-    server.listen(opts.port, "127.0.0.1", () => {
+    server.listen(opts.port, listenHost, () => {
       port = (server.address() as AddressInfo).port;
       resolveStart({
-        url: `http://127.0.0.1:${port}/#key=${key}`,
+        url: mode.kind === "hosted" ? `${mode.auth.settings.publicUrl}/` : `http://127.0.0.1:${port}/#key=${localKey}`,
         port,
-        key,
+        key: localKey,
         server,
         close: () => new Promise((r) => server.close(() => r()))
       });

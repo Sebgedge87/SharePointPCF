@@ -2,7 +2,10 @@
 
 A dashboard and command-line tool for looking after Power Platform / Dataverse environments (DEV, TEST, UAT, PREPROD, PROD and so on) from one place.
 
-It runs on your own machine. It signs in with the PowerShell session you already use (`Connect-AzAccount`), so no Entra app registration is needed.
+It runs in one of two ways:
+
+- **On your own machine:** it signs in with the PowerShell session you already use (`Connect-AzAccount`), so no Entra app registration is needed.
+- **Hosted for your team** (Azure App Service): everyone signs in with their own Microsoft account. Dataverse is called as that person, so their security roles decide what they can do. See [Hosting for a team](#hosting-for-a-team).
 
 **Works today**
 
@@ -161,6 +164,59 @@ Every change is appended to `~/.pcx/actions.log` (one JSON object per line), or 
 - Changes from other websites are refused.
 - The page has a strict Content Security Policy and builds everything with `textContent`, never HTML strings.
 - Changes are only made to IDs that the server has just read back from that environment as the right kind of component.
+
+## Hosting for a team
+
+In hosted mode the site uses Entra ID sign-in (authorization code with PKCE). Each person's sign-in is exchanged for a token for each Dataverse environment, and every call runs as that person:
+
+- They only see and change what their Dataverse security roles allow.
+- Dataverse auditing records the real person, and the site's Activity page records who, what and why.
+- Only the users and groups you assign to the app can sign in ("Assignment required").
+
+### Deploy with one script
+
+You need:
+- PowerShell 7;
+- the Azure CLI (`az`), signed in to the subscription the site should live in;
+- a Global, Application or Cloud Application Administrator, for the one-time admin consent. If you are not one, the script prints a link to send to an admin.
+
+```powershell
+pwsh ./deploy/deploy-azure.ps1 -AppName pcx-contoso -AllowedGroup "Power Platform Admins"
+```
+
+The script:
+1. builds the app;
+2. creates the Entra app registration (redirect URI, the delegated permission `Dynamics CRM / user_impersonation`, admin consent, assignment required, and a client secret);
+3. creates the resource group, a Linux App Service plan (B1) and the web app (Node 22, HTTPS only, Always On);
+4. stores the settings;
+5. deploys the code.
+
+Environments come from `-Dev/-Test/-Uat/-PreProd/-Prod`, or from your local pcx config if you ran `setup.ps1`. Run the script again to redeploy. Add `-RotateSecret` to issue a new client secret.
+
+Each person also needs a user record in every environment they will use, as they would for the maker portal.
+
+### App settings (if you deploy another way)
+
+| Setting | Value |
+|---|---|
+| `PCX_MODE` | `hosted` |
+| `PCX_TENANT_ID` | Tenant ID |
+| `PCX_CLIENT_ID` | App registration's Application (client) ID |
+| `PCX_CLIENT_SECRET` | Client secret (better: a Key Vault reference) |
+| `PCX_PUBLIC_URL` | `https://<app>.azurewebsites.net` (the redirect URI is this plus `/auth/callback`) |
+| `PCX_SESSION_SECRET` | 32+ random characters |
+| `PCX_ENVIRONMENTS` | `[{"name":"DEV","url":"https://…","managed":false},{"name":"PROD","url":"https://…"}]` |
+| `PCX_ACTION_LOG` | `/home/pcx/actions.log` (kept across restarts on App Service) |
+| `PCX_REQUIRED_ROLE` | Optional: an app role users must hold |
+| `PCX_SESSION_IDLE_MINUTES` | Optional, default 480 |
+
+Start command: `node dist/src/cli/index.js serve`. Health check path: `/healthz`.
+
+### Limits of this first hosted version
+
+- Sign-in sessions are kept in memory. Restarting the app signs everyone out, and it should run as one instance (B1 does). Shared sessions would be needed to scale out.
+- The activity log is a file on the app's shared storage. Moving it to a Dataverse or Azure table is a planned improvement.
+- The client secret sits in app settings. A Key Vault reference, or a managed identity with federated credentials, is the stronger option.
 
 ## Development
 

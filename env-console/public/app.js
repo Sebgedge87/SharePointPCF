@@ -18,8 +18,11 @@ function key() {
   try { return sessionStorage.getItem("pcxKey") || window.__pcxKey || ""; } catch { return window.__pcxKey || ""; }
 }
 
+class NeedsLogin extends Error {}
+
 async function api(path, body) {
-  const init = { headers: { "x-pcx-key": key() } };
+  const init = { headers: { "x-pcx-request": "1" } };
+  if (key()) init.headers["x-pcx-key"] = key();
   if (body !== undefined) {
     init.method = "POST";
     init.headers["Content-Type"] = "application/json";
@@ -27,6 +30,12 @@ async function api(path, body) {
   }
   const res = await fetch(path, init);
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && data.login) {
+    // Hosted mode: go to Microsoft sign-in and come back to this page.
+    location.href = `${data.login}?returnTo=${encodeURIComponent("/" + location.hash)}`;
+    throw new NeedsLogin("Signing in…");
+  }
+  if (res.status === 401) throw new NeedsLogin(data.error || "Not signed in");
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
@@ -92,7 +101,8 @@ async function overview() {
     cards.set(e.name, card);
     grid.append(card);
   }
-  mount(header("Environments", `${config.environments.length} environments · signed in through ${config.provider === "azps" ? "PowerShell (Az.Accounts)" : "Azure CLI"}`, h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")), grid);
+  const via = config.mode === "hosted" ? `signed in as ${config.user}` : `signed in through ${config.provider === "azps" ? "PowerShell (Az.Accounts)" : "Azure CLI"}`;
+  mount(header("Environments", `${config.environments.length} environments · ${via}`, h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")), grid);
 
   let anyLogin = false;
   await Promise.all(
@@ -101,7 +111,7 @@ async function overview() {
       let s;
       try { s = await api(`/api/status?env=${encodeURIComponent(e.name)}`); } catch (err) { s = { connected: false, error: err.message }; }
       if (s.needsLogin) anyLogin = true;
-      if (s.connected && s.user) document.getElementById("who").textContent = `Signed in as ${s.user}`;
+      if (s.connected && s.user && config.mode !== "hosted") document.getElementById("who").textContent = `Signed in as ${s.user}`;
       const body = s.connected
         ? [
             h("div", { class: "row small" }, h("span", { class: "dot ok" }), h("strong", {}, "Connected"), h("span", { class: "muted" }, s.version ? `v${s.version}` : "")),
@@ -116,7 +126,7 @@ async function overview() {
       card.replaceChildren(card.children[0], card.children[1], ...body.filter(Boolean));
     })
   );
-  if (anyLogin) main().insertBefore(h("div", { class: "notice warn" }, "Some environments need you to sign in. In a terminal run ", h("code", {}, "pcx auth login"), ", then press Refresh."), grid);
+  if (anyLogin && config.mode !== "hosted") main().insertBefore(h("div", { class: "notice warn" }, "Some environments need you to sign in. In a terminal run ", h("code", {}, "pcx auth login"), ", then press Refresh."), grid);
 }
 
 // ------------------------------------------------------------------ solutions
@@ -285,11 +295,12 @@ function renderComponents() {
 // ------------------------------------------------------------------ activity
 
 async function activity() {
-  mount(header("Activity", "Changes made through pcx on this machine (dashboard and CLI)."), h("div", { class: "muted" }, "Loading…"));
+  const sub = config.mode === "hosted" ? "Changes made through this site, newest first." : "Changes made through pcx on this machine (dashboard and CLI).";
+  mount(header("Activity", sub), h("div", { class: "muted" }, "Loading…"));
   let data;
   try { data = await api("/api/actions"); } catch (err) { mount(header("Activity"), h("div", { class: "notice bad" }, err.message)); return; }
   mount(
-    header("Activity", "Changes made through pcx on this machine (dashboard and CLI)."),
+    header("Activity", sub),
     h("section", { class: "card flush" }, data.actions.length === 0 ? h("div", { class: "empty" }, "No changes yet.") :
       h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, ["When", "Env", "Change", "Item", "Reason", "By", "Result"].map((t) => h("th", { scope: "col" }, t)))),
@@ -309,9 +320,16 @@ async function activity() {
 const ROUTES = { overview, solutions, components, activity };
 
 async function route() {
-  if (!key()) return needKeyScreen();
   if (!config) {
-    try { config = await api("/api/config"); } catch (err) { return mount(header("Env Console"), h("div", { class: "notice bad" }, err.message)); }
+    try {
+      config = await api("/api/config");
+    } catch (err) {
+      if (err instanceof NeedsLogin) return key() ? mount(header("Env Console"), h("div", { class: "notice bad" }, err.message)) : needKeyScreen();
+      return mount(header("Env Console"), h("div", { class: "notice bad" }, err.message));
+    }
+    if (config.mode === "hosted") {
+      document.getElementById("who").replaceChildren(h("div", {}, config.name || config.user), h("div", {}, config.user), h("a", { href: "/auth/logout", style: "color:#C9CFD6" }, "Sign out"));
+    }
   }
   const [path, query] = (location.hash.replace(/^#\/?/, "") || "overview").split("?");
   const name = ROUTES[path] ? path : "overview";

@@ -4,11 +4,12 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createProvider } from "../core/auth.js";
-import { defaultConfigPath, findEnv, loadConfig, normaliseEnvUrl, saveConfig, type EnvConfig, type PcxConfig } from "../core/config.js";
+import { defaultConfigPath, findEnv, loadConfig, normaliseEnvUrl, saveConfig, validateConfig, type EnvConfig, type PcxConfig } from "../core/config.js";
 import { changeState, checkPolicy, listComponents, selectComponents, type ComponentKind } from "../core/components.js";
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, filterMatrix, listSolutions, type Solution } from "../core/solutions.js";
 import { startServer } from "../server/index.js";
+import { HostedAuth, loadHostedSettings } from "../server/hosted.js";
 import { c, table } from "./format.js";
 
 const VERSION = "0.1.0";
@@ -237,6 +238,29 @@ async function cmdComponents(group: string, sub: string | undefined, pos: string
   return results.every((r) => r.ok) ? 0 : 1;
 }
 
+/**
+ * Hosted mode (Azure App Service and similar): settings come from app settings.
+ * Environments come from PCX_ENVIRONMENTS (JSON list) or the usual config file.
+ */
+async function serveHosted(fileConfig: PcxConfig): Promise<number> {
+  const settings = loadHostedSettings();
+  let config = fileConfig;
+  if (process.env.PCX_ENVIRONMENTS) {
+    let envs: unknown;
+    try {
+      envs = JSON.parse(process.env.PCX_ENVIRONMENTS);
+    } catch {
+      throw new UsageError('PCX_ENVIRONMENTS must be JSON, e.g. [{"name":"DEV","url":"https://org-dev.crm11.dynamics.com","managed":false}]');
+    }
+    config = validateConfig({ tenantId: settings.tenantId, environments: envs, allowedHostSuffixes: fileConfig.allowedHostSuffixes });
+  }
+  if (config.environments.length === 0) throw new UsageError("No environments configured. Set the PCX_ENVIRONMENTS app setting.");
+  const port = Number(process.env.PORT ?? 8080);
+  const s = await startServer({ config, port, mode: { kind: "hosted", auth: new HostedAuth(settings, config) } });
+  out(`Env Console (hosted) listening on port ${s.port} for ${settings.publicUrl} · ${config.environments.length} environments`);
+  return await new Promise<number>(() => {});
+}
+
 function cmdConfig(sub: string | undefined, pos: string[], config: PcxConfig, configPath: string): number {
   if (sub === "path") return out(configPath), 0;
   if (sub === "set") {
@@ -299,6 +323,7 @@ export async function main(argv: string[]): Promise<number> {
       case "plugins":
         return await cmdComponents(cmd, sub, rest, o, config);
       case "serve": {
+        if (process.env.PCX_MODE === "hosted") return await serveHosted(config);
         const port = o.port ? Number(o.port) : 4820;
         if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new UsageError("--port must be 1024-65535");
         const s = await startServer({ config, port });
