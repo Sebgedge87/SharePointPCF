@@ -85,7 +85,7 @@ export class PowerShellTokenProvider implements TokenProvider {
     checkTenant(tenantId);
     const env = { ...process.env, PCX_RESOURCE: res, PCX_TENANT: tenantId ?? "" };
     for (const shell of this.shells) {
-      const r = await this.run(shell, ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodePs(PS_GET_TOKEN)], { env });
+      const r = await this.run(shell, ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", encodePs(PS_GET_TOKEN)], { env });
       if (r.notFound) continue;
       if (r.code !== 0) {
         const msg = r.stderr.trim() || r.stdout.trim();
@@ -109,7 +109,7 @@ export class PowerShellTokenProvider implements TokenProvider {
     checkTenant(tenantId);
     const env = { ...process.env, PCX_TENANT: tenantId ?? "", PCX_DEVICE: deviceCode ? "1" : "0" };
     for (const shell of this.shells) {
-      const r = await this.interactive(shell, ["-NoProfile", "-EncodedCommand", encodePs(PS_LOGIN)], { env });
+      const r = await this.interactive(shell, ["-NoProfile", "-OutputFormat", "Text", "-EncodedCommand", encodePs(PS_LOGIN)], { env });
       if (r.notFound) continue;
       if (r.code !== 0) throw new AuthError("PowerShell sign-in did not complete");
       return;

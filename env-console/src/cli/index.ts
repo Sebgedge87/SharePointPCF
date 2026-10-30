@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -33,10 +34,12 @@ Flows, business rules and plugin steps
                     [--reason TEXT] [--dry-run] [--yes]
 
 Dashboard
-  pcx serve [--port 4820]               Start the dashboard on this machine
+  pcx serve [--port 4820] [--open]      Start the dashboard on this machine (--open opens the browser)
 
 Other
   pcx config path                       Show which config file is used
+  pcx config set tenant <id-or-domain>  Sign in to a specific tenant (empty to clear)
+  pcx config set provider azps|azcli    Sign in with PowerShell (default) or Azure CLI
 
 Changes in managed environments (everything except unmanaged DEV) need --reason.
 Config: ./pcx.config.json, or ~/.pcx/config.json, or the PCX_CONFIG variable.`;
@@ -64,6 +67,7 @@ function opts(argv: string[]) {
       "device-code": { type: "boolean" },
       unmanaged: { type: "boolean" },
       port: { type: "string" },
+      open: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" }
     }
@@ -233,6 +237,40 @@ async function cmdComponents(group: string, sub: string | undefined, pos: string
   return results.every((r) => r.ok) ? 0 : 1;
 }
 
+function cmdConfig(sub: string | undefined, pos: string[], config: PcxConfig, configPath: string): number {
+  if (sub === "path") return out(configPath), 0;
+  if (sub === "set") {
+    const [key, value] = pos;
+    if (key === "tenant") {
+      const next: PcxConfig = { ...config };
+      if (value) next.tenantId = value;
+      else delete next.tenantId;
+      saveConfig(next, configPath);
+      out(`${c.green("✓")} Tenant ${value ? `set to ${value}` : "cleared (your default tenant is used)"}`);
+      return 0;
+    }
+    if (key === "provider" && (value === "azps" || value === "azcli")) {
+      saveConfig({ ...config, auth: { provider: value } }, configPath);
+      out(`${c.green("✓")} Sign-in provider set to ${value}`);
+      return 0;
+    }
+  }
+  throw new UsageError("Usage: pcx config path | pcx config set tenant <id-or-domain> | pcx config set provider azps|azcli");
+}
+
+/** Opens a URL in the default browser without going through a shell. */
+function openBrowser(url: string): void {
+  const [cmd, args] =
+    process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : process.platform === "darwin" ? ["open", [url]] : ["xdg-open", [url]];
+  try {
+    spawn(cmd as string, args as string[], { stdio: "ignore", detached: true })
+      .on("error", () => out(c.dim("Could not open a browser; copy the link above.")))
+      .unref();
+  } catch {
+    out(c.dim("Could not open a browser; copy the link above."));
+  }
+}
+
 export async function main(argv: string[]): Promise<number> {
   let parsed;
   try {
@@ -265,11 +303,11 @@ export async function main(argv: string[]): Promise<number> {
         if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new UsageError("--port must be 1024-65535");
         const s = await startServer({ config, port });
         out(`Dashboard running. Open this link (it carries a one-time key):\n\n  ${c.bold(s.url)}\n\nPress Ctrl+C to stop.`);
+        if (o.open) openBrowser(s.url);
         return await new Promise<number>(() => {});
       }
       case "config":
-        if (sub === "path") return out(configPath), 0;
-        throw new UsageError("Usage: pcx config path");
+        return cmdConfig(sub, rest, config, configPath);
       default:
         throw new UsageError(`Unknown command: ${cmd}\n\n${HELP}`);
     }

@@ -22,7 +22,32 @@ It runs on your own machine. It signs in with the PowerShell session you already
   - **Azure CLI:** `az`. Set `"auth": { "provider": "azcli" }` in the config.
 - A Dataverse security role in each environment that can read solutions and workflows. Turning flows, rules and plugin steps on or off needs System Customizer or System Administrator.
 
-## Set up
+## Set up in one step (Windows)
+
+`setup.ps1` does everything:
+1. installs Node.js, PowerShell 7, git and Az.Accounts if they are missing;
+2. downloads or updates the code and builds it;
+3. asks for your environment URLs;
+4. signs you in;
+5. opens the dashboard.
+
+Run it again at any time to update.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+You can also pass everything up front:
+
+```powershell
+.\setup.ps1 -Dev https://contoso-dev.crm11.dynamics.com -Uat https://contoso-uat.crm11.dynamics.com -Prod https://contoso.crm11.dynamics.com -TenantId contoso.onmicrosoft.com
+```
+
+Other switches: `-DeviceCode` (sign in without a browser), `-NoDashboard`, `-NonInteractive`, and `-InstallPath` (where the code goes; default `~\pcx`).
+
+After setup, start the dashboard with `pcx serve --open`.
+
+## Set up by hand
 
 ```bash
 cd env-console
@@ -101,7 +126,9 @@ pcx env remove <NAME>
 pcx solution list [--env NAME]... [--publisher P]... [--include-microsoft] [--diff-only] [--search TEXT] [--json]
 pcx flows|rules|plugins list --env NAME [--off] [--json]
 pcx flows|rules|plugins on|off --env NAME (<name-or-id>... | --filter TEXT | --all) [--reason TEXT] [--dry-run] [--yes]
-pcx serve [--port 4820]
+pcx serve [--port 4820] [--open]
+pcx config set tenant <id-or-domain>
+pcx config set provider azps|azcli
 pcx config path
 ```
 
