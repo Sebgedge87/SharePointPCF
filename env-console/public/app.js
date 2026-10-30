@@ -743,7 +743,7 @@ function renderAlerts() {
     seg([["all", `All (${d.alerts.length})`], ["critical", "Critical"], ["warning", "Warnings"], ["info", "Info"]], alertState.sev, (v) => { alertState.sev = v; renderAlerts(); }, "Severity"),
     h("section", { class: "card flush" },
       list.length === 0 ? h("div", { class: "empty" }, "No alerts. Everything looks healthy.") :
-      h("ul", { class: "list" }, list.map((a) => h("li", { style: "display:grid;grid-template-columns:90px 90px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 20px" },
+      h("ul", { class: "list" }, list.map((a) => h("li", { style: "display:grid;grid-template-columns:76px 84px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 20px" },
         h("span", { class: `pill ${a.severity === "critical" ? "bad" : a.severity === "warning" ? "warn" : "info"}` }, a.severity === "critical" ? "Critical" : a.severity === "warning" ? "Warning" : "Info"),
         chip(a.env),
         h("div", { style: "min-width:0" }, h("div", { style: "font-weight:600" }, a.title), a.detail ? h("div", { class: "small muted", style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, a.detail) : null),

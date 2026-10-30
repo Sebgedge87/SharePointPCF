@@ -229,3 +229,19 @@ dl.stats dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 dl.stats dd .of { font-size: 13px; font-weight: 500; color: var(--muted); }
 a.envlink { display: block; color: var(--link); text-decoration: none; }
 a.envlink:hover { text-decoration: underline; color: var(--link-hover); }
+
+/* labels in list rows: natural width, lined up with the row's title */
+.list li > .pill, .list li > .chip { justify-self: start; align-self: start; margin-top: 1px; }
+
+/* side menu stays in view while the page scrolls; its footer is always visible */
+.side { position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; overscroll-behavior: contain; }
+.side-foot { position: sticky; bottom: 0; background: var(--side); margin-bottom: -20px; padding-bottom: 16px; }
+@media (max-width: 720px) {
+  .side { position: static; height: auto; overflow: visible; }
+  .side-foot { position: static; margin-bottom: 0; }
+}
+/* a little tighter so the whole menu fits in shorter windows */
+.side { padding-top: 16px; }
+.brand { padding-bottom: 14px; }
+.side a { min-height: 36px; }
+.nav-group { margin-top: 10px; }
