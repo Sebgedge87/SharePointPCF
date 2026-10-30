@@ -84,7 +84,7 @@ let config = null;
 function envLabel(name) {
   return (config && config.environments.find((e) => e.name === name)?.label) || name;
 }
-const STAGE_WORDS = [[/\b(pre[-_ ]?prod|preprod|staging)\b/i, "PREPROD"], [/\b(uat|acceptance)\b/i, "UAT"], [/\b(test|qa|sit)\b/i, "TEST"], [/\b(dev|development|sandbox)\b/i, "DEV"], [/\b(prod|production|live)\b/i, "PROD"]];
+const STAGE_WORDS = [[/\b(pre[-_ ]?prod(uction)?|staging)\b/i, "PREPROD"], [/\b(uat|acceptance)\b/i, "UAT"], [/\b(test|testing|qa|sit)\b/i, "TEST"], [/\b(dev|development|sandbox)\b/i, "DEV"], [/\b(prod|production|live)\b/i, "PROD"]];
 function envColor(name) {
   if (KNOWN_COLORS[name.toUpperCase()]) return KNOWN_COLORS[name.toUpperCase()];
   const label = envLabel(name);
@@ -263,21 +263,19 @@ function foundTable() {
   const chosen = [...acctState.picks.values()].filter((p) => p.on).length;
   return h("div", { class: "stack" },
     h("div", { class: "scroll" }, h("table", {},
-      h("thead", {}, h("tr", {}, ["", "Environment", "URL", "Region", "Short name (for pcx --env)", "Unmanaged (DEV)"].map((t) => h("th", { scope: "col" }, t)))),
+      h("thead", {}, h("tr", {}, ["", "Environment", "URL", "Region", "Unmanaged (DEV)"].map((t) => h("th", { scope: "col" }, t)))),
       h("tbody", {}, acctState.found.map((f) => {
         const p = acctState.picks.get(f.url);
-        if (!p) return h("tr", {}, h("td", {}, h("span", { class: "pill ok" }, "Added")), h("th", { scope: "row" }, f.friendlyName), h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}), h("td", {}));
+        if (!p) return h("tr", {}, h("td", {}, h("span", { class: "pill ok" }, "Added")), h("th", { scope: "row" }, f.friendlyName), h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}));
         const pick = h("input", { type: "checkbox", "aria-label": `Add ${f.friendlyName}`, disabled: !f.enabled });
         pick.checked = p.on;
         pick.addEventListener("change", () => { p.on = pick.checked; overview(); });
-        const name = h("input", { class: "input", value: p.name, maxlength: 32, style: "width:140px", "aria-label": `Name for ${f.friendlyName}` });
-        name.addEventListener("input", () => { p.name = name.value.trim(); });
         const unm = h("input", { type: "checkbox", "aria-label": `${f.friendlyName} is unmanaged` });
         unm.checked = !p.managed;
         unm.addEventListener("change", () => { p.managed = !unm.checked; });
         return h("tr", { class: p.on ? "sel" : "" }, h("td", {}, pick),
           h("th", { scope: "row" }, f.friendlyName, f.enabled ? null : h("span", { class: "pill", style: "margin-left:6px" }, "Disabled")),
-          h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}, name), h("td", {}, unm));
+          h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}, unm));
       })))),
     h("div", { class: "row" }, h("button", { type: "button", class: "btn primary", disabled: !chosen, onclick: addPicked }, chosen ? `Add ${chosen} selected` : "Tick the environments to add"),
       h("button", { type: "button", class: "btn", onclick: () => { acctState.found = null; overview(); } }, "Close")));
@@ -382,16 +380,26 @@ function accountBar() {
 }
 function manageEnvironments() {
   if (!config.canManage) return null;
-  const name = h("input", { class: "input", placeholder: "e.g. UAT", maxlength: 32, "aria-label": "Name" });
-  const url = h("input", { class: "input", placeholder: "https://contoso-uat.crm11.dynamics.com", style: "min-width:320px", "aria-label": "Environment URL" });
-  const unmanaged = h("input", { type: "checkbox" });
+  const url = h("input", { class: "input", placeholder: "https://contoso-uat.crm4.dynamics.com", style: "min-width:320px", "aria-label": "Environment URL", required: true });
+  const kind = h("select", { class: "input", "aria-label": "Type" }, h("option", { value: "" }, "Detect from its name"), h("option", { value: "managed" }, "Managed"), h("option", { value: "unmanaged" }, "Unmanaged (DEV)"));
+  const addBtn = h("button", { type: "submit", class: "btn primary" }, "Add environment");
   const tenant = h("input", { class: "input", placeholder: "Leave empty for your default tenant", value: config.tenantId || "", style: "min-width:320px", "aria-label": "Tenant" });
   const status = h("div", { role: "status", class: "small" });
   const fail = (err) => { status.textContent = err.message; status.style.color = "var(--bad-text)"; };
   const add = async (ev) => {
     ev.preventDefault();
-    try { await api("/api/account/env", { name: name.value.trim(), url: url.value.trim(), managed: !unmanaged.checked }); await reloadConfig(); overview(); }
-    catch (err) { fail(err); }
+    addBtn.disabled = true;
+    addBtn.textContent = "Looking it up…";
+    status.textContent = "";
+    try {
+      const body = { url: url.value.trim() };
+      if (kind.value) body.managed = kind.value === "managed";
+      const { environments } = await api("/api/account/env", body);
+      const added = environments[environments.length - 1];
+      await reloadConfig();
+      acctState.notice = { kind: "ok", text: `Added ${added.label || added.name} (${added.managed ? "managed" : "unmanaged"}, pcx --env ${added.name}).` };
+      overview();
+    } catch (err) { fail(err); addBtn.disabled = false; addBtn.textContent = "Add environment"; }
   };
   const remove = async (n) => {
     if (!(await confirmDialog({ title: `Remove ${n}?`, message: `${n} is removed from the console only. Nothing changes in the environment itself, and you can add it back at any time.`, confirmText: "Remove", danger: true }))) return;
@@ -405,7 +413,7 @@ function manageEnvironments() {
     h("summary", { style: "cursor:pointer;font:600 15px var(--head)" }, `Manage environments (${config.environments.length})`),
     h("div", { class: "stack", style: "margin-top:14px" },
       h("div", { class: "row between" },
-        h("div", { class: "small muted" }, "Pick from the environments your account can reach, or add one by URL below."),
+        h("div", { class: "small muted" }, "Pick from the environments your account can reach, or paste a URL below."),
         h("button", { type: "button", class: "btn primary", disabled: acctState.finding, onclick: findEnvironments }, acctState.finding ? "Looking…" : "Find my environments")),
       foundTable(),
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
@@ -419,10 +427,9 @@ function manageEnvironments() {
             h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, "Remove")));
         })))) : null,
       h("form", { class: "row", style: "align-items:flex-end", onsubmit: add },
-        h("label", { class: "field" }, h("span", {}, "Name"), name),
-        h("label", { class: "field", style: "flex:1" }, h("span", {}, "Environment URL (Power Platform admin center › Environments)"), url),
-        h("label", { class: "check" }, unmanaged, "Unmanaged (DEV)"),
-        h("button", { type: "submit", class: "btn primary" }, "Add environment")),
+        h("label", { class: "field", style: "flex:1" }, h("span", {}, "Environment URL (its name is looked up for you)"), url),
+        h("label", { class: "field" }, h("span", {}, "Type"), kind),
+        addBtn),
       h("div", { class: "row", style: "align-items:flex-end" },
         h("label", { class: "field", style: "flex:1" }, h("span", {}, "Tenant (only if your account can sign in to several)"), tenant),
         h("button", { type: "button", class: "btn", onclick: saveTenant }, "Save tenant")),
@@ -443,7 +450,9 @@ async function overview() {
   const grid = h("section", { class: "grid", "aria-label": "Environments" });
   for (const e of config.environments) {
     const card = h("article", { class: "card stack" },
-      h("div", { class: "row between" }, chip(e.name), h("span", { class: e.managed ? "pill" : "pill ok" }, e.managed ? "Managed" : "Unmanaged")),
+      h("div", { class: "env-head" },
+        h("h2", { class: "env-title", title: `pcx --env ${e.name}` }, h("span", { class: "envdot", style: `background:${envColor(e.name)}`, "aria-hidden": "true" }), envLabel(e.name)),
+        h("span", { class: e.managed ? "pill" : "pill ok" }, e.managed ? "Managed" : "Unmanaged")),
       envLink(e.url), h("div", { class: "muted small" }, "Checking…"));
     cards.set(e.name, card);
     grid.append(card);
@@ -1593,7 +1602,7 @@ const CLI_COMMANDS = [
     ["auth status", "Check sign-in against every environment", "auth status"],
     ["env list", "Health, version, solutions, flows and plugin steps per environment", "env list"],
     ["env discover", "Every environment your account can reach", "env discover"],
-    ["env add <NAME> <URL> [--unmanaged]", "Add an environment by URL", "env add UAT https://contoso-uat.crm4.dynamics.com"],
+    ["env add <URL>", "Add an environment by URL; its name is looked up", "env add https://contoso-uat.crm4.dynamics.com"],
     ["env remove <NAME>", "Remove an environment from the console", "env remove UAT"],
     ["config path", "Which config file is in use", "config path"],
     ["config set tenant <id-or-domain>", "Sign in to a specific tenant", "config set tenant contoso.onmicrosoft.com"]

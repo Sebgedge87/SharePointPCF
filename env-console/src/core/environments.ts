@@ -1,4 +1,5 @@
-import type { EnvConfig, PcxConfig } from "./config.js";
+import { ConfigError, DEFAULT_HOST_SUFFIXES, normaliseEnvUrl, type EnvConfig, type PcxConfig } from "./config.js";
+import { suggestName } from "./discovery.js";
 import { AuthError, createProvider, TokenCache, type TokenSource } from "./auth.js";
 import { DataverseClient, type ClientOptions } from "./dataverse.js";
 
@@ -28,7 +29,7 @@ export class Workspace {
   constructor(
     readonly config: PcxConfig,
     tokens?: TokenSource,
-    private readonly clientOptions: ClientOptions = {}
+    readonly clientOptions: ClientOptions = {}
   ) {
     this.tokens = tokens ?? new TokenCache(createProvider(config.auth.provider), config.tenantId);
   }
@@ -85,4 +86,42 @@ export async function envStatus(ws: Workspace, env: EnvConfig, detail = true): P
   const failed = settled.filter((_, i) => i !== 1).find((s) => s.status === "rejected") as PromiseRejectedResult | undefined;
   if (failed) base.error = `Some details could not be read: ${(failed.reason as Error).message}`;
   return base;
+}
+
+/** The environment's display name from Dataverse, or undefined if it can't be read. */
+export async function lookupDisplayName(client: DataverseClient): Promise<string | undefined> {
+  try {
+    const r = await client.get<{ Detail?: { FriendlyName?: string } }>("RetrieveCurrentOrganization(AccessType=@p)?@p=Microsoft.Dynamics.CRM.EndpointAccessType'Default'");
+    return r.Detail?.FriendlyName || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A short name for `--env` that isn't already taken: UAT, UAT-2, … */
+export function uniqueShortName(base: string, taken: string[]): string {
+  const used = new Set(taken.map((t) => t.toUpperCase()));
+  const clean = base.toUpperCase().replace(/[^A-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "ENV";
+  let name = clean;
+  for (let i = 2; used.has(name.toUpperCase()); i++) name = `${clean}-${i}`;
+  return name;
+}
+
+/**
+ * Builds a new environment entry from just its URL: looks up its display name, suggests a short
+ * name and whether it's managed (DEV-like environments are unmanaged).
+ */
+export async function environmentFromUrl(ws: Workspace, url: string, opts: { managed?: boolean; label?: string; name?: string } = {}): Promise<EnvConfig> {
+  const normalised = normaliseEnvUrl(url, ws.config.allowedHostSuffixes ? [...DEFAULT_HOST_SUFFIXES, ...ws.config.allowedHostSuffixes] : undefined);
+  if (ws.config.environments.some((e) => e.url === normalised)) throw new ConfigError(`${normalised} is already in the console`);
+  const probe: EnvConfig = { name: "NEW", url: normalised, managed: true };
+  const label = opts.label || (await lookupDisplayName(new DataverseClient(probe, ws.tokens, ws.clientOptions))) || new URL(normalised).hostname.split(".")[0]!;
+  const suggestion = suggestName(label, normalised);
+  const env: EnvConfig = {
+    name: opts.name || uniqueShortName(suggestion.name, ws.config.environments.map((e) => e.name)),
+    label,
+    url: normalised,
+    managed: opts.managed ?? suggestion.managed
+  };
+  return env;
 }

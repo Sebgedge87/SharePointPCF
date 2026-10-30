@@ -6,6 +6,10 @@ test("short names are suggested from the display name or URL", () => {
   assert.deepEqual(suggestName("Contoso Development", "https://contoso-dev.crm11.dynamics.com"), { name: "DEV", managed: false });
   assert.deepEqual(suggestName("Contoso UAT", "https://contoso-uat.crm11.dynamics.com"), { name: "UAT", managed: true });
   assert.deepEqual(suggestName("Contoso Pre-Prod", "https://contoso-pp.crm11.dynamics.com"), { name: "PREPROD", managed: true });
+  assert.deepEqual(suggestName("FormusPro Pre-Production", "https://orgpp01.crm4.dynamics.com"), { name: "PREPROD", managed: true });
+  assert.deepEqual(suggestName("FormusPro Preproduction", "https://orgpp02.crm4.dynamics.com"), { name: "PREPROD", managed: true });
+  assert.deepEqual(suggestName("FormusPro Testing", "https://orgt.crm4.dynamics.com"), { name: "TEST", managed: true });
+  assert.deepEqual(suggestName("FormusPro Production", "https://org.crm4.dynamics.com"), { name: "PROD", managed: true });
   assert.deepEqual(suggestName("Contoso", "https://contoso-prod.crm11.dynamics.com"), { name: "PROD", managed: true });
   assert.deepEqual(suggestName("Contoso", "https://contoso.crm11.dynamics.com"), { name: "CONTOSO", managed: true });
 });

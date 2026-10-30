@@ -32,9 +32,9 @@ interface RawInstance {
 type FetchLike = (url: string, init: { headers: Record<string, string> }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
 const PATTERNS: [RegExp, string][] = [
-  [/\b(pre[-_ ]?prod|preprod|staging|stage)\b/i, "PREPROD"],
+  [/\b(pre[-_ ]?prod(uction)?|staging|stage)\b/i, "PREPROD"],
   [/\b(uat|acceptance)\b/i, "UAT"],
-  [/\b(test|tst|qa|sit)\b/i, "TEST"],
+  [/\b(test|testing|tst|qa|sit)\b/i, "TEST"],
   [/\b(dev|develop|development|sandbox)\b/i, "DEV"],
   [/\b(prod|production|live)\b/i, "PROD"]
 ];

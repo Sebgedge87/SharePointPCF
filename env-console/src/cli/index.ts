@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 import { createProvider } from "../core/auth.js";
 import { defaultConfigPath, findEnv, loadConfig, normaliseEnvUrl, saveConfig, validateConfig, type EnvConfig, type PcxConfig } from "../core/config.js";
 import { changeState, checkPolicy, listComponents, selectComponents, type ComponentKind } from "../core/components.js";
-import { envStatus, whoAmI, Workspace } from "../core/environments.js";
+import { environmentFromUrl, envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, filterMatrix, listSolutions, type Solution } from "../core/solutions.js";
 import { startServer } from "../server/index.js";
 import { compareSolution } from "../core/compare.js";
@@ -37,7 +37,8 @@ Sign-in
 Environments
   pcx env list [--json]                 Health, version, solutions, flows and plugin steps
   pcx env discover [--json]              List every environment your account can reach
-  pcx env add <NAME> <URL> [--unmanaged]
+  pcx env add <URL> [--unmanaged]       Name and short name are looked up for you
+  pcx env add <NAME> <URL> [--unmanaged]  (or choose the short name yourself)
   pcx env remove <NAME>
 
 Solutions
@@ -211,9 +212,16 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
     for (const r of res) if (r.error) out(c.yellow(`${r.name}: ${r.error}`));
     return res.every((r) => r.connected) ? 0 : 1;
   }
+  if (sub === "add" && pos.length === 1 && /^https?:\/\//i.test(pos[0]!)) {
+    // Just a URL: look up its name, suggest the short name and type.
+    const env = await environmentFromUrl(new Workspace(config), pos[0]!, o.unmanaged ? { managed: false } : {});
+    saveConfig({ ...config, environments: [...config.environments, env] }, configPath);
+    out(`${c.green("✓")} Added ${env.label} as ${c.bold(env.name)} (${env.managed ? "managed" : "unmanaged"}) ${env.url}`);
+    return 0;
+  }
   if (sub === "add") {
     const [name, url] = pos;
-    if (!name || !url) throw new UsageError("Usage: pcx env add <NAME> <URL> [--unmanaged]");
+    if (!name || !url) throw new UsageError("Usage: pcx env add <URL> [--unmanaged]   or   pcx env add <NAME> <URL> [--unmanaged]");
     if (config.environments.some((e) => e.name.toUpperCase() === name.toUpperCase())) throw new UsageError(`${name} already exists`);
     const env: EnvConfig = { name, url: normaliseEnvUrl(url, undefined), managed: !o.unmanaged };
     saveConfig({ ...config, environments: [...config.environments, env] }, configPath);

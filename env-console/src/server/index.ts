@@ -8,7 +8,7 @@ import { ConfigError, findEnv, validateConfig, type PcxConfig } from "../core/co
 import { readActions } from "../core/actionLog.js";
 import { AuthError, DeviceLoginError, TokenCache, type DeviceLogin, type TokenProvider } from "../core/auth.js";
 import { changeState, listComponents, PolicyError, type ComponentKind } from "../core/components.js";
-import { envStatus, whoAmI, Workspace } from "../core/environments.js";
+import { environmentFromUrl, envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, listSolutions, publisherCounts, type Solution } from "../core/solutions.js";
 import { isGuid, type ClientOptions } from "../core/dataverse.js";
 import { compareSolution, diffComponent } from "../core/compare.js";
@@ -282,10 +282,16 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         return { environments: cfg.environments };
       }
       if (req.method === "POST" && url.pathname === "/api/account/env") {
+        // Only the URL is needed: the name is looked up and the short name and type suggested.
         const body = await readJson(req);
-        const name = String(body.name ?? "").trim();
-        if (cfg.environments.some((e) => e.name.toUpperCase() === name.toUpperCase())) throw new HttpError(400, `${name} already exists`);
-        const next = validateConfig({ ...cfg, environments: [...cfg.environments, { name, label: typeof body.label === "string" ? body.label : undefined, url: String(body.url ?? ""), managed: body.managed !== false }] });
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        if (name && cfg.environments.some((e) => e.name.toUpperCase() === name.toUpperCase())) throw new HttpError(400, `${name} already exists`);
+        const env = await environmentFromUrl(localWs!, String(body.url ?? ""), {
+          name: name || undefined,
+          label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : undefined,
+          managed: typeof body.managed === "boolean" ? body.managed : undefined
+        });
+        const next = validateConfig({ ...cfg, environments: [...cfg.environments, env] });
         acct.save(next);
         cfg.environments = next.environments;
         return { environments: cfg.environments };
