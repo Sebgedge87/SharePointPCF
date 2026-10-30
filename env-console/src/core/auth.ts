@@ -1,4 +1,4 @@
-import { isValidTenant, normaliseEnvUrl, type AuthProviderName } from "./config.js";
+import { isValidTenant, normaliseResource, type AuthProviderName } from "./config.js";
 import { runCapturing, runInteractive, runProcess, type CapturedProcess, type CapturingRunner, type InteractiveRunner, type Runner } from "./proc.js";
 
 export interface AccessToken {
@@ -173,7 +173,7 @@ export class PowerShellTokenProvider implements TokenProvider {
   }
 
   async getToken(resource: string, tenantId?: string): Promise<AccessToken> {
-    const res = normaliseEnvUrl(resource);
+    const res = normaliseResource(resource);
     checkTenant(tenantId);
     const env = { ...process.env, PCX_RESOURCE: res, PCX_TENANT: tenantId ?? "" };
     for (const shell of this.shells) {
@@ -236,7 +236,7 @@ export class AzureCliTokenProvider implements TokenProvider {
   }
 
   async getToken(resource: string, tenantId?: string): Promise<AccessToken> {
-    const res = normaliseEnvUrl(resource);
+    const res = normaliseResource(resource);
     checkTenant(tenantId);
     const args = ["account", "get-access-token", "--resource", res, "--output", "json"];
     if (tenantId) args.push("--tenant", tenantId);
@@ -301,7 +301,7 @@ export class TokenCache implements TokenSource {
   }
 
   async token(resource: string): Promise<string> {
-    const key = normaliseEnvUrl(resource);
+    const key = normaliseResource(resource);
     const hit = this.cache.get(key);
     if (hit && hit.expiresOn.getTime() - this.now() > 5 * 60_000) return hit.token;
     let p = this.pending.get(key);

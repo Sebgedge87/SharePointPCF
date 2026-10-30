@@ -3,6 +3,7 @@ import type { DataverseClient } from "./dataverse.js";
 import { appendAction } from "./actionLog.js";
 import { checkPolicy } from "./components.js";
 import { fv } from "./util.js";
+import { requireAccess } from "./access.js";
 
 export type RunStatus = "succeeded" | "failed" | "cancelled" | "running" | "other";
 
@@ -122,6 +123,7 @@ export async function getTraceSetting(client: DataverseClient): Promise<{ orgId:
 
 export async function setTraceSetting(client: DataverseClient, setting: TraceSetting, reason: string | undefined, actor: string | undefined, source: "cli" | "dashboard", log = appendAction): Promise<void> {
   checkPolicy(client.env, reason);
+  await requireAccess(client, "admin", "change the plugin trace log setting");
   const { orgId, setting: before } = await getTraceSetting(client);
   let ok = true;
   let error: string | undefined;

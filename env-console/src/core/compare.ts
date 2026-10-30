@@ -4,6 +4,7 @@ import { appendAction } from "./actionLog.js";
 import { checkPolicy } from "./components.js";
 import { diffLines, prettyJson, prettyXml, type DiffLine } from "./diff.js";
 import { mapLimit } from "./util.js";
+import { requireAccess } from "./access.js";
 
 /** Solution component types (solutioncomponent.componenttype) shown with friendly names. */
 export const COMPONENT_TYPES: Record<number, string> = {
@@ -283,6 +284,7 @@ export async function removeUnmanagedLayer(
   log = appendAction
 ): Promise<void> {
   checkPolicy(client.env, opts.reason);
+  await requireAccess(client, "customize", "remove unmanaged changes");
   const componentName = LAYER_NAMES[type];
   if (!componentName) throw new Error(`Unmanaged changes on this component type (${typeName(type)}) can't be removed here; use the maker portal.`);
   assertGuid(id);

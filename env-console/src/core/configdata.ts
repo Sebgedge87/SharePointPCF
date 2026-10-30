@@ -1,6 +1,7 @@
 import { appendAction } from "./actionLog.js";
 import { checkPolicy } from "./components.js";
 import { assertGuid, type DataverseClient } from "./dataverse.js";
+import { requireAccess } from "./access.js";
 
 export const ENV_VAR_TYPES: Record<number, string> = {
   100000000: "Text",
@@ -72,6 +73,7 @@ export async function setEnvVarValue(
   log = appendAction
 ): Promise<void> {
   checkPolicy(client.env, opts.reason);
+  await requireAccess(client, "customize", "set environment variables");
   if (value.length > 100_000) throw new Error("Value is too long");
   const vars = await listEnvVars(client);
   const v = vars.find((x) => x.schemaName === schemaName);

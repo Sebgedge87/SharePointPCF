@@ -24,6 +24,10 @@ import { removeUnmanagedLayer } from "../core/compare.js";
 import { evaluateAlerts, postToTeams } from "../core/alerts.js";
 import { buildReport, renderReportCsv, renderReportHtml } from "../core/report.js";
 import { discoverEnvironments, type DiscoveredEnv } from "../core/discovery.js";
+import { mergeDiscovered } from "../core/envlist.js";
+import { AccessError, clearAccessCache, getAccess } from "../core/access.js";
+import { createEnvironment, ENV_TYPES, REGIONS as ENV_REGIONS, validateNewEnvironment, type CreatedEnvironment } from "../core/provision.js";
+import { appendAction } from "../core/actionLog.js";
 
 interface DeviceState {
   state: "starting" | "waiting" | "done" | "failed" | "cancelled";
@@ -174,8 +178,31 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const hostedWs = new WeakMap<Session, Workspace>();
   let loginRun: Promise<void> | undefined;
   let device: DeviceState | undefined;
+  let creating: { state: "running" | "done" | "failed"; displayName: string; messages: string[]; result?: CreatedEnvironment; error?: string } | undefined;
+  // Environments found through the Discovery service (local mode): looked up at most every 10 minutes.
+  let discoveredAt = 0;
+  let discoveryError: string | undefined;
+  let discovering: Promise<void> | undefined;
+  const refreshDiscovered = async (force = false): Promise<void> => {
+    if (mode.kind !== "local" || !opts.account || cfg.discovery === false) return;
+    if (!force && Date.now() - discoveredAt < 10 * 60_000) return;
+    const acct = opts.account;
+    discovering ??= (async () => {
+      try {
+        const found = await (acct.discover ? acct.discover() : discoverEnvironments(localWs!.tokens, localWs!.clientOptions.fetchImpl as never));
+        mergeDiscovered(cfg, found);
+        discoveryError = undefined;
+      } catch (e) {
+        discoveryError = (e as Error).message;
+      }
+      discoveredAt = Date.now();
+    })().finally(() => (discovering = undefined));
+    await discovering;
+  };
   const clearTokens = () => {
     if (localWs?.tokens instanceof TokenCache) localWs.tokens.clear();
+    if (localWs) for (const e of cfg.environments) clearAccessCache(localWs.client(e));
+    discoveredAt = 0;
   };
   let port = opts.port;
 
@@ -204,14 +231,18 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const api = async (req: IncomingMessage, url: URL, who: Caller): Promise<unknown> => {
     const { ws } = who;
     if (req.method === "GET" && url.pathname === "/api/config") {
+      await refreshDiscovered(url.searchParams.get("refresh") === "1");
       return {
+        discovery: mode.kind === "local" && !!opts.account && cfg.discovery !== false,
+        discoveryError: discoveryError ?? null,
+        canCreate: mode.kind === "local" && !!opts.account,
         mode: mode.kind,
         canManage: mode.kind === "local" && !!opts.account,
         tenantId: cfg.tenantId ?? null,
         provider: mode.kind === "hosted" ? "entra" : cfg.auth.provider,
         user: who.user,
         name: who.name,
-        environments: cfg.environments.map((e) => ({ name: e.name, label: e.label ?? null, url: e.url, managed: e.managed }))
+        environments: cfg.environments.map((e) => ({ name: e.name, label: e.label ?? null, url: e.url, managed: e.managed, discovered: !!e.discovered }))
       };
     }
     // ---- sign-in and environment list (local mode only)
@@ -287,13 +318,21 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         // Only the URL is needed: the name is looked up and the short name and type suggested.
         const body = await readJson(req);
         const name = typeof body.name === "string" ? body.name.trim() : "";
-        if (name && cfg.environments.some((e) => e.name.toUpperCase() === name.toUpperCase())) throw new HttpError(400, `${name} already exists`);
+        const bodyUrl = (() => {
+          try {
+            return new URL(String(body.url ?? "")).origin.toLowerCase();
+          } catch {
+            return "";
+          }
+        })();
+        // Saving a found environment keeps its short name; any other clash is refused.
+        if (name && cfg.environments.some((e) => e.name.toUpperCase() === name.toUpperCase() && !(e.discovered && e.url === bodyUrl))) throw new HttpError(400, `${name} already exists`);
         const env = await environmentFromUrl(localWs!, String(body.url ?? ""), {
           name: name || undefined,
           label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : undefined,
           managed: typeof body.managed === "boolean" ? body.managed : undefined
         });
-        const next = validateConfig({ ...cfg, environments: [...cfg.environments, env] });
+        const next = validateConfig({ ...cfg, environments: [...cfg.environments.filter((e) => e.url !== env.url), env] });
         acct.save(next);
         cfg.environments = next.environments;
         return { environments: cfg.environments };
@@ -302,7 +341,8 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         const body = await readJson(req);
         const env = findEnv(cfg, String(body.name ?? ""));
         const label = String(body.label ?? "").trim();
-        const next = validateConfig({ ...cfg, environments: cfg.environments.map((e) => (e === env ? { ...e, label: label || undefined } : e)) });
+        // Renaming a found environment saves it, so the name sticks.
+        const next = validateConfig({ ...cfg, environments: cfg.environments.map((e) => (e === env ? { ...e, label: label || undefined, discovered: undefined } : e)) });
         acct.save(next);
         cfg.environments = next.environments;
         return { environments: cfg.environments };
@@ -310,10 +350,54 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       if (req.method === "POST" && url.pathname === "/api/account/env/remove") {
         const body = await readJson(req);
         const env = findEnv(cfg, String(body.name ?? ""));
-        const next = { ...cfg, environments: cfg.environments.filter((e) => e !== env) };
+        // A found environment is hidden rather than removed, or it would come straight back.
+        const next = { ...cfg, environments: cfg.environments.filter((e) => e !== env), hiddenEnvironments: env.discovered ? [...(cfg.hiddenEnvironments ?? []), env.url] : cfg.hiddenEnvironments };
         acct.save(next);
         cfg.environments = next.environments;
+        if (next.hiddenEnvironments) cfg.hiddenEnvironments = next.hiddenEnvironments;
         return { environments: cfg.environments };
+      }
+      if (req.method === "GET" && url.pathname === "/api/account/env/create/options") {
+        return { types: ENV_TYPES, regions: ENV_REGIONS };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/env/create") {
+        if (creating?.state === "running") throw new HttpError(409, `Already creating "${creating.displayName}". Wait for it to finish.`);
+        const body = await readJson(req);
+        const reqEnv = ((): ReturnType<typeof validateNewEnvironment> => {
+          try {
+            return validateNewEnvironment({
+          displayName: body.displayName as string,
+          type: body.type as never,
+          region: body.region as string,
+          domain: body.domain as string,
+          currency: body.currency as string,
+          language: body.language === undefined || body.language === "" ? undefined : Number(body.language),
+          securityGroupId: body.securityGroupId as string,
+          description: body.description as string
+            });
+          } catch (e) {
+            throw new HttpError(400, (e as Error).message);
+          }
+        })();
+        const job: NonNullable<typeof creating> = { state: "running", displayName: reqEnv.displayName, messages: [] };
+        creating = job;
+        createEnvironment(localWs!.tokens, reqEnv, { onProgress: (m) => job.messages.push(m) }).then(
+          async (r) => {
+            job.result = r;
+            job.state = "done";
+            appendAction({ at: new Date().toISOString(), env: reqEnv.displayName, action: `create ${reqEnv.type} environment in ${reqEnv.region}`, kind: "environment", id: r.id ?? "", name: reqEnv.displayName, source: "dashboard", ok: true });
+            await refreshDiscovered(true);
+          },
+          (e: Error) => {
+            job.state = "failed";
+            job.error = e.message;
+            appendAction({ at: new Date().toISOString(), env: reqEnv.displayName, action: `create ${reqEnv.type} environment in ${reqEnv.region}`, kind: "environment", id: "", name: reqEnv.displayName, source: "dashboard", ok: false, error: e.message });
+          }
+        );
+        return { ok: true };
+      }
+      if (req.method === "GET" && url.pathname === "/api/account/env/create/status") {
+        return creating ? { state: creating.state, displayName: creating.displayName, messages: creating.messages.slice(-5), result: creating.result ?? null, error: creating.error ?? null } : { state: "none" };
       }
       if (req.method === "POST" && url.pathname === "/api/account/tenant") {
         const body = await readJson(req);
@@ -336,6 +420,9 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       if (args[0] === "auth" && args[1] === "login") return { code: 2, output: "Use the Sign in button on the Overview page to sign in from here." };
       if (args.includes("--config")) return { code: 2, output: "--config can't be changed from the dashboard terminal." };
       return runPcx(args as string[], opts.account.configPath);
+    }
+    if (req.method === "GET" && url.pathname === "/api/access/all") {
+      return acrossEnvs(ws, cfg.environments, (client) => getAccess(client, cfg.roles));
     }
     if (req.method === "GET" && url.pathname === "/api/status") {
       const env = findEnv(cfg, url.searchParams.get("env") ?? "");
@@ -597,7 +684,8 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       if (e instanceof HttpError) {
         status = e.status;
         extra = e.extra;
-      } else if (e instanceof PolicyError || e instanceof ConfigError) status = 400;
+      } else if (e instanceof AccessError) status = 403;
+      else if (e instanceof PolicyError || e instanceof ConfigError) status = 400;
       else if (e instanceof AuthError && e.needsLogin && mode.kind === "hosted") {
         status = 401;
         extra = { login: "/auth/login" };

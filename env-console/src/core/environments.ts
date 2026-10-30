@@ -2,6 +2,7 @@ import { ConfigError, DEFAULT_HOST_SUFFIXES, normaliseEnvUrl, type EnvConfig, ty
 import { suggestName } from "./discovery.js";
 import { AuthError, createProvider, TokenCache, type TokenSource } from "./auth.js";
 import { DataverseClient, type ClientOptions } from "./dataverse.js";
+import { setExtraRoles } from "./access.js";
 
 export interface EnvStatus {
   name: string;
@@ -35,10 +36,13 @@ export class Workspace {
   }
 
   client(env: EnvConfig): DataverseClient {
-    let c = this.clients.get(env.name);
+    // Keyed by name and URL: a short name must never reuse another environment's connection.
+    const key = `${env.name}|${env.url}`;
+    let c = this.clients.get(key);
     if (!c) {
       c = new DataverseClient(env, this.tokens, this.clientOptions);
-      this.clients.set(env.name, c);
+      setExtraRoles(c, this.config.roles);
+      this.clients.set(key, c);
     }
     return c;
   }
@@ -113,12 +117,12 @@ export function uniqueShortName(base: string, taken: string[]): string {
  */
 export async function environmentFromUrl(ws: Workspace, url: string, opts: { managed?: boolean; label?: string; name?: string } = {}): Promise<EnvConfig> {
   const normalised = normaliseEnvUrl(url, ws.config.allowedHostSuffixes ? [...DEFAULT_HOST_SUFFIXES, ...ws.config.allowedHostSuffixes] : undefined);
-  if (ws.config.environments.some((e) => e.url === normalised)) throw new ConfigError(`${normalised} is already in the console`);
+  if (ws.config.environments.some((e) => e.url === normalised && !e.discovered)) throw new ConfigError(`${normalised} is already in the console`);
   const probe: EnvConfig = { name: "NEW", url: normalised, managed: true };
   const label = opts.label || (await lookupDisplayName(new DataverseClient(probe, ws.tokens, ws.clientOptions))) || new URL(normalised).hostname.split(".")[0]!;
   const suggestion = suggestName(label, normalised);
   const env: EnvConfig = {
-    name: opts.name || uniqueShortName(suggestion.name, ws.config.environments.map((e) => e.name)),
+    name: opts.name || uniqueShortName(suggestion.name, ws.config.environments.filter((e) => e.url !== normalised).map((e) => e.name)),
     label,
     url: normalised,
     managed: opts.managed ?? suggestion.managed

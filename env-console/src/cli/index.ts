@@ -22,6 +22,10 @@ import { changeJobs, listProblemJobs } from "../core/jobs.js";
 import { listRoles, listUserRoles } from "../core/security.js";
 import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configdata.js";
 import { runProcess } from "../core/proc.js";
+import { addDiscovered } from "../core/envlist.js";
+import { getAccess, PERMISSION_LABEL } from "../core/access.js";
+import { createBody, createEnvironment, ENV_TYPES, REGIONS as ENV_REGIONS, validateNewEnvironment } from "../core/provision.js";
+import { appendAction } from "../core/actionLog.js";
 import { discoverEnvironments } from "../core/discovery.js";
 import { HostedAuth, loadHostedSettings } from "../server/hosted.js";
 import { c, table } from "./format.js";
@@ -35,11 +39,23 @@ Sign-in
   pcx auth status                       Check sign-in against every environment
 
 Environments
+  Every environment your account can reach is found automatically (Discovery service),
+  next to the ones you saved. --env takes the short name, the display name or the URL.
   pcx env list [--json]                 Health, version, solutions, flows and plugin steps
-  pcx env discover [--json]              List every environment your account can reach
-  pcx env add <URL> [--unmanaged]       Name and short name are looked up for you
+  pcx env discover [--json]             List every environment your account can reach
+  pcx env add <URL> [--unmanaged]       Save one (name and short name are looked up for you)
   pcx env add <NAME> <URL> [--unmanaged]  (or choose the short name yourself)
-  pcx env remove <NAME>
+  pcx env remove <NAME>                 Remove a saved one, or hide a found one
+  pcx env unhide <URL>|--all            Show hidden environments again
+  pcx env create --name "Name" --region unitedkingdom [--type Sandbox|Production|Developer|Trial]
+                    [--domain url-name] [--currency GBP] [--language 1033]
+                    [--security-group <group-id>] [--description TEXT] [--no-wait] [--yes]
+                                        Create a new environment with a Dataverse database
+                                        (needs the Power Platform or Dynamics 365 admin role)
+
+Your access
+  pcx access [--env NAME]...            Your security roles in each environment and what
+                                        they let you change here
 
 Solutions
   pcx solution list [--env NAME]... [--publisher P]... [--include-microsoft]
@@ -94,9 +110,14 @@ Other
   pcx config set tenant <id-or-domain>  Sign in to a specific tenant (empty to clear)
   pcx config set provider azps|azcli    Sign in with PowerShell (default) or Azure CLI
   pcx config set teams-webhook <url>    Teams channel for alerts (empty to remove)
+  pcx config set discovery on|off       Find environments automatically (default on)
   --config FILE                         Use this config file (any command)
 
 Changes in managed environments (everything except unmanaged DEV) need --reason.
+Every change first checks your roles in that environment: flows, rules, plugin steps,
+unmanaged layers, table auditing, variables and jobs need System Administrator or
+System Customizer; organisation settings need System Administrator.
+--saved-only                            Skip the lookup and use only the saved environments.
 Config: ./pcx.config.json, or ~/.pcx/config.json, or the PCX_CONFIG variable.`;
 
 class UsageError extends Error {}
@@ -150,6 +171,14 @@ function opts(argv: string[]) {
       format: { type: "string" },
       out: { type: "string" },
       config: { type: "string" },
+      "saved-only": { type: "boolean" },
+      name: { type: "string" },
+      type: { type: "string" },
+      domain: { type: "string" },
+      currency: { type: "string" },
+      "security-group": { type: "string" },
+      description: { type: "string" },
+      "no-wait": { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" }
     }
@@ -163,7 +192,7 @@ function out(s: string): void {
 }
 
 function envsFrom(config: PcxConfig, names?: string[]): EnvConfig[] {
-  if (config.environments.length === 0) throw new UsageError("No environments configured. Add one: pcx env add DEV https://<org>.crm.dynamics.com --unmanaged");
+  if (config.environments.length === 0) throw new UsageError("No environments found. Sign in (pcx auth login), or add one: pcx env add https://<org>.crm.dynamics.com");
   return names && names.length ? names.map((n) => findEnv(config, n)) : config.environments;
 }
 
@@ -196,9 +225,10 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
     if (o.json) return out(JSON.stringify(res, null, 2)), 0;
     out(
       table(
-        ["NAME", "TYPE", "AUTH", "VERSION", "SOLUTIONS", "FLOWS ON", "PLUGIN STEPS ON", "URL"],
+        ["NAME", "DISPLAY NAME", "TYPE", "AUTH", "VERSION", "SOLUTIONS", "FLOWS ON", "PLUGIN STEPS ON", "URL"],
         res.map((r) => [
-          r.name,
+          r.name + (findEnv(config, r.name).discovered ? "" : c.dim(" (saved)")),
+          r.displayName ?? findEnv(config, r.name).label ?? "",
           r.managed ? "managed" : "unmanaged",
           r.connected ? c.green("connected") : c.red(r.needsLogin ? "sign-in needed" : "failed"),
           r.version ?? "-",
@@ -238,11 +268,96 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
   }
   if (sub === "remove") {
     const env = findEnv(config, pos[0] ?? "");
+    if (env.discovered) {
+      saveConfig({ ...config, hiddenEnvironments: [...(config.hiddenEnvironments ?? []), env.url] }, configPath);
+      out(`${c.green("✓")} Hidden ${env.label ?? env.name}. Show it again with: pcx env unhide ${env.url}`);
+      return 0;
+    }
     saveConfig({ ...config, environments: config.environments.filter((e) => e !== env) }, configPath);
     out(`${c.green("✓")} Removed ${env.name}`);
     return 0;
   }
-  throw new UsageError("Usage: pcx env list|discover|add|remove");
+  if (sub === "unhide") {
+    const hidden = config.hiddenEnvironments ?? [];
+    const keep = o.all ? [] : hidden.filter((u) => u !== normaliseEnvUrl(pos[0] ?? "", undefined));
+    if (!o.all && keep.length === hidden.length) throw new UsageError(hidden.length ? `Not hidden. Hidden: ${hidden.join(", ")}` : "Nothing is hidden.");
+    saveConfig({ ...config, hiddenEnvironments: keep }, configPath);
+    out(`${c.green("✓")} ${hidden.length - keep.length} environment(s) shown again`);
+    return 0;
+  }
+  if (sub === "create") return cmdEnvCreate(o, config, configPath);
+  throw new UsageError("Usage: pcx env list|discover|add|remove|unhide|create");
+}
+
+async function cmdEnvCreate(o: Opts, config: PcxConfig, configPath: string): Promise<number> {
+  if (!o.name || !o.region) {
+    throw new UsageError(`Usage: pcx env create --name "Name" --region <region> [--type ${ENV_TYPES.join("|")}] [--domain url-name] [--currency GBP] [--language 1033] [--yes]\nRegions: ${Object.keys(ENV_REGIONS).join(", ")}`);
+  }
+  const req = validateNewEnvironment({
+    displayName: o.name,
+    type: (o.type ?? "Sandbox") as never,
+    region: o.region,
+    domain: o.domain,
+    currency: o.currency,
+    language: o.language ? Number(o.language) : undefined,
+    securityGroupId: o["security-group"],
+    description: o.description
+  });
+  out(`${o["dry-run"] ? "Would create" : "Creating"} a ${c.bold(req.type)} environment:`);
+  out(`  Name      ${req.displayName}`);
+  out(`  Region    ${ENV_REGIONS[req.region]} (${req.region})`);
+  out(`  URL name  ${req.domain ?? c.dim("chosen by Power Platform")}`);
+  out(`  Currency  ${req.currency}   Language ${req.language}`);
+  if (req.securityGroupId) out(`  Access    members of security group ${req.securityGroupId}`);
+  if (o["dry-run"]) {
+    out(c.dim(JSON.stringify(createBody(req), null, 2)));
+    return 0;
+  }
+  if (!o.yes) {
+    out(c.yellow("This creates a new environment and uses Dataverse capacity. Re-run with --yes to go ahead."));
+    return 2;
+  }
+  const ws = new Workspace(config);
+  let created;
+  let error: string | undefined;
+  try {
+    created = await createEnvironment(ws.tokens, req, { noWait: !!o["no-wait"], onProgress: (m) => out(c.dim(m)) });
+  } catch (e) {
+    error = (e as Error).message;
+  }
+  appendAction({ at: new Date().toISOString(), env: req.displayName, action: `create ${req.type} environment in ${req.region}`, kind: "environment", id: created?.id ?? "", name: req.displayName, source: "cli", ok: !error, error });
+  if (error || !created) throw new Error(error ?? "Creating the environment failed");
+  if (created.state !== "Succeeded" || !created.url) {
+    out(`${c.green("✓")} Requested. Power Platform is still creating it; it will show in pcx env list once it's ready.`);
+    return 0;
+  }
+  out(`${c.green("✓")} Created ${req.displayName}: ${created.url}`);
+  if (config.discovery === false) {
+    const env = await environmentFromUrl(ws, created.url, { label: req.displayName });
+    saveConfig({ ...config, environments: [...config.environments, env] }, configPath);
+    out(`Saved as ${c.bold(env.name)}.`);
+  }
+  return 0;
+}
+
+async function cmdAccess(o: Opts, config: PcxConfig): Promise<number> {
+  const ws = new Workspace(config);
+  const res = await acrossEnvs(ws, envsFrom(config, o.env), (client) => getAccess(client, config.roles));
+  if (o.json) return out(JSON.stringify(res, null, 2)), 0;
+  const yes = (b: boolean) => (b ? c.green("yes") : c.dim("no"));
+  out(
+    table(
+      ["ENV", "YOU", "ROLES", "CHANGE COMPONENTS", "CHANGE SETTINGS"],
+      res.environments.map((n) => {
+        const a = res.results[n];
+        const env = findEnv(config, n);
+        if (!a) return [env.label ?? n, c.red("unreachable"), res.errors[n] ?? "", "-", "-"];
+        return [env.label ?? n, a.user, a.roles.join(", ") || c.dim("none"), yes(a.can.customize), yes(a.can.admin)];
+      })
+    )
+  );
+  out(c.dim(`Changing components needs ${PERMISSION_LABEL.customize}; changing settings needs ${PERMISSION_LABEL.admin}.`));
+  return 0;
 }
 
 async function cmdSolution(sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {
@@ -702,6 +817,14 @@ function cmdConfig(sub: string | undefined, pos: string[], config: PcxConfig, co
       out(`${c.green("✓")} Teams webhook ${value ? "saved" : "removed"}`);
       return 0;
     }
+    if (key === "discovery" && (value === "on" || value === "off")) {
+      const next: PcxConfig = { ...config };
+      if (value === "off") next.discovery = false;
+      else delete next.discovery;
+      saveConfig(next, configPath);
+      out(`${c.green("✓")} Finding environments automatically is ${value}`);
+      return 0;
+    }
     if (key === "provider" && (value === "azps" || value === "azcli")) {
       saveConfig({ ...config, auth: { provider: value } }, configPath);
       out(`${c.green("✓")} Sign-in provider set to ${value}`);
@@ -740,6 +863,12 @@ export async function main(argv: string[]): Promise<number> {
   const configPath = defaultConfigPath();
   try {
     const config = loadConfig(configPath);
+    // Find every environment the account can reach, except for commands that only manage the config.
+    const noLookup = ["auth", "config", "serve"].includes(cmd) || (cmd === "env" && ["add", "discover", "create", "unhide"].includes(sub ?? ""));
+    if (!noLookup && !o["saved-only"]) {
+      const d = await addDiscovered(config, new Workspace(config).tokens);
+      if (d.error && !o.json) process.stderr.write(c.dim(`Couldn't look up your environments (${d.error.split("\n")[0]}); using the saved ones.\n`));
+    }
     switch (cmd) {
       case "auth":
         return await cmdAuth(sub, o, config);
@@ -766,6 +895,8 @@ export async function main(argv: string[]): Promise<number> {
         return await cmdVars(sub, rest, o, config);
       case "connections":
         return await cmdConnections(o, config);
+      case "access":
+        return await cmdAccess(o, config);
       case "flows":
       case "rules":
       case "plugins":

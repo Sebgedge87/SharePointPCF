@@ -2,6 +2,7 @@ import { appendAction } from "./actionLog.js";
 import { checkPolicy } from "./components.js";
 import { assertGuid, type DataverseClient } from "./dataverse.js";
 import { mapLimit } from "./util.js";
+import { requireAccess } from "./access.js";
 
 /** The usersettings columns pcx manages. */
 export interface FormatSettings {
@@ -196,6 +197,7 @@ export async function applyUserSettings(
   log = appendAction
 ): Promise<ApplyResult> {
   checkPolicy(client.env, opts.reason);
+  await requireAccess(client, "admin", "change other people's user settings");
   const target = validateSettings(plan.target);
   plan.toChange.forEach((u) => assertGuid(u.id));
   const failed: ApplyResult["failed"] = [];

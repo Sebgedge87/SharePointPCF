@@ -39,7 +39,7 @@ test("managed environments need a reason; nothing is sent without one", async ()
 });
 
 test("changes are made one by one, partial failures reported, every attempt logged", async () => {
-  const f = fakeFetch((c) => (c.url.includes(ID2) ? { status: 403, body: { error: { message: "no privilege" } } } : { status: 204 }));
+  const f = fakeFetch((c) => (c.method === "GET" ? undefined : c.url.includes(ID2) ? { status: 403, body: { error: { message: "no privilege" } } } : { status: 204 }));
   const client = new DataverseClient(PROD, fakeTokens, { fetchImpl: f.fn });
   const logged: ActionEntry[] = [];
   const res = await changeState(client, { kind: "plugin", items: [{ id: ID1, name: "A" }, { id: ID2, name: "B" }], on: false, reason: "SAP outage", actor: "me", source: "dashboard" }, (e) => void logged.push(e));
@@ -49,11 +49,11 @@ test("changes are made one by one, partial failures reported, every attempt logg
   assert.equal(logged[0]!.reason, "SAP outage");
   assert.equal(logged[0]!.env, "PROD");
   assert.equal(logged[1]!.ok, false);
-  assert.equal(f.calls[0]!.url, `https://org.crm11.dynamics.com/api/data/v9.2/sdkmessageprocessingsteps(${ID1})`);
+  assert.equal(f.calls.filter((c) => c.method !== "GET")[0]!.url, `https://org.crm11.dynamics.com/api/data/v9.2/sdkmessageprocessingsteps(${ID1})`);
 });
 
 test("unmanaged DEV needs no reason", async () => {
-  const f = fakeFetch(() => ({ status: 204 }));
+  const f = fakeFetch((c) => (c.method === "GET" ? undefined : { status: 204 }));
   const res = await changeState(new DataverseClient(DEV, fakeTokens, { fetchImpl: f.fn }), { kind: "flow", items: [{ id: ID1, name: "A" }], on: true, source: "cli" }, () => {});
   assert.equal(res[0]!.ok, true);
 });

@@ -2,6 +2,7 @@ import { appendAction } from "./actionLog.js";
 import { checkPolicy } from "./components.js";
 import type { DataverseClient } from "./dataverse.js";
 import { fv, label, mapLimit } from "./util.js";
+import { requireAccess } from "./access.js";
 
 export interface SystemAudit {
   orgId: string;
@@ -123,6 +124,7 @@ export interface AuditChangeResult extends AuditChange {
  */
 export async function setAudit(client: DataverseClient, changes: AuditChange[], reason: string | undefined, actor: string | undefined, source: "cli" | "dashboard", log = appendAction): Promise<AuditChangeResult[]> {
   checkPolicy(client.env, reason);
+  await requireAccess(client, "customize", "change auditing on tables and columns");
   changes.forEach((c) => {
     assertLogical(c.table);
     if (c.column) assertLogical(c.column);
@@ -170,6 +172,7 @@ export async function setAudit(client: DataverseClient, changes: AuditChange[], 
 
 export async function setSystemAudit(client: DataverseClient, change: { auditEnabled?: boolean; userAccessAudit?: boolean }, reason: string | undefined, actor: string | undefined, source: "cli" | "dashboard", log = appendAction): Promise<void> {
   checkPolicy(client.env, reason);
+  await requireAccess(client, "admin", "change system auditing");
   const sys = await getSystemAudit(client);
   const body: Record<string, unknown> = {};
   if (change.auditEnabled !== undefined) body.isauditenabled = change.auditEnabled;

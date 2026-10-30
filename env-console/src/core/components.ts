@@ -2,6 +2,7 @@ import type { EnvConfig } from "./config.js";
 import { assertGuid, type DataverseClient } from "./dataverse.js";
 import { appendAction } from "./actionLog.js";
 import { isMicrosoftPublisher } from "./solutions.js";
+import { requireAccess } from "./access.js";
 
 export type ComponentKind = "flow" | "rule" | "plugin";
 
@@ -133,7 +134,8 @@ export function statePatch(kind: ComponentKind, on: boolean): { entitySet: strin
   return { entitySet: "workflows", body: on ? { statecode: 1, statuscode: 2 } : { statecode: 0, statuscode: 1 } };
 }
 
-export class PolicyError extends Error {}
+import { PolicyError } from "./errors.js";
+export { PolicyError };
 
 export interface ChangeRequest {
   kind: ComponentKind;
@@ -160,6 +162,7 @@ export function checkPolicy(env: EnvConfig, reason?: string): void {
 
 export async function changeState(client: DataverseClient, req: ChangeRequest, log = appendAction): Promise<ChangeResult[]> {
   checkPolicy(client.env, req.reason);
+  await requireAccess(client, "customize", `turn ${req.kind === "plugin" ? "plugin steps" : req.kind === "rule" ? "business rules" : "flows"} on or off`);
   req.items.forEach((i) => assertGuid(i.id));
   const { entitySet, body } = statePatch(req.kind, req.on);
   const results: ChangeResult[] = [];

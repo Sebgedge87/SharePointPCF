@@ -139,9 +139,31 @@ function needsReason(envName, state) {
   }
   return false;
 }
-function switchButton(on, label, onClick) {
-  return h("button", { type: "button", class: "switch", role: "switch", "aria-checked": on ? "true" : "false", "aria-label": label, onclick: onClick }, h("span", { class: "track" }, h("span", { class: "knob" })));
+function switchButton(on, label, onClick, disabledReason = null) {
+  return h("button", { type: "button", class: "switch", role: "switch", "aria-checked": on ? "true" : "false", "aria-label": label, onclick: onClick, disabled: disabledReason ? true : null, title: disabledReason }, h("span", { class: "track" }, h("span", { class: "knob" })));
 }
+
+// ------------------------------------------------------------------ your access (security roles per environment)
+
+let accessData = null;
+async function loadAccess(force) {
+  if (!accessData || force) {
+    try { accessData = await api("/api/access/all"); } catch { accessData = { results: {}, errors: {} }; }
+  }
+  return accessData;
+}
+/** true / false, or null while unknown. */
+function canChange(env, perm = "customize") {
+  const a = accessData?.results?.[env];
+  return a ? a.can[perm] : null;
+}
+function accessSummary(a) {
+  if (a.isAdmin) return { text: "System Administrator", cls: "info" };
+  if (a.isCustomizer) return { text: "System Customizer", cls: "info" };
+  if (a.can.customize) return { text: a.can.admin ? "Full access" : "Can change components", cls: "info" };
+  return { text: "Read only", cls: "warn" };
+}
+const NO_ROLE = (env) => `You need the System Administrator or System Customizer role in ${envLabel(env)} to change this`;
 const tip = () => document.getElementById("tip");
 function showTip(ev, title, rows) {
   const t = tip();
@@ -302,7 +324,8 @@ function signIn() {
     stop();
     show(h("div", { class: "row" }, h("span", { class: "dot ok" }), h("strong", {}, "Signed in")), h("p", { class: "muted", style: "margin:0" }, "Loading your environments…"));
     acctState.user = null;
-    setTimeout(() => { dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." }; overview(); refreshAlertBadge(); }, 900);
+    accessData = null;
+    setTimeout(async () => { dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." }; try { await reloadConfig(); } catch { /* keep the old list */ } overview(); refreshAlertBadge(); }, 900);
   };
   const failed = (msg, output) => {
     stop();
@@ -361,8 +384,8 @@ async function signOut() {
   catch (err) { acctState.notice = { kind: "bad", text: err.message }; }
   overview();
 }
-async function reloadConfig() {
-  config = await api("/api/config");
+async function reloadConfig(refresh) {
+  config = await api(`/api/config${refresh ? "?refresh=1" : ""}`);
   solState.data = null;
 }
 function accountBar() {
@@ -403,7 +426,11 @@ function manageEnvironments() {
     } catch (err) { fail(err); addBtn.disabled = false; addBtn.textContent = "Add environment"; }
   };
   const remove = async (n) => {
-    if (!(await confirmDialog({ title: `Remove ${n}?`, message: `${n} is removed from the console only. Nothing changes in the environment itself, and you can add it back at any time.`, confirmText: "Remove", danger: true }))) return;
+    const found = config.environments.find((e) => e.name === n)?.discovered;
+    const ok = found
+      ? await confirmDialog({ title: `Hide ${envLabel(n)}?`, message: `${envLabel(n)} won't be listed here any more. Nothing changes in the environment itself. Show it again with: pcx env unhide <its URL>.`, confirmText: "Hide" })
+      : await confirmDialog({ title: `Remove ${envLabel(n)}?`, message: `${envLabel(n)} is removed from the console only. Nothing changes in the environment itself, and you can add it back at any time.`, confirmText: "Remove", danger: true });
+    if (!ok) return;
     try { await api("/api/account/env/remove", { name: n }); await reloadConfig(); overview(); } catch (err) { fail(err); }
   };
   const saveTenant = async () => {
@@ -413,19 +440,34 @@ function manageEnvironments() {
   const details = h("details", { class: "card", open: config.environments.length === 0 || acctState.open ? true : null },
     h("summary", { style: "cursor:pointer;font:600 15px var(--head)" }, `Manage environments (${config.environments.length})`),
     h("div", { class: "stack", style: "margin-top:14px" },
-      h("div", { class: "row between" },
-        h("div", { class: "small muted" }, "Pick from the environments your account can reach, or paste a URL below."),
-        h("button", { type: "button", class: "btn primary", disabled: acctState.finding, onclick: findEnvironments }, acctState.finding ? "Looking…" : "Find my environments")),
-      foundTable(),
+      config.discovery
+        ? h("div", { class: "row between" },
+            h("div", { class: "small muted", style: "max-width:70ch" }, "Every environment your account can reach is listed automatically. Save one to keep its settings (type, display name); hide the ones you don't need."),
+            h("div", { class: "row" },
+              h("button", { type: "button", class: "btn", onclick: async () => { try { await reloadConfig(true); accessData = null; overview(); } catch (err) { fail(err); } } }, "Refresh list"),
+              config.canCreate ? h("button", { type: "button", class: "btn primary", onclick: createEnvironmentDialog }, "Create environment") : null))
+        : h("div", { class: "row between" },
+            h("div", { class: "small muted" }, "Pick from the environments your account can reach, or paste a URL below."),
+            h("div", { class: "row" },
+              h("button", { type: "button", class: "btn primary", disabled: acctState.finding, onclick: findEnvironments }, acctState.finding ? "Looking…" : "Find my environments"),
+              config.canCreate ? h("button", { type: "button", class: "btn", onclick: createEnvironmentDialog }, "Create environment") : null)),
+      config.discoveryError ? notice("warn", `Couldn't list your environments automatically: ${config.discoveryError}`) : null,
+      config.discovery ? null : foundTable(),
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
-        h("thead", {}, h("tr", {}, ["Display name", "Short name (for pcx --env)", "URL", "Type", ""].map((t) => h("th", { scope: "col" }, t)))),
+        h("thead", {}, h("tr", {}, ["Display name", "Short name (for pcx --env)", "URL", "Type", "Source", ""].map((t) => h("th", { scope: "col" }, t)))),
         h("tbody", {}, config.environments.map((e) => {
           const label = h("input", { class: "input", value: e.label || "", placeholder: e.name, maxlength: 100, "aria-label": `Display name for ${e.name}`, style: "min-width:200px" });
           label.addEventListener("change", async () => {
             try { await api("/api/account/env/label", { name: e.name, label: label.value }); await reloadConfig(); overview(); } catch (err) { fail(err); }
           });
+          const save = async () => {
+            try { await api("/api/account/env", { url: e.url, label: e.label || undefined, name: e.name, managed: e.managed }); await reloadConfig(); overview(); } catch (err) { fail(err); }
+          };
           return h("tr", {}, h("td", {}, label), h("td", {}, h("span", { class: "chip", style: `background:${envColor(e.name)}` }, e.name)), h("td", { style: "max-width:320px" }, envLink(e.url)), h("td", { class: "small" }, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
-            h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, "Remove")));
+            h("td", { class: "small" }, e.discovered ? h("span", { class: "pill" }, "Found") : h("span", { class: "pill info" }, "Saved")),
+            h("td", {}, h("div", { class: "row", style: "justify-content:flex-end;flex-wrap:nowrap;gap:6px" },
+              e.discovered ? h("button", { type: "button", class: "btn sm", onclick: save, title: "Keep it in your config, so its short name and type stay as they are" }, "Save") : null,
+              h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, e.discovered ? "Hide" : "Remove"))));
         })))) : null,
       h("form", { class: "row", style: "align-items:flex-end", onsubmit: add },
         h("label", { class: "field", style: "flex:1" }, h("span", {}, "Environment URL (its name is looked up for you)"), url),
@@ -437,6 +479,83 @@ function manageEnvironments() {
       status));
   details.addEventListener("toggle", () => { acctState.open = details.open; });
   return details;
+}
+
+/** "Your access" line on an environment card. */
+async function accessLine(accessP, env) {
+  const d = await accessP;
+  const a = d.results?.[env];
+  if (!a) return d.errors?.[env] ? h("div", { class: "small muted" }, "Couldn't read your roles here.") : null;
+  const s = accessSummary(a);
+  return h("div", { class: "row small", style: "flex-wrap:nowrap;min-width:0" },
+    h("span", { class: `pill ${s.cls}`, title: a.can.customize ? (a.can.admin ? "You can change components and settings here" : "You can change components here, not organisation settings") : "You can look, but not change anything here" }, s.text),
+    h("span", { class: "muted truncate", title: a.roles.join(", ") }, a.roles.filter((r) => !/^(System Administrator|System Customizer)$/.test(r)).join(", ")));
+}
+
+/** Create a new environment (Power Platform admin API); shows progress until it's ready. */
+async function createEnvironmentDialog() {
+  let opts;
+  try { opts = await api("/api/account/env/create/options"); } catch (err) { return messageDialog("Can't create environments here", err.message); }
+  const name = h("input", { class: "input", maxlength: 100, required: true, placeholder: "e.g. FormusPro UAT 2" });
+  const type = h("select", { class: "input" }, opts.types.map((t) => h("option", { value: t }, t)));
+  const region = h("select", { class: "input" }, Object.entries(opts.regions).map(([k, v]) => h("option", { value: k }, v)));
+  const domain = h("input", { class: "input", placeholder: "Optional: chosen for you if empty", pattern: "[A-Za-z][A-Za-z0-9-]*[A-Za-z0-9]" });
+  const currency = h("input", { class: "input", value: "GBP", maxlength: 3, style: "width:90px" });
+  const language = h("input", { class: "input", value: "1033", inputmode: "numeric", style: "width:110px" });
+  const group = h("input", { class: "input", placeholder: "Optional: Entra security group object ID" });
+  const desc = h("input", { class: "input", maxlength: 500, placeholder: "Optional" });
+  const status = h("div", { role: "status", class: "small" });
+  const submit = h("button", { type: "submit", class: "btn primary" }, "Create environment");
+  const body = h("div", { class: "modal-body" });
+  const dlg = h("dialog", { class: "modal", "aria-labelledby": "create-title", style: "width:min(560px, calc(100vw - 32px))" },
+    h("div", { class: "modal-head" }, h("h2", { id: "create-title" }, "Create environment"), h("button", { type: "button", class: "iconbtn", "aria-label": "Close", onclick: () => dlg.close() }, "×")),
+    body);
+  let poll = null;
+  const field = (label, el) => h("label", { class: "field" }, h("span", {}, label), el);
+  const form = h("form", { class: "stack", onsubmit: async (ev) => {
+    ev.preventDefault();
+    const req = { displayName: name.value.trim(), type: type.value, region: region.value, domain: domain.value.trim(), currency: currency.value.trim(), language: language.value.trim(), securityGroupId: group.value.trim(), description: desc.value.trim() };
+    const sure = await confirmDialog({ title: `Create ${req.displayName || "this environment"}?`, message: `A new ${req.type} environment with a Dataverse database will be created in ${opts.regions[req.region]}. It uses your tenant's Dataverse capacity and usually takes a few minutes.`, confirmText: "Create" });
+    if (!sure) return;
+    submit.disabled = true;
+    status.textContent = "";
+    try { await api("/api/account/env/create", req); }
+    catch (err) { status.textContent = err.message; status.style.color = "var(--bad-text)"; submit.disabled = false; return; }
+    const lines = h("div", { class: "small muted stack", style: "gap:4px" });
+    body.replaceChildren(h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), h("strong", {}, `Creating ${req.displayName}…`)), lines,
+      h("p", { class: "small muted", style: "margin:0" }, "You can close this window; it carries on in the background and the environment appears in the list when it's ready."));
+    poll = setInterval(async () => {
+      let st;
+      try { st = await api("/api/account/env/create/status"); } catch { return; }
+      lines.replaceChildren(...(st.messages || []).map((m) => h("div", {}, m)));
+      if (st.state === "done") {
+        clearInterval(poll); poll = null;
+        const r = st.result || {};
+        body.replaceChildren(
+          r.url ? notice("ok", `${req.displayName} is ready.`) : notice("info", `${req.displayName} was requested. Power Platform is still setting it up; it will appear in the list when it's ready.`),
+          r.url ? envLink(r.url) : null,
+          h("div", { class: "row" }, h("button", { type: "button", class: "btn primary", onclick: () => dlg.close() }, "Done")));
+        try { await reloadConfig(true); accessData = null; } catch { /* list refreshes later */ }
+      } else if (st.state === "failed") {
+        clearInterval(poll); poll = null;
+        body.replaceChildren(notice("bad", st.error || "Creating the environment failed."), h("div", { class: "row" }, h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, "Close")));
+      }
+    }, 3000);
+  } },
+    field("Name", name),
+    h("div", { class: "row", style: "align-items:flex-end" }, field("Type", type), field("Region", region)),
+    field("URL name (the first part of its address)", domain),
+    h("div", { class: "row", style: "align-items:flex-end" }, field("Currency", currency), field("Language (code)", language)),
+    field("Security group", group),
+    field("Description", desc),
+    h("p", { class: "small muted", style: "margin:0" }, "Needs the Power Platform administrator or Dynamics 365 administrator role, unless your tenant lets everyone create environments."),
+    status,
+    h("div", { class: "row" }, submit, h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, "Cancel")));
+  body.append(form);
+  dlg.addEventListener("close", () => { if (poll) clearInterval(poll); dlg.remove(); overview(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  name.focus();
 }
 
 /** The environment's address as a link that opens it in a new tab. */
@@ -472,6 +591,7 @@ async function overview() {
   }, () => alertBox.remove());
   let anyLogin = false;
   let learned = false;
+  const accessP = loadAccess(true);
   await Promise.all(config.environments.map(async (e) => {
     const card = cards.get(e.name);
     let st;
@@ -490,6 +610,7 @@ async function overview() {
            h("div", {}, h("dt", {}, "Flows on"), h("dd", {}, st.flowsTotal !== undefined ? [fmtNum(st.flowsOn), h("span", { class: "of" }, ` / ${fmtNum(st.flowsTotal)}`)] : "—")),
            h("div", {}, h("dt", {}, "Plugin steps on"), h("dd", {}, st.pluginStepsTotal !== undefined ? [fmtNum(st.pluginStepsOn), h("span", { class: "of" }, ` / ${fmtNum(st.pluginStepsTotal)}`)] : "—"))),
          st.error ? h("div", { class: "small muted" }, st.error) : null,
+         await accessLine(accessP, e.name),
          h("div", { class: "row small" }, h("a", { href: "#/components" }, "Flows & plugins"), h("a", { href: `#/runs${q}` }, "Run history"), h("a", { href: "#/jobs" }, "Background jobs"))]
       : [h("div", { class: "row small" }, h("span", { class: "dot bad" }), h("strong", {}, st.needsLogin ? "Sign-in needed" : "Not reachable")), h("div", { class: "small muted" }, st.needsLogin && config.canManage ? "You're not signed in, or the sign-in has expired." : st.error || ""),
          config.canManage ? h("button", { type: "button", class: "btn sm primary", disabled: acctState.busy, onclick: signIn }, "Sign in") : config.mode === "hosted" ? h("a", { class: "btn sm", href: "/auth/login?returnTo=%2F%23%2Foverview" }, "Sign in again") : null];
@@ -806,7 +927,7 @@ async function components(params) {
   compState.sel.clear();
   compState.data = null;
   renderComponents();
-  try { compState.data = await api(`/api/components/all?kind=${compState.kind}${compState.all ? "&all=1" : ""}`); }
+  try { [compState.data] = await Promise.all([api(`/api/components/all?kind=${compState.kind}${compState.all ? "&all=1" : ""}`), loadAccess()]); }
   catch (err) { compState.data = { error: err.message }; }
   renderComponents();
 }
@@ -880,7 +1001,7 @@ function renderComponents() {
             names.map((n) => {
               const c = r.cells[n];
               if (!c) return h("td", { class: "envcol muted" }, "—");
-              return h("td", { class: `envcol${states.size > 1 ? " differs" : ""}` }, switchButton(c.on, `${c.on ? "Turn off" : "Turn on"} ${r.name} in ${n}`, () => setStates([r], [n], !c.on)));
+              return h("td", { class: `envcol${states.size > 1 ? " differs" : ""}` }, switchButton(c.on, `${c.on ? "Turn off" : "Turn on"} ${r.name} in ${n}`, () => setStates([r], [n], !c.on), canChange(n) === false ? NO_ROLE(n) : null));
             }));
         }))))),
     h("p", { class: "small muted", style: "margin:0" }, "Highlighted rows are on in some environments and off in others. — means it isn't in that environment. Every change is logged on the Activity page."));
@@ -1604,7 +1725,11 @@ const CLI_COMMANDS = [
     ["env list", "Health, version, solutions, flows and plugin steps per environment", "env list"],
     ["env discover", "Every environment your account can reach", "env discover"],
     ["env add <URL>", "Add an environment by URL; its name is looked up", "env add https://contoso-uat.crm4.dynamics.com"],
-    ["env remove <NAME>", "Remove an environment from the console", "env remove UAT"],
+    ["env remove <NAME>", "Remove a saved environment, or hide a found one", "env remove UAT"],
+    ["env unhide <URL> | --all", "Show hidden environments again", "env unhide --all"],
+    ["env create --name <N> --region <R>", "Create an environment (add --yes to go ahead; --dry-run to preview)", "env create --name \"FormusPro UAT 2\" --region unitedkingdom --dry-run"],
+    ["access", "Your roles in every environment and what they let you change", "access"],
+    ["config set discovery on|off", "Find environments automatically (on by default)", "config set discovery on"],
     ["config path", "Which config file is in use", "config path"],
     ["config set tenant <id-or-domain>", "Sign in to a specific tenant", "config set tenant contoso.onmicrosoft.com"]
   ] },

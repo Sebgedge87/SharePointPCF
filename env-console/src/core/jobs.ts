@@ -2,6 +2,7 @@ import { appendAction } from "./actionLog.js";
 import { checkPolicy } from "./components.js";
 import { assertGuid, type DataverseClient } from "./dataverse.js";
 import { fv, mapLimit } from "./util.js";
+import { requireAccess } from "./access.js";
 
 /** asyncoperation.statecode: 0 Ready, 1 Suspended, 2 Locked (in progress), 3 Completed */
 export type JobProblem = "failed" | "suspended" | "waiting" | "long-running";
@@ -67,6 +68,7 @@ export async function changeJobs(
   log = appendAction
 ): Promise<{ id: string; name: string; ok: boolean; error?: string }[]> {
   checkPolicy(client.env, opts.reason);
+  await requireAccess(client, "customize", `${action} background jobs`);
   jobs.forEach((j) => assertGuid(j.id));
   return mapLimit(jobs, 4, async (j) => {
     let ok = true;

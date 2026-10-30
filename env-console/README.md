@@ -112,7 +112,48 @@ pcx never stores passwords or tokens on disk. When it needs to call an environme
 
 Tokens are kept in memory and reused until five minutes before they expire. To sign in as someone else, run `Connect-AzAccount` again (or `pcx auth login`) and restart `pcx serve`.
 
-Tokens are only requested for, and sent to, Dataverse hosts (`*.dynamics.com` and the sovereign-cloud equivalents). Any other URL is refused when you add the environment.
+Tokens are only requested for, and sent to, Dataverse hosts (`*.dynamics.com` and the sovereign-cloud equivalents). Any other URL is refused when you add the environment. The one exception is creating environments, which uses a token for the Power Platform admin API (`https://service.powerapps.com/`) that is only ever sent to `api.bap.microsoft.com`.
+
+## Which environments are listed
+
+Every environment your account can reach is found automatically through the Dataverse Discovery service, so you don't have to add them one by one. They sit next to any you saved in the config:
+
+- **Found** environments are looked up fresh each time and never written to the config file. Their short name comes from their display name, and `--env` also accepts the display name or the URL.
+- **Save** one (dashboard: Manage environments › Save, or `pcx env add <URL>`) to fix its short name and type (managed or unmanaged).
+- **Hide** the ones you don't need (dashboard: Hide, or `pcx env remove <NAME>`). `pcx env unhide <URL>` or `--all` shows them again.
+- `pcx config set discovery off` switches the lookup off; `--saved-only` skips it for one command.
+
+## Roles: who can change what
+
+Before any change, pcx reads your security roles in that environment (direct and through teams) and refuses the change if they don't allow it. Nothing is sent to Dataverse when the change is refused, and the message names the role you need. Roles are recognised by their built-in template, so renamed or translated roles still count.
+
+| Change | Needs |
+|---|---|
+| Turn flows, business rules or plugin steps on or off | System Administrator or System Customizer |
+| Remove unmanaged changes, table and column auditing, environment variables, cancel or resume jobs | System Administrator or System Customizer |
+| System auditing, plugin trace log setting, other people's user settings | System Administrator |
+
+`pcx access` shows your roles and what they allow in every environment; the dashboard shows the same on each environment card and greys out switches you can't use. To let a custom role make changes too, list it in the config:
+
+```json
+"roles": { "customize": ["Release Manager"], "admin": [] }
+```
+
+Dataverse still checks its own privileges on every call, so this is an extra gate, not a replacement.
+
+## Creating environments
+
+`pcx env create` (or **Create environment** under Manage environments in the dashboard) creates a new environment with a Dataverse database through the Power Platform admin API, waits until it's ready, and lists it.
+
+```bash
+pcx env create --name "FormusPro UAT 2" --region unitedkingdom --type Sandbox --domain fp-uat2 --dry-run
+pcx env create --name "FormusPro UAT 2" --region unitedkingdom --type Sandbox --domain fp-uat2 --yes
+```
+
+- Types: Sandbox (default), Production, Developer, Trial. Currency defaults to GBP, language to 1033 (English). `--security-group <object-id>` limits access to one Entra group.
+- It needs the Power Platform administrator or Dynamics 365 administrator role, unless your tenant lets everyone create environments. A refusal says so.
+- It uses Dataverse capacity, so it only runs with `--yes` (the dashboard asks you to confirm). `--dry-run` prints the request without sending it.
+- Each attempt is written to the activity log. It isn't available on the hosted site yet.
 
 ## Configuration
 
@@ -135,6 +176,9 @@ pcx reads `./pcx.config.json` if it exists, then `~/.pcx/config.json`, or the fi
 | `auth.provider` | `azps` (PowerShell, the default) or `azcli`. |
 | `environments[].managed` | `true` means every change needs a reason. Defaults to `true`. |
 | `allowedHostSuffixes` | Optional extra host endings for sovereign clouds, for example `[".crm.microsoftdynamics.us"]`. |
+| `discovery` | `false` turns off finding environments automatically. On by default. |
+| `hiddenEnvironments` | URLs of found environments you've hidden. |
+| `roles` | Extra role names that may make changes: `{ "customize": [...], "admin": [...] }`. |
 
 ## Commands
 
@@ -142,14 +186,18 @@ pcx reads `./pcx.config.json` if it exists, then `~/.pcx/config.json`, or the fi
 pcx auth login [--device-code]
 pcx auth status
 pcx env list [--json]
-pcx env add <NAME> <URL> [--unmanaged]
+pcx env add <URL> [--unmanaged]
 pcx env remove <NAME>
+pcx env unhide <URL>|--all
+pcx env create --name "Name" --region <region> [--type Sandbox|Production|Developer|Trial] [--domain url-name] [--currency GBP] [--language 1033] [--security-group <id>] [--dry-run] [--yes]
+pcx access [--env NAME]...
 pcx solution list [--env NAME]... [--publisher P]... [--include-microsoft] [--diff-only] [--search TEXT] [--json]
 pcx flows|rules|plugins list --env NAME [--off] [--json]
 pcx flows|rules|plugins on|off --env NAME (<name-or-id>... | --filter TEXT | --all) [--reason TEXT] [--dry-run] [--yes]
 pcx serve [--port 4820] [--open]
 pcx config set tenant <id-or-domain>
 pcx config set provider azps|azcli
+pcx config set discovery on|off
 pcx config path
 ```
 
@@ -164,6 +212,7 @@ pcx plugins on --env PROD AccountPreUpdate --reason "Fix deployed, CHG-456"
 
 Rules for changes:
 
+- Your roles in the environment must allow the change (see Roles above).
 - In a managed environment, `--reason` is required.
 - Changing more than one item in a managed environment also needs `--yes`.
 - `--dry-run` shows what would change without changing it.
@@ -234,6 +283,7 @@ Start command: `node dist/src/cli/index.js serve`. Health check path: `/healthz`
 
 - Sign-in sessions are kept in memory. Restarting the app signs everyone out, and it should run as one instance (B1 does). Shared sessions would be needed to scale out.
 - The activity log is a file on the app's shared storage. Moving it to a Dataverse or Azure table is a planned improvement.
+- Environments come from the config only; finding them automatically and creating them are local-only for now.
 - The client secret sits in app settings. A Key Vault reference, or a managed identity with federated credentials, is the stronger option.
 
 ## Development

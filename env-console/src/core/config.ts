@@ -13,6 +13,8 @@ export interface EnvConfig {
   url: string;
   /** Managed environments (everything after DEV) require a reason for every change. */
   managed: boolean;
+  /** Found through the Discovery service rather than saved in the config. Never written to disk. */
+  discovered?: boolean;
 }
 
 export interface PcxConfig {
@@ -24,6 +26,12 @@ export interface PcxConfig {
   allowedHostSuffixes?: string[];
   /** Where `pcx alerts run --post` sends new alerts. */
   alerts?: { teamsWebhook?: string };
+  /** List every environment the signed-in user can reach (Discovery service). On unless set to false. */
+  discovery?: boolean;
+  /** Discovered environments the user chose to hide (their URLs). */
+  hiddenEnvironments?: string[];
+  /** Extra role names that also allow changes, besides System Administrator / System Customizer. */
+  roles?: { customize?: string[]; admin?: string[] };
 }
 
 /** Tokens are only ever requested for, and sent to, hosts ending in one of these. */
@@ -49,6 +57,16 @@ export function defaultConfigPath(): string {
 
 export function emptyConfig(): PcxConfig {
   return { auth: { provider: "azps" }, environments: [] };
+}
+
+/** Non-Dataverse APIs tokens may be requested for (exact match only): the Power Platform admin API. */
+export const API_RESOURCES = ["https://service.powerapps.com/"];
+
+/** A token resource: one of API_RESOURCES as-is, otherwise it must be a Dataverse environment URL. */
+export function normaliseResource(raw: string, suffixes?: string[]): string {
+  const t = raw.trim();
+  if (API_RESOURCES.includes(t)) return t;
+  return normaliseEnvUrl(t, suffixes);
 }
 
 export function normaliseEnvUrl(raw: string, suffixes: string[] = DEFAULT_HOST_SUFFIXES): string {
@@ -97,6 +115,7 @@ export function validateConfig(input: unknown): PcxConfig {
     seen.add(key);
     if (typeof r.url !== "string") throw new ConfigError(`environments[${i}].url is required`);
     const env: EnvConfig = { name: r.name, url: normaliseEnvUrl(r.url, suffixes), managed: r.managed === undefined ? true : r.managed === true };
+    if (r.discovered === true) env.discovered = true;
     if (r.label !== undefined && r.label !== null && r.label !== "") {
       // eslint-disable-next-line no-control-regex
       if (typeof r.label !== "string" || r.label.length > 100 || /[\u0000-\u001f]/.test(r.label)) throw new ConfigError(`environments[${i}].label must be text of up to 100 characters`);
@@ -117,6 +136,21 @@ export function validateConfig(input: unknown): PcxConfig {
     if (u.protocol !== "https:") throw new ConfigError("alerts.teamsWebhook must use https");
     out.alerts = { teamsWebhook: u.toString() };
   }
+  if (c.discovery === false) out.discovery = false;
+  if (c.hiddenEnvironments !== undefined) {
+    if (!Array.isArray(c.hiddenEnvironments)) throw new ConfigError("hiddenEnvironments must be a list of URLs");
+    out.hiddenEnvironments = [...new Set((c.hiddenEnvironments as unknown[]).map((u) => normaliseEnvUrl(String(u), suffixes)))];
+  }
+  if (c.roles !== undefined) {
+    const r = c.roles as Record<string, unknown>;
+    const list = (v: unknown, k: string) => {
+      if (v === undefined) return undefined;
+      if (!Array.isArray(v) || !v.every((x) => typeof x === "string" && x.trim() && x.length <= 100)) throw new ConfigError(`roles.${k} must be a list of role names`);
+      return (v as string[]).map((x) => x.trim());
+    };
+    const roles = { customize: list(r?.customize, "customize"), admin: list(r?.admin, "admin") };
+    if (roles.customize || roles.admin) out.roles = JSON.parse(JSON.stringify(roles));
+  }
   if (tenantId) out.tenantId = tenantId;
   if (c.allowedHostSuffixes) out.allowedHostSuffixes = c.allowedHostSuffixes as string[];
   return out;
@@ -134,13 +168,26 @@ export function loadConfig(path = defaultConfigPath()): PcxConfig {
 }
 
 export function saveConfig(config: PcxConfig, path = defaultConfigPath()): void {
-  const valid = validateConfig(config);
+  // Discovered environments are looked up fresh each time, not saved.
+  const valid = validateConfig({ ...config, environments: config.environments.filter((e) => !e.discovered) });
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileSync(path, JSON.stringify(valid, null, 2) + "\n", { mode: 0o600 });
 }
 
+/** Finds an environment by short name, display name or URL. */
 export function findEnv(config: PcxConfig, name: string): EnvConfig {
-  const env = config.environments.find((e) => e.name.toUpperCase() === name.toUpperCase());
+  const want = name.trim().toUpperCase();
+  const host = (() => {
+    try {
+      return new URL(name.includes("://") ? name : `https://${name}`).hostname.toUpperCase();
+    } catch {
+      return "";
+    }
+  })();
+  const env =
+    config.environments.find((e) => e.name.toUpperCase() === want) ??
+    config.environments.find((e) => e.label?.toUpperCase() === want) ??
+    config.environments.find((e) => host.includes(".") && new URL(e.url).hostname.toUpperCase() === host);
   if (!env) {
     const known = config.environments.map((e) => e.name).join(", ") || "none configured";
     throw new ConfigError(`Unknown environment "${name}". Known: ${known}`);

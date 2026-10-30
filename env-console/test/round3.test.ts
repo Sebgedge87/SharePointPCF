@@ -123,13 +123,14 @@ test("connection references report whether a connection is set", async () => {
 });
 
 test("removing an unmanaged change calls RemoveActiveCustomizations with the component's name", async () => {
-  const f = fakeFetch(() => ({ status: 204 }));
+  const f = fakeFetch((c) => (c.method === "GET" ? undefined : { status: 204 }));
   const client = new DataverseClient(PROD, fakeTokens, { fetchImpl: f.fn });
+  const writes = () => f.calls.filter((c) => c.method !== "GET");
   const FORM = "d0000000-0000-0000-0000-000000000001";
   await assert.rejects(removeUnmanagedLayer(client, 60, FORM, "Case form", { source: "dashboard" }, noLog), PolicyError);
   await removeUnmanagedLayer(client, 60, FORM, "Case form", { reason: "hotfix moved to DEV", source: "dashboard" }, noLog);
-  assert.ok(f.calls[0]!.url.endsWith("RemoveActiveCustomizations"));
-  assert.deepEqual(JSON.parse(f.calls[0]!.body!), { SolutionComponentName: "SystemForm", ComponentId: FORM });
+  assert.ok(writes()[0]!.url.endsWith("RemoveActiveCustomizations"));
+  assert.deepEqual(JSON.parse(writes()[0]!.body!), { SolutionComponentName: "SystemForm", ComponentId: FORM });
   await assert.rejects(removeUnmanagedLayer(client, 300, FORM, "Canvas", { reason: "x y z", source: "dashboard" }, noLog), /maker portal/);
 });
 
