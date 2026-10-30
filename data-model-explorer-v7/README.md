@@ -14,7 +14,7 @@ The Dynamics 365 solution defaults to the publisher `DataModelExplorer` with the
 | `dist/Data_Model_Explorer.html` (copied to `Data_Model_Explorer.html`) | Opened as a file, and built into the XrmToolBox tool: one file with everything inlined |
 | `dist/web/` | The Dataverse solution: `DataModelExplorer.html` (layout, styles, template), `app.js` (the code) and `lib/` (SheetJS, ExcelJS, JSZip) |
 
-`DataModelExplorer_7_0_0_0.zip` packages `dist/web` as five web resources (`npm run webresource`, or
+`DataModelExplorer_7_1_0_0.zip` packages `dist/web` as five web resources (`npm run webresource`, or
 `python3 tools/make-webresource-solution.py --single` for the one-file page as before). A new version then only
 replaces the files that changed, the browser keeps the libraries cached, and the code can be reviewed file by file.
 The page and `app.js` carry the same build id (version plus a hash of the code and libraries), and the script tags ask
@@ -36,7 +36,7 @@ the connected environment's address, so the page runs in its "inside Dynamics 36
 
 ### Try it without building
 
-`xrmtoolbox/release/DataModelExplorer.XrmToolBox.dll` is the tool, ready built (7.0.0, for XrmToolBox
+`xrmtoolbox/release/DataModelExplorer.XrmToolBox.dll` is the tool, ready built (7.1.0, for XrmToolBox
 1.2025.10 or later).
 
 1. Download it, right-click it → **Properties** → tick **Unblock** → OK. (Windows marks downloaded files, and XrmToolBox

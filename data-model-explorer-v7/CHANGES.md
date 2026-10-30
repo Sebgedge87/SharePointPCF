@@ -1,10 +1,14 @@
+# 7.1.0
+
+- **Several environments in XrmToolBox.** Add environments as extra XrmToolBox connections (**This environment → Other environments → Add environment…**), then **Check this workbook against all** of them side by side, or **Compare** a solution across them to find drift: tables and columns missing somewhere or set differently. Results page with filter, differences only and CSV.
+- **ERD: move several tables at once.** **Select all** (or `Ctrl`+`A`), `Ctrl`+click to add a table, or `Shift`+drag a box; dragging a selected table moves them all. `Esc` or a background click clears.
+- The XrmToolBox tool is rebuilt with this page (`xrmtoolbox/release`, 7.1.0).
+
 # 7.0.0
 
 New folder (`data-model-explorer-v7`), from 6.0.1.
 
 - **Dark mode.** The page follows the system's light or dark setting. The theme button in the header (beside ?) cycles Automatic, Dark and Light, and the choice is kept in the browser. The ERD on the page follows the theme; exported ERD images and draw.io files keep their light colours.
-- **Several environments in XrmToolBox.** Add environments as extra XrmToolBox connections (**This environment → Other environments → Add environment…**), then **Check this workbook against all** of them side by side, or **Compare** a solution across them to find drift: tables and columns missing somewhere or set differently. Results page with filter, differences only and CSV.
-- **ERD: move several tables at once.** **Select all** (or `Ctrl`+`A`), `Ctrl`+click to add a table, or `Shift`+drag a box; dragging a selected table moves them all. `Esc` or a background click clears.
 - **Generic.** No company logo or name anywhere: the page, the guide, the template (its comment columns are now **Comments**), the example workbook (prefix `sample_`), the Dynamics 365 solution (`DataModelExplorer_7_0_0_0.zip`, publisher `DataModelExplorer`, prefix `dme`, so the page opens at `/WebResources/dme_/dme/DataModelExplorer.html`) and the XrmToolBox tool (`DataModelExplorer.XrmToolBox.dll`).
 - **XrmToolBox:** the tool's file name changed, so remove the 6.0 tool's dll from the Plugins folder when installing this one, or both appear in the tool list.
 

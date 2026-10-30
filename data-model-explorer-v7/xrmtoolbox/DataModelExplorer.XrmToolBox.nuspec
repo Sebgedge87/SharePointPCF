@@ -4,14 +4,14 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata>
     <id>DataModelExplorer.XrmToolBox</id>
-    <version>6.0.1</version>
+    <version>7.1.0</version>
     <title>Data Model Explorer</title>
     <authors>Data Model Explorer</authors>
     <owners>Data Model Explorer</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Open a Dataverse data-model workbook, check it, draw the ERD and build an unmanaged solution from it. Load a solution from the connected environment as the model, or check a workbook against the environment for undocumented and unmanaged changes. Reads the environment only.</description>
     <summary>View, check and build Dataverse data models, and compare them with the connected environment.</summary>
-    <releaseNotes>6.0.1: one searchable solution list for loading and checking</releaseNotes>
+    <releaseNotes>7.1.0: compare several environments (extra XrmToolBox connections), ERD multi-select, dark mode, generic</releaseNotes>
     <tags>XrmToolBox Plugins DataModel ERD Solution Metadata</tags>
     <projectUrl>https://example.com/replace-me</projectUrl>
     <iconUrl>https://example.com/replace-me.png</iconUrl>

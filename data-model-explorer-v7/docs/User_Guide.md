@@ -1,6 +1,6 @@
 ---
 title: "Data Model Explorer: User Guide"
-subtitle: "Version 7.0.0 · 29 October 2026"
+subtitle: "Version 7.1.0 · 30 October 2026"
 ---
 
 ## Introduction
@@ -328,7 +328,7 @@ Uploaded to an environment as a web resource, the page reads the environment's t
 
 ### Putting it in an environment
 
-1. Get the solution zip: `DataModelExplorer_7_0_0_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
+1. Get the solution zip: `DataModelExplorer_7_1_0_0.zip` in the repository, or make one with your publisher: `python3 tools/make-webresource-solution.py --prefix <prefix> --publisher <publisher unique name>`. The publisher unique name must match the one in the environment exactly.
 2. Import it into the environment (Power Apps → Solutions → Import, or `pac solution import`). It holds five web resources under `<prefix>_/dme/`, each well under the 5 MB default limit:
 
    | Web resource | Holds | Size |

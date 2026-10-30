@@ -1,6 +1,6 @@
 {
   "name": "data-model-explorer",
-  "version": "7.0.0",
+  "version": "7.1.0",
   "private": true,
   "description": "Viewer and editor for Dataverse data-model workbooks: one offline file, an XrmToolBox tool, and separate web resources for Dataverse (6.0)",
   "scripts": {

@@ -4,7 +4,7 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>DataModelExplorer.XrmToolBox</AssemblyName>
     <RootNamespace>DataModelExplorer</RootNamespace>
-    <Version>6.0.1</Version>
+    <Version>7.1.0</Version>
     <Company>Data Model Explorer</Company>
     <Product>Data Model Explorer</Product>
     <LangVersion>latest</LangVersion>

@@ -411,6 +411,12 @@ body.ro [data-fedit]{cursor:default}
 :root:not([data-theme="light"]) .convmask{background:rgba(0,0,0,.6)} :root:not([data-theme="light"]) .erdv svg [fill="#FFFFFF"]{fill:#17212b} :root:not([data-theme="light"]) .erdv svg [fill="#E3ECF4"],:root:not([data-theme="light"]) .erdv .eyebtn:hover rect{fill:#1f3549} :root:not([data-theme="light"]) .erdv svg [fill="#F4F7FA"]{fill:#1c2731}
 :root:not([data-theme="light"]) .erdv svg [fill="#0A4873"]{fill:#a9cdee} :root:not([data-theme="light"]) .erdv svg [stroke="#0A4873"]{stroke:#86b7e3} :root:not([data-theme="light"]) .erdv svg [fill="#BB1C73"]{fill:#f08bc0} :root:not([data-theme="light"]) .erdv svg [stroke="#BB1C73"]{stroke:#f08bc0}
 }
+.envrow{display:flex;gap:10px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:var(--panel)}
+.envpage{padding:18px 24px;height:100%;display:flex;flex-direction:column;min-height:0} .envwrap{flex:1;overflow:auto;border:1px solid var(--line);border-radius:12px;min-height:0}
+.envgrid{width:100%;border-collapse:collapse} .envgrid th,.envgrid td{padding:7px 10px;border-bottom:1px solid var(--line2);text-align:left;vertical-align:top} .envgrid thead th{position:sticky;top:0;background:var(--panel2);z-index:1}
+.envgrid td.envok{color:var(--faint)} .envgrid td.envdiff{color:var(--edit);background:var(--edit-bg);font-weight:600}
+.erdv g.node.sel rect[fill="none"]{stroke:#E8A317!important;stroke-width:3px} .erdband{fill:rgba(232,163,23,.12);stroke:#E8A317;stroke-width:1.5;stroke-dasharray:5 4;pointer-events:none}
+.erdv .tb [data-ea="selall"].on{background:var(--accent-bg);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -550,18 +556,18 @@ const EMBEDDED_B64 = "UEsDBBQAAAAIAAJsVl1Gx01IlQAAAM0AAAAQAAAAZG9jUHJvcHMvYXBwLn
 const TEMPLATE_B64 = "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";
 const TEMPLATE_NAME = "Data_Model_Template.xlsx";
 const EMBEDDED_NAME = "Data_Model_Template.xlsx";
-const DME_BUILD = "7.0.0-da9125eb30";
+const DME_BUILD = "7.1.0-36cc5e6576";
 </script>
 <script>
 (()=>{
 // read-only copy: for a client or support team. Everything can be viewed, searched, checked and diagrammed; nothing can be changed
 const RO=typeof DME_MODE!=='undefined'&&DME_MODE==='readonly';
-const DME_VERSION="7.0.0";   // from package.json, written in by build.py
+const DME_VERSION="7.1.0";   // from package.json, written in by build.py
 // the page's own source, taken before anything on it changes, so "Read-only copy" can write a copy of this same page
 const PAGE_SRC=RO?null:{head:document.head.outerHTML,body:document.body.innerHTML,lang:document.documentElement.getAttribute('lang')||'en'};
 // In Dataverse the page, this code and each library are separate web resources. If one did not load, or one is from
 // another version (an import that did not finish, or an old copy cached by the browser), say so before anything else.
-const APP_BUILD="7.0.0-da9125eb30";
+const APP_BUILD="7.1.0-36cc5e6576";
 (()=>{
   const miss=[['XLSX','SheetJS (lib/xlsx.full.min.js)'],['ExcelJS','ExcelJS (lib/exceljs.min.js)'],['JSZip','JSZip (lib/jszip.min.js)']].filter(([g])=>typeof window[g]==='undefined').map(x=>x[1]);
   const mixed=typeof DME_BUILD!=='undefined'&&DME_BUILD!==APP_BUILD;
@@ -2874,8 +2880,12 @@ function dvHTML(sh){
      managed environment, anything created or changed directly there (unmanaged). */
 const LIVE=!RO&&location.protocol==='https:'&&(/\/webresources\//i.test(location.pathname)||(()=>{try{return !!(window.parent&&window.parent!==window&&window.parent.Xrm)}catch(e){return false}})());
 const LIVE_API=location.origin+'/api/data/v9.2/';
+// which environment dvGet reads: the page's own ('0'), or, in XrmToolBox, one of its extra connections (see inEnv)
+let DV_API=LIVE_API, DV_ENV='0';
 async function dvGet(path){
-  const url=/^https:/.test(path)?path:LIVE_API+path;
+  let url=/^https:/.test(path)?path:DV_API+path;
+  // a next-page link from another environment comes back with that environment's address: send it through the tool
+  if(DV_ENV!=='0'&&/^https:/.test(path)){const u=new URL(path); if(u.origin!==location.origin) url=location.origin+'/__dme/env/'+encodeURIComponent(DV_ENV)+u.pathname+u.search}
   let r;
   try{ r=await fetch(url,{credentials:'same-origin',headers:{'Accept':'application/json','OData-MaxVersion':'4.0','OData-Version':'4.0'}}) }
   catch(e){ throw new Error('The environment could not be reached ('+e.message+')') }
@@ -3020,6 +3030,136 @@ async function liveSetDv(main,extra){
   try{await idb.put(rec)}catch(e){}
   updateCounts(); refreshSpecial(true);
 }
+/* ---------- other environments (XrmToolBox) ----------
+   The XrmToolBox tool can hold extra connections. It lists them at /__dme/envs, opens its connection picker for
+   /__dme/envs/add, and reads one through /__dme/env/<id>/api/data/... with that connection's sign-in. Two comparisons:
+   - this workbook against every environment, side by side (the same checks as This environment);
+   - one solution across the environments: tables and columns that are missing or set differently (drift). */
+const ENV={host:false,list:[],res:null};
+async function envsLoad(){
+  try{const r=await fetch(location.origin+'/__dme/envs',{cache:'no-store'}); if(!r.ok) return; const j=await r.json(); ENV.host=true; ENV.list=j.envs||[]}catch(e){}
+}
+try{ if(window.chrome&&chrome.webview) chrome.webview.addEventListener('message',e=>{ if(e.data==='dme-envs') envsLoad().then(()=>{ if($('#dvpanel').classList.contains('open')&&LIVE) renderLive() }) }) }catch(e){}
+const envApi=id=>id==='0'?LIVE_API:location.origin+'/__dme/env/'+encodeURIComponent(id)+'/api/data/v9.2/';
+async function inEnv(id,fn){const a=DV_API,b=DV_ENV; DV_API=envApi(id); DV_ENV=id; try{return await fn()}finally{DV_API=a; DV_ENV=b}}
+async function envAction(a,id){
+  if(a==='add'){ try{await fetch(location.origin+'/__dme/envs/add',{cache:'no-store'})}catch(e){} toast('Pick the environment in XrmToolBox\'s connection window'); return }
+  if(a==='remove'){ try{await fetch(location.origin+'/__dme/envs/remove?id='+encodeURIComponent(id),{cache:'no-store'})}catch(e){} return }
+  if(a==='checkall') return envCheckAll();
+  if(a==='drift') return envDrift();
+  if(a==='results') return go('__envs');
+}
+const ENV_TAG={'dv-field-missing':'Not built','dv-table-missing':'Table missing','dv-field-undocumented':'Undocumented','dv-table-undocumented':'Undocumented','dv-nn-undocumented':'Undocumented',
+  'dv-type':'Type differs','dv-required':'Required level differs','dv-unmanaged':'Unmanaged','dv-active-layer':'Changed here','dv-rel-extra':'Relationship missing','dv-rel-missing':'Relationship not documented',
+  'dv-custom':'Custom flag differs','dv-ownership':'Ownership differs','dv-std-undocumented':'Standard fields not listed'};
+// the workbook against each environment: the checks of This environment, run once per environment and lined up
+async function envCheckAll(){
+  if(isStarter()) return toast('Open the data-model workbook first');
+  const pick=LV.sol1?(LV.sols||[]).find(s=>s.solutionid===LV.sol1):null, ents=S.sheets.filter(s=>s.kind==='entity');
+  const wbTables=[...new Set(ents.filter(s=>/^[a-z0-9_]+$/.test(s.logical||'')).map(s=>s.logical))];
+  LV.busy=true; LV.err=''; renderLive();
+  const res={mode:'check',at:Date.now(),sol:pick?pick.friendlyname:'',file:S.fileName,envs:[],rows:[]}, map=new Map(), saved=S.dv;
+  try{
+    for(const env of ENV.list){
+      const col={id:env.id,name:env.name,url:env.url,err:'',note:''}; res.envs.push(col);
+      try{
+        await inEnv(env.id,async()=>{
+          let solRec=null, solTables=null;
+          if(pick){ liveProg(env.name+': finding '+pick.friendlyname+'…'); solRec=(await liveSolutions()).find(s=>s.uniquename===pick.uniquename);
+            if(solRec) solTables=(await liveSolutionTables(solRec)).tables.map(x=>x.ln); else col.note=pick.friendlyname+' is not here: checked against the Default solution' }
+          if(solRec) col.note='Solution version '+(solRec.version||'?')+(solRec.ismanaged?' (managed)':'');
+          const names=[...new Set([...wbTables,...(solTables||[])])];
+          const defs=await liveDefs(names,false,(d,n)=>liveProg(env.name+': reading '+names.length+' table definitions: '+Math.round(d/n*100)+'%'));
+          const rec={id:'env',org:env.url,ents:parseDv([{name:'live',text:JSON.stringify({value:defs.main})}]).ents,live:true,managed:LV.managed,sol:solRec?{name:solRec.friendlyname,unique:solRec.uniquename,tables:solTables}:null};
+          if(LV.managed){ const lay=await liveLayers(rec.ents,wbTables,(d,n)=>liveProg(env.name+': looking for unmanaged changes: '+d+' of '+n)); rec.layers=lay.layers; if(lay.failed) col.note+=(col.note?' · ':'')+'layers not read' }
+          const out=[]; S.dv=rec;
+          try{ dvChecks((rule,sh,row,field,msg)=>out.push({rule,sh,row,field,msg}),ents) } finally { S.dv=saved }
+          out.forEach(i=>{
+            let table=i.sh.logical||i.sh.name, tlabel=i.sh.label||i.sh.name, field=i.field||(i.row?getVal(i.sh,i.row,'Logical Name').trim().toLowerCase():'');
+            if(i.rule==='dv-table-undocumented'){table=i.field; tlabel=i.field; field=''}
+            const k=table+'|'+field+'|'+i.rule; let r=map.get(k);
+            if(!r){ r={table,tlabel,field,what:RULES[i.rule]?RULES[i.rule][1]:i.rule,rule:i.rule,cells:{}}; map.set(k,r) }
+            r.cells[env.id]={t:ENV_TAG[i.rule]||'Differs',title:i.msg,diff:true};
+          });
+        });
+      }catch(e){ col.err=e.message }
+    }
+  }finally{ S.dv=saved; S.issues=null }
+  res.rows=[...map.values()].sort((a,b)=>a.tlabel.localeCompare(b.tlabel)||a.field.localeCompare(b.field)||a.what.localeCompare(b.what));
+  res.rows.forEach(r=>res.envs.forEach(c=>{ if(!r.cells[c.id]) r.cells[c.id]=c.err?{t:'Not read',title:c.err}:{t:'✓',title:'As the workbook'} }));
+  ENV.res=res; LV.busy=false; liveProg(''); renderLive(); go('__envs');
+}
+// one column's settings, for comparing environments
+function envColProps(a,d,m1){return {type:LIVE_TYPES[vOf(a.AttributeTypeName)]||a.AttributeType||'',req:vOf(a.RequiredLevel)||'None',label:lbl(a.DisplayName),add:liveAddl(a,d,m1)}}
+// one solution across the environments: what is missing, and what is set differently
+async function envDrift(){
+  const pick=(LV.sols||[]).find(s=>s.solutionid===LV.sol1); if(!pick) return toast('Pick a solution first');
+  LV.busy=true; LV.err=''; renderLive();
+  const res={mode:'drift',at:Date.now(),sol:pick.friendlyname,envs:[],rows:[]}, models={};
+  for(const env of ENV.list){
+    const col={id:env.id,name:env.name,url:env.url,err:'',note:''}; res.envs.push(col);
+    try{
+      await inEnv(env.id,async()=>{
+        liveProg(env.name+': finding '+pick.friendlyname+'…');
+        const s=(await liveSolutions()).find(x=>x.uniquename===pick.uniquename); if(!s){col.err=pick.friendlyname+' is not in this environment'; return}
+        col.note='Version '+(s.version||'?')+(s.ismanaged?' (managed)':' (unmanaged)');
+        const st=await liveSolutionTables(s), names=st.tables.map(x=>x.ln), whole={}; st.tables.forEach(x=>{whole[x.ln]=x.all});
+        const defs=await liveDefs(names,true,(d,n)=>liveProg(env.name+': reading '+names.length+' tables: '+Math.round(d/n*100)+'%'));
+        const m={}; defs.main.forEach(e=>{
+          const ln=String(e.LogicalName).toLowerCase(), det=defs.det[ln]||{}, pk=String(e.PrimaryIdAttribute||'').toLowerCase(), pn=String(e.PrimaryNameAttribute||'').toLowerCase();
+          const pickA=a=>whole[ln]!==false||st.attrIds.has(String(a.MetadataId).toLowerCase())||[pk,pn].includes(String(a.LogicalName).toLowerCase());
+          const t=m[ln]={label:lbl(e.DisplayName)||e.SchemaName,attrs:{}};
+          (e.Attributes||[]).filter(a=>a.LogicalName&&!a.AttributeOf&&vOf(a.AttributeTypeName)!=='VirtualType'&&pickA(a)).forEach(a=>{
+            const al=String(a.LogicalName).toLowerCase(), m1=(e.ManyToOneRelationships||[]).filter(r=>String(r.ReferencingAttribute).toLowerCase()===al&&String(r.ReferencingEntity).toLowerCase()===ln);
+            t.attrs[al]=envColProps(a,det[al],m1) });
+        });
+        models[env.id]=m;
+      });
+    }catch(e){ col.err=e.message }
+  }
+  const ok=res.envs.filter(c=>models[c.id]), tables=new Set(); ok.forEach(c=>Object.keys(models[c.id]).forEach(x=>tables.add(x)));
+  const P=[['type','Type'],['req','Required level'],['label','Display name'],['add','Settings']];
+  [...tables].sort().forEach(tl=>{
+    const label=(ok.map(c=>models[c.id][tl]).find(Boolean)||{}).label||tl, has=ok.filter(c=>models[c.id][tl]);
+    if(has.length<ok.length) res.rows.push({table:tl,tlabel:label,field:'',what:'Table',cells:Object.fromEntries(ok.map(c=>[c.id,models[c.id][tl]?{t:'✓',title:'Here'}:{t:'Missing',title:'Not in the solution here',diff:true}]))});
+    const attrs=new Set(); has.forEach(c=>Object.keys(models[c.id][tl].attrs).forEach(a=>attrs.add(a)));
+    [...attrs].sort().forEach(al=>{
+      const vals=ok.map(c=>models[c.id][tl]?models[c.id][tl].attrs[al]||null:undefined), present=vals.filter(Boolean);
+      const missing=vals.some(v=>v===null), differ=P.filter(([k])=>new Set(present.map(v=>v[k])).size>1);
+      if(!missing&&!differ.length) return;
+      const show=differ.length?differ:[P[0],P[1]];
+      res.rows.push({table:tl,tlabel:label,field:al,what:[missing?'Missing somewhere':'',...differ.map(x=>x[1]+' differs')].filter(Boolean).join(', '),
+        cells:Object.fromEntries(ok.map((c,i)=>{const v=vals[i];
+          if(v===undefined) return [c.id,{t:'(no table)',title:'The table is not here',diff:true}];
+          if(v===null) return [c.id,{t:'Missing',title:'Not on '+tl+' here',diff:true}];
+          return [c.id,{t:show.map(([k])=>k==='add'?String(v.add||'').split('\n').slice(0,3).join(' '):v[k]).join(' · '),title:P.map(([k,n])=>n+': '+(v[k]||'–')).join('\n'),diff:differ.length>0}]}))});
+    });
+  });
+  res.envs.filter(c=>!models[c.id]).forEach(c=>res.rows.forEach(r=>{r.cells[c.id]={t:'Not read',title:c.err}}));
+  ENV.res=res; LV.busy=false; liveProg(''); renderLive(); go('__envs');
+}
+function envCsv(){
+  const R=ENV.res; if(!R) return;
+  const rows=[['Table','Field',R.mode==='drift'?'What differs':'Check',...R.envs.map(c=>c.name+' ('+c.url+')')]].concat(R.rows.map(r=>[r.tlabel+(r.table!==r.tlabel?' ('+r.table+')':''),r.field,r.what,...R.envs.map(c=>{const x=r.cells[c.id]||{}; return (x.t||'')+(x.title&&x.t!==x.title&&x.t!=='✓'?' – '+x.title:'')})]));
+  download((R.mode==='drift'?'Environment drift - '+R.sol:'Environments - '+R.file)+'.csv',new Blob([csv(rows)],{type:'text/csv'}));
+}
+function renderEnvs(){
+  const R=ENV.res, main=$('#main');
+  if(!R){ main.innerHTML='<div class="readme"><article class="rwrap"><h1>Environments</h1><p class="dim">Nothing compared yet. Open This environment, add the other environments, then compare.</p></article></div>'; return }
+  const q=(ENV.q||'').trim().toLowerCase(), only=ENV.only!==false;
+  const rows=R.rows.filter(r=>(!only||R.envs.some(c=>r.cells[c.id]&&r.cells[c.id].diff))&&(!q||(r.tlabel+' '+r.table+' '+r.field+' '+r.what+' '+Object.values(r.cells).map(x=>x.t).join(' ')).toLowerCase().includes(q)));
+  const title=R.mode==='drift'?'Compare '+R.sol+' across environments':'This workbook against each environment';
+  main.innerHTML=`<div class="envpage"><div class="vhead"><h1 style="margin:0">${esc(title)}</h1>
+    <div class="dim" style="margin:4px 0 10px">${R.mode==='drift'?'Tables and columns of the solution that are missing from an environment or set differently. ':'The checks of This environment, for '+esc(R.file)+(R.sol?' and the solution '+esc(R.sol):'')+', run in each environment. ✓ means as the workbook. '}Read ${esc(new Date(R.at).toLocaleString())}.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><input type="search" id="envq" placeholder="Filter rows" value="${esc(ENV.q||'')}" style="height:32px;border:1px solid var(--line);border-radius:8px;padding:0 9px;min-width:240px;background:var(--panel)">
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="envonly" ${only?'checked':''}> Differences only</label>
+    <button class="btn" data-envcsv>Download CSV</button><span class="dim">${rows.length} of ${R.rows.length} row${R.rows.length===1?'':'s'}</span></div></div>
+    <div class="envwrap"><table class="grid envgrid"><thead><tr><th>Table</th><th>Field</th><th>${R.mode==='drift'?'What differs':'Check'}</th>${R.envs.map(c=>`<th title="${esc(c.url)}">${esc(c.name)}<small class="dim" style="display:block;font-weight:500">${esc(c.err?'Not read: '+c.err:c.note||c.url)}</small></th>`).join('')}</tr></thead>
+    <tbody>${rows.length?rows.map(r=>`<tr><td><b>${esc(r.tlabel)}</b>${r.table!==r.tlabel?`<div class="mono dim">${esc(r.table)}</div>`:''}</td><td class="mono">${esc(r.field||'–')}</td><td>${esc(r.what)}</td>${R.envs.map(c=>{const x=r.cells[c.id]||{t:''}; return `<td class="${x.diff?'envdiff':'envok'}" title="${esc(x.title||'')}">${esc(x.t)}</td>`}).join('')}</tr>`).join(''):`<tr><td colspan="${3+R.envs.length}" class="dim">${R.rows.length?'No rows match.':'No differences: every environment matches.'}</td></tr>`}</tbody></table></div></div>`;
+  const qi=$('#envq'); qi.oninput=()=>{ENV.q=qi.value; const pos=qi.selectionStart; renderEnvs(); const n=$('#envq'); n.focus(); n.setSelectionRange(pos,pos)};
+  $('#envonly').onchange=e=>{ENV.only=e.target.checked; renderEnvs()};
+  main.querySelector('[data-envcsv]').onclick=envCsv;
+}
 const LV={sols:null,user:'',busy:false,msg:'',err:'',sol1:'',managed:false,last:null};   // sol1: the solution picked ('' = the Default solution)
 function liveProg(m){LV.msg=m; const el=$('#liveprog'); if(el) el.textContent=m}
 async function liveStart(){
@@ -3027,6 +3167,7 @@ async function liveStart(){
   try{
     const who=await dvGet('WhoAmI'); try{const u=await dvGet('systemusers('+who.UserId+')?$select=fullname'); LV.user=u.fullname||''}catch(e){}
     LV.sols=await liveSolutions();
+    await envsLoad();
   }catch(e){LV.err=e.message}
   LV.busy=false; if($('#dvpanel').classList.contains('open')) renderLive();
 }
@@ -3086,6 +3227,15 @@ function renderLive(){
     <p class="dim" style="margin:2px 0 8px">${isStarter()?'Open the data-model workbook first.':'Compares <b>'+esc(S.fileName)+'</b> with what is really there: undocumented tables, fields and N:N, fields not built yet, and differences in types, required levels and relationships.'}</p>
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="livemanaged" style="width:auto;height:auto;flex:none;margin-top:3px" ${LV.managed?'checked':''} ${dis}><span>Managed environment (test or production): also find anything created or changed directly here, as unmanaged. <span class="dim">Slower: one check per custom field.</span></span></label>
     <div style="margin-top:8px"><button class="btn primary" data-live="check" ${dis||isStarter()?'disabled':''}>${liveCheckLabel()}</button></div></div>`;
+  if(ENV.host){
+    const n=ENV.list.length, sol=LV.sol1?solName(LV.sol1):'';
+    h+=`<div class="fld"><div class="k">Other environments</div>
+      <p class="dim" style="margin:2px 0 8px">Add test, production or any other environment as an extra XrmToolBox connection, then compare them side by side.</p>
+      <div class="envlist">${ENV.list.map(e=>`<div class="envrow"><div style="flex:1;min-width:0"><b>${esc(e.name)}</b><div class="mono dim">${esc(e.url)}</div></div>${e.main?'<span class="dim">this one</span>':`<button class="btn ghost" data-env="remove" data-envid="${esc(e.id)}" title="Remove ${esc(e.name)}" aria-label="Remove ${esc(e.name)}">✕</button>`}</div>`).join('')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-env="add" ${dis}>Add environment…</button>${ENV.res?'<button class="btn" data-env="results">Last comparison</button>':''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn primary" data-env="checkall" ${dis||n<2||isStarter()?'disabled':''}>Check this workbook against all ${n}</button>
+      <button class="btn primary" data-env="drift" ${dis||n<2||!LV.sol1?'disabled':''}>${sol?'Compare '+esc(sol)+' across them':'Pick a solution to compare it across them'}</button></div></div>`;
+  }
   h+=`<div id="liveprog" class="dim" style="min-height:20px">${esc(LV.msg)}</div>`;
   const L=LV.last;
   if(L&&L.kind==='check'&&S.dv&&S.dv.live){
@@ -3107,6 +3257,7 @@ function renderLive(){
       LV['sol'+w]=r.dataset.sid; list.innerHTML=solRows(w);
       const lb=d.querySelector('[data-live="load"]'), cb=d.querySelector('[data-live="check"]');
       if(lb){lb.disabled=!!LV.busy||!LV.sol1; lb.textContent=liveLoadLabel()} if(cb) cb.textContent=liveCheckLabel();
+      const db=d.querySelector('[data-env="drift"]'); if(db){db.disabled=!!LV.busy||ENV.list.length<2||!LV.sol1; db.textContent=LV.sol1?'Compare '+solName(LV.sol1)+' across them':'Pick a solution to compare it across them'}
     };
     const on=list.querySelector('.sprow.on'); if(on) list.scrollTop=on.offsetTop-list.offsetTop-60;
   });
@@ -3845,24 +3996,51 @@ function erdWire(E,s,nodes,edges){
   let drag=null, raf=0;
   const scale=()=>{const m=s.getScreenCTM(); return m?m.a:1};
   const nodeOf=t=>{const g=t&&t.closest&&t.closest('g.node'); return g?nodes[+g.dataset.k]:null};
+  // selected tables move together: Ctrl+click adds or removes one, Shift+drag on the background draws a box,
+  // Ctrl+A or Select all takes every table, Esc or a click on the background clears it
+  const sel=new Set(nodes.filter(n=>E.pick&&E.pick.has(n.name)));
+  const paintSel=()=>{nodes.forEach(n=>n.g.classList.toggle('sel',sel.has(n))); E.pick=new Set([...sel].map(n=>n.name));
+    const b=document.querySelector('[data-ea="selall"]'); if(b){b.textContent=sel.size?'Clear selection ('+sel.size+')':'Select all'; b.classList.toggle('on',sel.size>0)}};
+  E.selAll=on=>{sel.clear(); if(on) nodes.forEach(n=>sel.add(n)); paintSel()};
+  paintSel();
+  const toSvg=ev=>{const pt=s.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; const m=s.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):{x:0,y:0}};
+  const routeAll=group=>{const es=new Set(); group.forEach(g=>inc.get(g.m).forEach(e=>es.add(e))); es.forEach(route)};
   s.addEventListener('pointerdown',ev=>{
     if(ev.button!==0) return; if(ev.target.closest&&ev.target.closest('.eyebtn')) return; const n=nodeOf(ev.target);
-    drag=n?{n,x:ev.clientX,y:ev.clientY,cx:n.cx,cy:n.cy,sc:scale()}:{pan:1,x:ev.clientX,y:ev.clientY,sl:cv.scrollLeft,st:cv.scrollTop};
-    if(n){n.g.parentNode.appendChild(n.g);n.g.style.cursor='grabbing'} else cv.style.cursor='grabbing';
+    if(n&&(ev.ctrlKey||ev.metaKey)){ sel.has(n)?sel.delete(n):sel.add(n); paintSel(); ev.preventDefault(); return }
+    if(!n&&ev.shiftKey){ const p0=toSvg(ev), r=document.createElementNS('http://www.w3.org/2000/svg','rect'); r.setAttribute('class','erdband'); s.appendChild(r);
+      drag={band:r,x0:p0.x,y0:p0.y,add:ev.ctrlKey||ev.metaKey}; try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault(); return }
+    if(n){
+      if(!sel.has(n)&&sel.size){sel.clear(); paintSel()}
+      const group=(sel.has(n)?[...sel]:[n]).map(m=>({m,cx:m.cx,cy:m.cy}));
+      drag={n,group,x:ev.clientX,y:ev.clientY,sc:scale()}; group.forEach(g=>g.m.g.parentNode.appendChild(g.m.g)); n.g.style.cursor='grabbing';
+    } else { drag={pan:1,x:ev.clientX,y:ev.clientY,sl:cv.scrollLeft,st:cv.scrollTop}; cv.style.cursor='grabbing' }
     try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault();
   });
+  // the space around the drawing: a click clears the selection, Shift+drag draws a box (one handler, replaced on each draw)
+  cv.onpointerdown=ev=>{
+    if(ev.button!==0||(ev.target.closest&&ev.target.closest('svg'))) return;
+    if(ev.shiftKey){ const p0=toSvg(ev), r=document.createElementNS('http://www.w3.org/2000/svg','rect'); r.setAttribute('class','erdband'); s.appendChild(r);
+      drag={band:r,x0:p0.x,y0:p0.y,add:ev.ctrlKey||ev.metaKey}; try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault(); return }
+    if(sel.size){sel.clear(); paintSel()}
+  };
   s.addEventListener('pointermove',ev=>{
     if(!drag) return;
-    if(drag.pan){cv.scrollLeft=drag.sl-(ev.clientX-drag.x);cv.scrollTop=drag.st-(ev.clientY-drag.y);return}
-    drag.tx=drag.cx+(ev.clientX-drag.x)/drag.sc; drag.ty=drag.cy+(ev.clientY-drag.y)/drag.sc;
-    if(!raf) raf=requestAnimationFrame(()=>{raf=0; if(!drag||drag.pan) return; move(drag.n,drag.tx,drag.ty); inc.get(drag.n).forEach(route)}); // only the moved table's lines, once per frame
+    if(drag.band){ const p=toSvg(ev), x=Math.min(p.x,drag.x0), y=Math.min(p.y,drag.y0); drag.box={x,y,w:Math.abs(p.x-drag.x0),h:Math.abs(p.y-drag.y0)};
+      drag.band.setAttribute('x',x); drag.band.setAttribute('y',y); drag.band.setAttribute('width',drag.box.w); drag.band.setAttribute('height',drag.box.h); return }
+    if(drag.pan){ if(Math.abs(ev.clientX-drag.x)+Math.abs(ev.clientY-drag.y)>3) drag.moved=1; cv.scrollLeft=drag.sl-(ev.clientX-drag.x);cv.scrollTop=drag.st-(ev.clientY-drag.y);return}
+    drag.dx=(ev.clientX-drag.x)/drag.sc; drag.dy=(ev.clientY-drag.y)/drag.sc;
+    if(!raf) raf=requestAnimationFrame(()=>{raf=0; if(!drag||drag.pan||drag.band) return; drag.group.forEach(g=>move(g.m,g.cx+drag.dx,g.cy+drag.dy)); routeAll(drag.group)}); // only the moved tables' lines, once per frame
   });
   s.addEventListener('pointerover',ev=>{if(drag&&!drag.pan) return; const n=nodeOf(ev.target); if(n) vis(new Set([n]))});
   s.addEventListener('pointerout',ev=>{if(drag&&!drag.pan) return; const g=ev.target.closest&&ev.target.closest('g.node'); if(g&&!(ev.relatedTarget&&g.contains(ev.relatedTarget))) vis(null)});
   const end=ev=>{
     if(!drag) return; const d=drag; drag=null; cv.style.cursor='';
-    if(d.pan) return; if(raf){cancelAnimationFrame(raf);raf=0} if(d.tx!=null){move(d.n,d.tx,d.ty); inc.get(d.n).forEach(route)}
-    d.n.g.style.cursor='grab'; E.pos[d.n.name]=[d.n.cx,d.n.cy]; persist(); fit(false);
+    if(d.band){ d.band.remove(); const b=d.box; if(!d.add) sel.clear();
+      if(b) nodes.forEach(n=>{ if(n.cx+n.w/2>=b.x&&n.cx-n.w/2<=b.x+b.w&&n.cy+n.h/2>=b.y&&n.cy-n.h/2<=b.y+b.h) sel.add(n) }); paintSel(); return }
+    if(d.pan){ if(!d.moved&&sel.size&&ev.type==='pointerup'){sel.clear(); paintSel()} return }
+    if(raf){cancelAnimationFrame(raf);raf=0} if(d.dx!=null){d.group.forEach(g=>move(g.m,g.cx+d.dx,g.cy+d.dy)); routeAll(d.group)}
+    d.n.g.style.cursor='grab'; d.group.forEach(g=>{E.pos[g.m.name]=[g.m.cx,g.m.cy]}); persist(); fit(false);
     const under=document.elementFromPoint(ev.clientX,ev.clientY); const un=nodeOf(under); vis(un===d.n?new Set([d.n]):null);
   };
   s.addEventListener('pointerup',end); s.addEventListener('pointercancel',end);
@@ -4085,7 +4263,7 @@ function renderErdPage(){
     ${hasAreas()?`<label><input type="checkbox" id="erdacol" ${E.acol?'checked':''}> Colour by area</label>`:`<span class="dim" style="font-size:12.5px">Fill in <b>Area</b> in the Table Dictionary to pick and colour tables by area.</span>`}</div></details></div></div>
     <div class="stage"><div class="tb"><span class="info" id="erdinfo"></span><span class="grow"></span>
       <button class="btn" data-ez="0.8">−</button><button class="btn" data-ez="0" title="Fit the whole diagram in the panel">Fit</button><button class="btn" data-ez="1.25">+</button>
-      <button class="btn" data-ea="names" title="Show or hide the relationship names on the lines">Names</button><button class="btn" data-ea="relayout" title="Discard your arrangement and lay the tables out again">Auto layout</button><span class="erdexp"><button class="btn" data-ea="expmenu" aria-haspopup="true">Export ▾</button><span class="erdmenu" id="erdmenu" hidden><button data-ea="drawio">draw.io (.drawio)<small>Editable, with your layout</small></button><button data-ea="svg">Picture (SVG)</button><button data-ea="png">Picture (PNG)</button><hr><button data-ea="mmd">Mermaid (.mmd)</button><button data-ea="copy">Copy Mermaid</button><button data-ea="src" class="${E.src?'on':''}">Show Mermaid source</button></span></span></div>
+      <button class="btn" data-ea="names" title="Show or hide the relationship names on the lines">Names</button><button class="btn" data-ea="selall" title="Select every table to move them together. Ctrl+click adds or removes a table; Shift+drag on the background selects an area; Esc clears">Select all</button><button class="btn" data-ea="relayout" title="Discard your arrangement and lay the tables out again">Auto layout</button><span class="erdexp"><button class="btn" data-ea="expmenu" aria-haspopup="true">Export ▾</button><span class="erdmenu" id="erdmenu" hidden><button data-ea="drawio">draw.io (.drawio)<small>Editable, with your layout</small></button><button data-ea="svg">Picture (SVG)</button><button data-ea="png">Picture (PNG)</button><hr><button data-ea="mmd">Mermaid (.mmd)</button><button data-ea="copy">Copy Mermaid</button><button data-ea="src" class="${E.src?'on':''}">Show Mermaid source</button></span></span></div>
       <div class="dim" id="erdlegend" style="padding:6px 16px;border-bottom:1px solid var(--line2)"><span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced</div>
       <div class="body ${E.dock} ${E.src?'srcopen':''}" id="erdbody" style="--sw:${E.sw}px;--sh:${E.sh}px"><div class="cv" id="erdcv"><div class="msg">Drawing…</div></div>
         <div class="sres" id="erdsres" title="Drag to resize. Double-click to reset."></div>
@@ -4218,6 +4396,7 @@ function erdSave(){const E=erdInit();S.ui.erd={acol:E.acol,nn:E.nn,attrs:E.attrs
 function erdAction(a,btn){
   const E=erdInit(); const base=S.fileName.replace(/\.[^.]+$/,'')+' - ERD';
   if(a==='expmenu'){const m=$('#erdmenu'); m.hidden=!m.hidden; if(!m.hidden) setTimeout(()=>document.addEventListener('click',function c(ev){if(!ev.target.closest('.erdexp')){m.hidden=true} document.removeEventListener('click',c)},{once:false}),0); return}
+  if(a==='selall'){ if(E.selAll) E.selAll(!(E.pick&&E.pick.size)); return }
   if(a==='names'){E.lbl=E.lbl==='hover'?'all':E.lbl==='all'?'none':'hover'; erdSave(); erdNamesBtn(); if(E.applyVis) E.applyVis(); return}
   if(a==='relayout'){const all=store.get('dme.erdpos')||{};let h=5381;const src=(E.srcText||'')+'|core:'+[...E.core].sort().join(',');for(let i=0;i<src.length;i++)h=((h<<5)+h+src.charCodeAt(i))|0;delete all['p'+(h>>>0).toString(36)];store.set('dme.erdpos',all);E.pos={};drawErd();return}
   if(a==='src'){E.src=!E.src; const bd=$('#erdbody'); bd.classList.toggle('srcopen',E.src); const sb=document.querySelector('.tb [data-ea="src"]'); if(sb){sb.classList.toggle('on',E.src); sb.textContent=E.src?'Hide Mermaid source':'Show Mermaid source'} return}
@@ -4237,7 +4416,7 @@ function erdAction(a,btn){
   }
 }
 
-function applyAndRender(){if(S.cur==='__erd')return;if(S.cur==='__readme'){renderReadme();return}if(S.cur==='__overview'){renderOverview();return}if(S.cur==='__issues'){renderIssues();return}const v=viewFor(S.cur);S.view=v;S.filtered=filterItems(v);renderMain()}
+function applyAndRender(){if(S.cur==='__erd')return;if(S.cur==='__readme'){renderReadme();return}if(S.cur==='__envs'){renderEnvs();return}if(S.cur==='__overview'){renderOverview();return}if(S.cur==='__issues'){renderIssues();return}const v=viewFor(S.cur);S.view=v;S.filtered=filterItems(v);renderMain()}
 // each screen (a table, Overview, Checks, ERD, All fields, How it works) is a step in the browser's history, so Back,
 // Alt+Left and a mouse's back button return to the previous screen. The address stays the same.
 let navDepth=0;
@@ -4248,12 +4427,12 @@ function navRecord(fromHistory){
   try{ if(history.state&&history.state.dmeView!=null&&history.state.dmeProj===S.proj){history.pushState({dmeView:v,dmeProj:S.proj,depth:navDepth+1},''); navDepth++} else history.replaceState({dmeView:v,dmeProj:S.proj,depth:0},'') }catch(e){}
   const b=$('#btnBack'); if(b) b.disabled=navDepth<=0;
 }
-function viewExists(v){v=String(v); return /^__(erd|readme|overview|issues|all)$/.test(v)||/^\d+$/.test(v)&&!!S.sheets[+v]}
+function viewExists(v){v=String(v); return /^__(erd|readme|overview|issues|all|envs)$/.test(v)||/^\d+$/.test(v)&&!!S.sheets[+v]}
 addEventListener('popstate',e=>{const st=e.state; if(!st||st.dmeView==null) return;
   navDepth=st.depth||0; const b=$('#btnBack'); if(b) b.disabled=navDepth<=0;
   go(st.dmeProj===S.proj&&viewExists(st.dmeView)?(/^\d+$/.test(st.dmeView)?+st.dmeView:st.dmeView):'__overview',{fromHistory:true})});
 function go(id,opts={}){
-  const special={__erd:renderErdPage,__readme:renderReadme,__overview:renderOverview,__issues:renderIssues}[String(id)];
+  const special={__erd:renderErdPage,__readme:renderReadme,__overview:renderOverview,__issues:renderIssues,__envs:renderEnvs}[String(id)];
   if(special){
     S.cur=String(id);S.selIt=null;S.selItem=null;S.view=null;S.filtered=[];
     document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open'));   // a full page: no panel left on top of it
@@ -4359,6 +4538,7 @@ document.addEventListener('click',e=>{
   if((n=t.closest('[data-ii]'))){const i=S.issList&&S.issList[+n.dataset.ii];if(i){if(i.row)go(i.sh.idx,{focusRow:i.row});else go(i.sh.idx)}return}
   if(t.closest('[data-dvclose]')){$('#dvpanel').classList.remove('open');return}
   if((n=t.closest('[data-live]'))){if(n.dataset.live==='load') liveLoad(); else if(n.dataset.live==='check') liveCheck(); return}
+  if((n=t.closest('[data-env]'))&&!n.disabled){envAction(n.dataset.env,n.dataset.envid); return}
   if((n=t.closest('[data-dv]'))){
     const a=n.dataset.dv;
     if(a==='pick') $('#dvfile').click();
@@ -4422,7 +4602,7 @@ document.addEventListener('dblclick',e=>{
   startEdit(td,it,td.dataset.col);
 });
 let qt;
-$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{if(S.cur==='__readme'||S.cur==='__erd'||S.cur==='__overview')return;if(S.cur==='__issues'){S.issQ=e.target.value;issState().shown=300;renderIssues();return}const st=vstate(S.cur);st.q=e.target.value;st.shown=150;applyAndRender()},120)});
+$('#q').addEventListener('input',e=>{clearTimeout(qt);qt=setTimeout(()=>{if(S.cur==='__readme'||S.cur==='__erd'||S.cur==='__overview'||S.cur==='__envs')return;if(S.cur==='__issues'){S.issQ=e.target.value;issState().shown=300;renderIssues();return}const st=vstate(S.cur);st.q=e.target.value;st.shown=150;applyAndRender()},120)});
 $('#sq').addEventListener('input',e=>{S.sideFilter=e.target.value;renderNav()});
 $('#btnChanges').onclick=()=>{$('#changes').classList.contains('open')?$('#changes').classList.remove('open'):renderChanges()};
 $('#btnExport').onclick=e=>{e.stopPropagation();exportMenu(e.currentTarget)};
@@ -4435,6 +4615,13 @@ $('#btnMob').onclick=e=>{e.stopPropagation();mobMenu(e.currentTarget)};
 $('#btnWb').onclick=e=>{e.stopPropagation();wbMenu(e.currentTarget)};
 $('#btnTmpl').onclick=()=>{$('#tmplpanel').classList.contains('open')?$('#tmplpanel').classList.remove('open'):renderTemplate()};
 $('#tfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=ev=>{try{const u=new Uint8Array(ev.target.result);const b64=u8ToB64(u);if(!parseWorkbook(XLSX.read(u,XLSX_OPTS)).length)throw new Error('no usable sheets');loadTemplate(b64,f.name);const kept=store.set('dme.tmpl',{name:f.name,b64});conformance();updateCounts();applyAndRender();renderTemplate();toast('Template set to '+f.name+(kept?'':'. This browser could not remember it, so it goes back to the bundled one on reload.'))}catch(err){dlg({title:'Could not use that template',body:esc(err.message),ok:'OK',cancel:null,danger:true})}};r.readAsArrayBuffer(f)};
+// ERD: Ctrl+A selects every table, Esc clears the selection
+document.addEventListener('keydown',e=>{
+  if(S.cur!=='__erd'||!S.erd||!S.erd.selAll||document.querySelector('.convmask')) return; const tg=e.target;
+  if(tg&&(/^(input|textarea|select)$/i.test(tg.tagName)||tg.isContentEditable)) return;
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='a'){e.preventDefault(); S.erd.selAll(true)}
+  else if(e.key==='Escape'&&S.erd.pick&&S.erd.pick.size) S.erd.selAll(false);
+});
 $('#btnHelp').onclick=()=>go('__readme'); $('#btnHelp').title='How it works · version '+DME_VERSION;
 // Theme: Automatic (as the system), Dark or Light, kept in this browser
 const TH_ICON={auto:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>',dark:'<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'};
