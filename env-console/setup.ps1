@@ -133,13 +133,21 @@ try {
     Info 'Building...'
     & npm run build --silent
     if ($LASTEXITCODE -ne 0) { Stop-Setup 'The build failed (see the messages above).' }
-    & npm link --no-audit --no-fund --loglevel=error 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & npm link --no-audit --no-fund --loglevel=error *> $null }
     if ($LASTEXITCODE -ne 0) { Info 'Could not add the pcx command to PATH; this script still works, and you can run: node dist/src/cli/index.js' }
 } finally {
     Pop-Location
 }
-$cli = Join-Path $appDir 'dist/src/cli/index.js'
-function Pcx { & node $cli @args }
+$script:cli = [System.IO.Path]::GetFullPath((Join-Path $appDir 'dist/src/cli/index.js'))
+if (-not (Test-Path -LiteralPath $script:cli)) { Stop-Setup "The build did not produce $($script:cli). Run 'npm run build' in $appDir to see why." }
+# Call node.exe itself (not a shim or alias), so the script path always reaches it as the first argument.
+$script:nodeExe = (Get-Command node -CommandType Application | Select-Object -First 1).Source
+function Pcx {
+    # Windows PowerShell 5.1 turns a native program's error output into script errors; keep going and use the exit code instead.
+    $ErrorActionPreference = 'Continue'
+    $argList = @($script:cli) + @($args)
+    & $script:nodeExe @argList
+}
 Ok 'Built'
 
 # ------------------------------------------------------------------ 4. environments
