@@ -145,6 +145,33 @@ function showTip(ev, title, rows) {
 }
 const hideTip = () => { tip().hidden = true; };
 
+// ------------------------------------------------------------------ dialogs (instead of the browser's confirm/alert)
+
+/**
+ * Shows a dialog in the console's style. Resolves true when confirmed, false when cancelled
+ * (Cancel, ×, Escape or clicking outside).
+ */
+function confirmDialog({ title, message, confirmText = "OK", cancelText = "Cancel", danger = false, details = null }) {
+  return new Promise((resolveDialog) => {
+    let result = false;
+    const ok = h("button", { type: "button", class: danger ? "btn danger-solid" : "btn primary", onclick: () => { result = true; dlg.close(); } }, confirmText);
+    const dlg = h("dialog", { class: "modal", "aria-labelledby": "dlg-title", "aria-describedby": "dlg-msg" },
+      h("div", { class: "modal-head" }, h("h2", { id: "dlg-title" }, title), h("button", { type: "button", class: "iconbtn", "aria-label": "Close", onclick: () => dlg.close() }, "×")),
+      h("div", { class: "modal-body" },
+        h("p", { id: "dlg-msg", style: "margin:0;color:var(--text-2)" }, message),
+        details,
+        h("div", { class: "row", style: "justify-content:flex-end" },
+          cancelText ? h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, cancelText) : null,
+          ok)));
+    dlg.addEventListener("click", (ev) => { if (ev.target === dlg) dlg.close(); });
+    dlg.addEventListener("close", () => { dlg.remove(); resolveDialog(result); });
+    document.body.append(dlg);
+    dlg.showModal();
+    (danger && cancelText ? dlg.querySelector(".modal-body .btn:not(.danger-solid)") : ok).focus();
+  });
+}
+const messageDialog = (title, message) => confirmDialog({ title, message, confirmText: "OK", cancelText: null });
+
 // ------------------------------------------------------------------ screens shared state
 
 const shared = { env: null };
@@ -302,7 +329,7 @@ function signIn() {
   startCode();
 }
 async function signOut() {
-  if (!confirm("Sign out? The dashboard can't read any environment until you sign in again.")) return;
+  if (!(await confirmDialog({ title: "Sign out?", message: "The console can't read any environment until you sign in again.", confirmText: "Sign out" }))) return;
   try { await api("/api/account/logout", {}); acctState.notice = { kind: "info", text: "Signed out." }; acctState.user = null; document.getElementById("who").textContent = "Not signed in"; }
   catch (err) { acctState.notice = { kind: "bad", text: err.message }; }
   overview();
@@ -339,7 +366,7 @@ function manageEnvironments() {
     catch (err) { fail(err); }
   };
   const remove = async (n) => {
-    if (!confirm(`Remove ${n} from the console? Nothing changes in the environment itself.`)) return;
+    if (!(await confirmDialog({ title: `Remove ${n}?`, message: `${n} is removed from the console only. Nothing changes in the environment itself, and you can add it back at any time.`, confirmText: "Remove", danger: true }))) return;
     try { await api("/api/account/env/remove", { name: n }); await reloadConfig(); overview(); } catch (err) { fail(err); }
   };
   const saveTenant = async () => {
@@ -527,7 +554,7 @@ function removeLayerBox(row, env) {
 }
 async function removeLayer(row, env) {
   if (missingReason(cmpState, [env])) { cmpState.error = cmpState.notice.text; renderCompare(); return; }
-  if (!confirm(`Remove the unmanaged change to "${row.name}" in ${env}? This can't be undone.`)) return;
+  if (!(await confirmDialog({ title: "Remove unmanaged change?", message: `The change made directly to "${row.name}" in ${env} is removed and the managed version comes back. This can't be undone.`, confirmText: "Remove change", danger: true }))) return;
   cmpState.busy = true; renderCompare();
   try {
     await api("/api/compare/remove-layer", { env, type: row.type, id: row.objectId, name: row.name, reason: cmpState.reason });
@@ -652,7 +679,7 @@ function reportButtons() {
     const label = b.textContent;
     b.disabled = true;
     b.textContent = "Building report…";
-    try { await download(`/api/report?format=${fmt}&days=7`); } catch (err) { alert(err.message); }
+    try { await download(`/api/report?format=${fmt}&days=7`); } catch (err) { await messageDialog("Report not created", err.message); }
     b.disabled = false;
     b.textContent = label;
   };
@@ -998,7 +1025,7 @@ async function jobs() {
 async function changeJobsUi(action, rows) {
   const names = [...new Set(rows.map((r) => r.env))];
   if (missingReason(jobState, names)) { renderJobs(); return; }
-  if (action === "cancel" && !confirm(`Cancel ${rows.length} background job${rows.length === 1 ? "" : "s"}? This can't be undone.`)) return;
+  if (action === "cancel" && !(await confirmDialog({ title: `Cancel ${rows.length} background job${rows.length === 1 ? "" : "s"}?`, message: "Cancelled jobs stop and can't be restarted.", confirmText: "Cancel jobs", cancelText: "Keep them", danger: true }))) return;
   jobState.busy = true; renderJobs();
   let ok = 0; const failed = [];
   for (const n of names) {
@@ -1414,7 +1441,8 @@ async function usPreview() {
 async function usApply() {
   const names = usTargets();
   if (missingReason(usState, names)) { renderUserSettings(); return; }
-  if (!confirm(`Apply these settings in ${names.join(", ")}?`)) return;
+  const counts = usState.preview ? names.map((n) => `${n}: ${usState.preview[n]?.toChange ?? "?"} users`).join(" · ") : "";
+  if (!(await confirmDialog({ title: "Apply user settings?", message: `Settings change for users in ${names.join(", ")}${usState.newUsers ? ", and become the defaults for new users" : ""}.`, details: counts ? h("p", { class: "small muted", style: "margin:0" }, counts) : null, confirmText: "Apply settings" }))) return;
   usState.busy = true; renderUserSettings();
   const msgs = []; let failed = 0;
   for (const n of names) {

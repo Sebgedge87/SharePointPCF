@@ -217,3 +217,5 @@ dialog.modal::backdrop { background: rgba(10,26,40,0.55); }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 .iconbtn { width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; }
 .iconbtn:hover { background: var(--surface-2); color: var(--text); }
+.btn.danger-solid { background: #B42318; border-color: #B42318; color: #FFFFFF; font-weight: 600; }
+.btn.danger-solid:hover { filter: brightness(0.92); }
