@@ -67,7 +67,9 @@ try { Update-AzConfig -EnableLoginByWam $false -Scope Process -WarningAction Sil
 $p = @{}
 if ($env:PCX_TENANT) { $p.TenantId = $env:PCX_TENANT }
 if ($env:PCX_DEVICE -eq '1') { $p.UseDeviceAuthentication = $true }
-Connect-AzAccount @p | Out-Null
+# pcx does not use Azure subscriptions: skip the subscription picker and the per-tenant warnings.
+try { Update-AzConfig -LoginExperienceV2 Off -Scope Process -WarningAction SilentlyContinue | Out-Null } catch { }
+Connect-AzAccount @p -WarningAction SilentlyContinue | Out-Null
 $c = Get-AzContext
 Write-Host ("Signed in as " + $c.Account.Id + " (tenant " + $c.Tenant.Id + ")")
 `;
