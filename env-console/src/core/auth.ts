@@ -49,6 +49,8 @@ const PS_GET_TOKEN = `
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Import-Module Az.Accounts -ErrorAction Stop
+# Use the browser, not the Windows sign-in prompt (WAM), which often fails to show when started from another program.
+try { Update-AzConfig -EnableLoginByWam $false -Scope Process -WarningAction SilentlyContinue | Out-Null } catch { }
 $p = @{ ResourceUrl = $env:PCX_RESOURCE }
 if ($env:PCX_TENANT) { $p.TenantId = $env:PCX_TENANT }
 $t = Get-AzAccessToken @p -WarningAction SilentlyContinue
@@ -60,6 +62,8 @@ if ($tok -is [System.Security.SecureString]) { $tok = [System.Net.NetworkCredent
 const PS_LOGIN = `
 $ErrorActionPreference = 'Stop'
 Import-Module Az.Accounts -ErrorAction Stop
+# Use the browser, not the Windows sign-in prompt (WAM), which often fails to show when started from another program.
+try { Update-AzConfig -EnableLoginByWam $false -Scope Process -WarningAction SilentlyContinue | Out-Null } catch { }
 $p = @{}
 if ($env:PCX_TENANT) { $p.TenantId = $env:PCX_TENANT }
 if ($env:PCX_DEVICE -eq '1') { $p.UseDeviceAuthentication = $true }

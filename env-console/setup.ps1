@@ -194,7 +194,7 @@ Pcx auth status *> $null
 if ($LASTEXITCODE -eq 0) {
     Ok 'Already signed in'
 } else {
-    Info 'A browser window opens for you to sign in (Connect-AzAccount).'
+    Info "A browser tab opens for you to sign in. If nothing appears, press Ctrl+C and run: .\\setup.ps1 -DeviceCode"
     if ($DeviceCode) { Pcx auth login --device-code } else { Pcx auth login }
 }
 Pcx auth status
