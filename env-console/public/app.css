@@ -300,6 +300,16 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 :root[data-theme="dark"] .chip, :root[data-theme="dark"] .envdot { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28); }
 /* environment labels in list rows never spill into the next column; the full name is in the tooltip */
 .list li > .chip { max-width: 100%; min-width: 0; }
+/* alert and audit rows share one set of columns (subgrid): the environment column is as wide as the
+   longest name in the list, up to 320px, so names show in full and titles still line up */
+.alert-list { display: grid; grid-template-columns: max-content fit-content(320px) minmax(0, 1fr) auto; column-gap: 12px; }
+.alert-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: start; padding: 12px 20px; }
+.audit-list { display: grid; grid-template-columns: fit-content(320px) max-content minmax(0, 1fr); column-gap: 12px; }
+.audit-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; padding: 10px 0; }
+.alert-list .chip, .audit-list .chip { max-width: 100%; }
 @media (max-width: 720px) {
-  .list li[style*="grid-template-columns:76px 180px"] { grid-template-columns: 76px minmax(0,1fr) !important; }
+  .alert-list { grid-template-columns: max-content minmax(0, 1fr); }
+  .alert-row > .chip { grid-column: 2; grid-row: 1; justify-self: end; max-width: 160px; }
+  .alert-row > div { grid-column: 1 / -1; }
+  .alert-row > a.btn { grid-column: 1 / -1; justify-self: start; }
 }

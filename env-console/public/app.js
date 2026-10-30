@@ -790,7 +790,7 @@ function renderAlerts() {
     seg([["all", `All (${d.alerts.length})`], ["critical", "Critical"], ["warning", "Warnings"], ["info", "Info"]], alertState.sev, (v) => { alertState.sev = v; renderAlerts(); }, "Severity"),
     h("section", { class: "card flush" },
       list.length === 0 ? h("div", { class: "empty" }, "No alerts. Everything looks healthy.") :
-      h("ul", { class: "list" }, list.map((a) => h("li", { style: "display:grid;grid-template-columns:76px 180px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 20px" },
+      h("ul", { class: "list alert-list" }, list.map((a) => h("li", { class: "alert-row" },
         h("span", { class: `pill ${a.severity === "critical" ? "bad" : a.severity === "warning" ? "warn" : "info"}` }, a.severity === "critical" ? "Critical" : a.severity === "warning" ? "Warning" : "Info"),
         chip(a.env),
         h("div", { style: "min-width:0" }, h("div", { style: "font-weight:600" }, a.title), a.detail ? h("div", { class: "small muted", style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, a.detail) : null),
@@ -1292,7 +1292,7 @@ function renderAudit() {
           seg([["24h", "24h"], ["7d", "7 days"], ["30d", "30 days"]], audState.since, (v) => { audState.since = v; loadAuditLog(); }, "Time range")),
         !audState.log ? loading("audit history") : audState.log.error ? notice("bad", audState.log.error) :
         logRows.length === 0 ? h("p", { class: "muted" }, "No audited changes in this period.") :
-        h("ol", { class: "list" }, logRows.slice(0, 200).map((e) => h("li", { style: "display:grid;grid-template-columns:180px 110px minmax(0,1fr);gap:12px;padding:10px 0" },
+        h("ol", { class: "list audit-list" }, logRows.slice(0, 200).map((e) => h("li", { class: "audit-row" },
           chip(e.env), h("div", { class: "small muted" }, fmtDate(e.at)),
           h("div", { class: "stack", style: "gap:4px" },
             h("div", { class: "row small" }, h("span", { class: "pill info" }, e.action || e.operation), h("strong", {}, e.record), h("span", { class: "muted" }, `by ${e.user}`)),
