@@ -59,6 +59,8 @@ npm run build
 npm link            # optional: puts `pcx` on your PATH
 ```
 
+Without `npm link`, run it from the `env-console` folder as `.\pcx env list` (PowerShell or cmd) or `node dist/src/cli/index.js env list`. Running `node env list` does not work: Node treats `env` as a file name.
+
 Add your environments. DEV is unmanaged; every other environment is managed unless you say otherwise.
 
 ```bash
