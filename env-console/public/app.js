@@ -238,7 +238,7 @@ function foundTable() {
       h("thead", {}, h("tr", {}, ["", "Environment", "URL", "Region", "Name in the console", "Unmanaged (DEV)"].map((t) => h("th", { scope: "col" }, t)))),
       h("tbody", {}, acctState.found.map((f) => {
         const p = acctState.picks.get(f.url);
-        if (!p) return h("tr", {}, h("td", {}, h("span", { class: "pill ok" }, "Added")), h("th", { scope: "row" }, f.friendlyName), h("td", { class: "mono" }, f.url), h("td", { class: "small" }, f.region || ""), h("td", {}), h("td", {}));
+        if (!p) return h("tr", {}, h("td", {}, h("span", { class: "pill ok" }, "Added")), h("th", { scope: "row" }, f.friendlyName), h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}), h("td", {}));
         const pick = h("input", { type: "checkbox", "aria-label": `Add ${f.friendlyName}`, disabled: !f.enabled });
         pick.checked = p.on;
         pick.addEventListener("change", () => { p.on = pick.checked; overview(); });
@@ -249,7 +249,7 @@ function foundTable() {
         unm.addEventListener("change", () => { p.managed = !unm.checked; });
         return h("tr", { class: p.on ? "sel" : "" }, h("td", {}, pick),
           h("th", { scope: "row" }, f.friendlyName, f.enabled ? null : h("span", { class: "pill", style: "margin-left:6px" }, "Disabled")),
-          h("td", { class: "mono" }, f.url), h("td", { class: "small" }, f.region || ""), h("td", {}, name), h("td", {}, unm));
+          h("td", { style: "max-width:320px" }, envLink(f.url)), h("td", { class: "small" }, f.region || ""), h("td", {}, name), h("td", {}, unm));
       })))),
     h("div", { class: "row" }, h("button", { type: "button", class: "btn primary", disabled: !chosen, onclick: addPicked }, chosen ? `Add ${chosen} selected` : "Tick the environments to add"),
       h("button", { type: "button", class: "btn", onclick: () => { acctState.found = null; overview(); } }, "Close")));
@@ -382,7 +382,7 @@ function manageEnvironments() {
       foundTable(),
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, ["Name", "URL", "Type", ""].map((t) => h("th", { scope: "col" }, t)))),
-        h("tbody", {}, config.environments.map((e) => h("tr", {}, h("td", {}, chip(e.name)), h("td", { class: "mono" }, e.url), h("td", {}, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
+        h("tbody", {}, config.environments.map((e) => h("tr", {}, h("td", {}, chip(e.name)), h("td", { style: "max-width:360px" }, envLink(e.url)), h("td", {}, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
           h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, "Remove"))))))) : null,
       h("form", { class: "row", style: "align-items:flex-end", onsubmit: add },
         h("label", { class: "field" }, h("span", {}, "Name"), name),
@@ -397,6 +397,11 @@ function manageEnvironments() {
   return details;
 }
 
+/** The environment's address as a link that opens it in a new tab. */
+function envLink(url) {
+  return h("a", { class: "mono truncate envlink", href: url, target: "_blank", rel: "noopener noreferrer", title: `Open ${url}` }, url.replace(/^https:\/\//, ""));
+}
+
 // ------------------------------------------------------------------ overview
 
 async function overview() {
@@ -405,7 +410,7 @@ async function overview() {
   for (const e of config.environments) {
     const card = h("article", { class: "card stack" },
       h("div", { class: "row between" }, chip(e.name), h("span", { class: e.managed ? "pill" : "pill ok" }, e.managed ? "Managed" : "Unmanaged")),
-      h("div", { class: "mono muted" }, e.url), h("div", { class: "muted small" }, "Checking…"));
+      envLink(e.url), h("div", { class: "muted small" }, "Checking…"));
     cards.set(e.name, card);
     grid.append(card);
   }
@@ -435,9 +440,9 @@ async function overview() {
     const body = st.connected
       ? [h("div", { class: "row small" }, h("span", { class: "dot ok" }), h("strong", {}, "Connected"), h("span", { class: "muted" }, st.version ? `v${st.version}` : "")),
          h("dl", { class: "stats" },
-           h("div", {}, h("dt", {}, "Solutions"), h("dd", {}, st.solutions ?? "—")),
-           h("div", {}, h("dt", {}, "Flows on"), h("dd", {}, st.flowsTotal !== undefined ? `${st.flowsOn} / ${st.flowsTotal}` : "—")),
-           h("div", {}, h("dt", {}, "Plugin steps on"), h("dd", {}, st.pluginStepsTotal !== undefined ? `${st.pluginStepsOn} / ${st.pluginStepsTotal}` : "—"))),
+           h("div", {}, h("dt", {}, "Solutions"), h("dd", {}, st.solutions !== undefined ? fmtNum(st.solutions) : "—")),
+           h("div", {}, h("dt", {}, "Flows on"), h("dd", {}, st.flowsTotal !== undefined ? [fmtNum(st.flowsOn), h("span", { class: "of" }, ` / ${fmtNum(st.flowsTotal)}`)] : "—")),
+           h("div", {}, h("dt", {}, "Plugin steps on"), h("dd", {}, st.pluginStepsTotal !== undefined ? [fmtNum(st.pluginStepsOn), h("span", { class: "of" }, ` / ${fmtNum(st.pluginStepsTotal)}`)] : "—"))),
          st.error ? h("div", { class: "small muted" }, st.error) : null,
          h("div", { class: "row small" }, h("a", { href: "#/components" }, "Flows & plugins"), h("a", { href: `#/runs${q}` }, "Run history"), h("a", { href: "#/jobs" }, "Background jobs"))]
       : [h("div", { class: "row small" }, h("span", { class: "dot bad" }), h("strong", {}, st.needsLogin ? "Sign-in needed" : "Not reachable")), h("div", { class: "small muted" }, st.needsLogin && config.canManage ? "You're not signed in, or the sign-in has expired." : st.error || ""),

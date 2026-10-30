@@ -219,3 +219,13 @@ dialog.modal::backdrop { background: rgba(10,26,40,0.55); }
 .iconbtn:hover { background: var(--surface-2); color: var(--text); }
 .btn.danger-solid { background: #B42318; border-color: #B42318; color: #FFFFFF; font-weight: 600; }
 .btn.danger-solid:hover { filter: brightness(0.92); }
+
+/* environment cards: keep long URLs and big numbers inside the card */
+.grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.grid > .card { min-width: 0; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+dl.stats > div { min-width: 0; }
+dl.stats dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+dl.stats dd .of { font-size: 13px; font-weight: 500; color: var(--muted); }
+a.envlink { display: block; color: var(--link); text-decoration: none; }
+a.envlink:hover { text-decoration: underline; color: var(--link-hover); }
