@@ -829,11 +829,30 @@ function missingReason(state, names) {
   }
   return false;
 }
-function envChecks(state, names = envNames()) {
-  state.targets ??= new Set(names);
+/** Which environments a bulk change goes to. Nothing is ticked until you choose. */
+function envChecks(state, names = envNames(), onChange = null) {
+  state.targets ??= new Set();
+  const boxes = names.map((n) => {
+    const label = checkbox(envLabel(n), state.targets.has(n), (v) => { v ? state.targets.add(n) : state.targets.delete(n); if (onChange) onChange(); });
+    return { n, label, box: label.querySelector("input") };
+  });
+  const setAll = (on) => {
+    for (const b of boxes) { b.box.checked = on; on ? state.targets.add(b.n) : state.targets.delete(b.n); }
+    if (onChange) onChange();
+  };
   return h("div", { class: "envchecks", role: "group", "aria-label": "Apply to environments" },
     h("span", { class: "small" }, "Apply to"),
-    names.map((n) => checkbox(envLabel(n), state.targets.has(n), (v) => { v ? state.targets.add(n) : state.targets.delete(n); })));
+    boxes.map((b) => b.label),
+    names.length > 2 ? h("span", { class: "row", style: "gap:4px" },
+      h("button", { type: "button", class: "btn link", onclick: () => setAll(true) }, "Select all"),
+      h("button", { type: "button", class: "btn link", onclick: () => setAll(false) }, "Clear")) : null);
+}
+/** Stops a bulk change when no environment is ticked. */
+function noTargets(state, names, render) {
+  if (names.length) return false;
+  state.notice = { kind: "warn", text: "Tick the environments to apply this to first." };
+  render();
+  return true;
 }
 async function download(path) {
   const res = await fetch(path, { headers: { "x-pcx-request": "1", ...(key() ? { "x-pcx-key": key() } : {}) } });
@@ -933,6 +952,7 @@ async function components(params) {
 }
 /** Turns the given rows on or off in the given environments (one request per environment). */
 async function setStates(rows, names, on) {
+  if (noTargets(compState, names, renderComponents)) return;
   if (missingReason(compState, names)) { renderComponents(); return; }
   compState.busy = true;
   renderComponents();
@@ -1362,8 +1382,8 @@ function renderAudit() {
     h("strong", {}, [audState.selT.size ? `${audState.selT.size} tables` : "", audState.selC.size ? `${audState.selC.size} columns` : ""].filter(Boolean).join(" and ") + " selected"),
     envChecks(audState, names),
     h("div", { class: "row", style: "margin-left:auto" },
-      h("button", { type: "button", class: "btn good", disabled: audState.busy, onclick: () => applyAudit(bulkChanges(true)) }, "Turn auditing on"),
-      h("button", { type: "button", class: "btn ghost", disabled: audState.busy, onclick: () => applyAudit(bulkChanges(false)) }, "Turn auditing off"),
+      h("button", { type: "button", class: "btn good", disabled: audState.busy, onclick: () => { if (!noTargets(audState, [...audState.targets].filter((n) => names.includes(n)), renderAudit)) applyAudit(bulkChanges(true)); } }, "Turn auditing on"),
+      h("button", { type: "button", class: "btn ghost", disabled: audState.busy, onclick: () => { if (!noTargets(audState, [...audState.targets].filter((n) => names.includes(n)), renderAudit)) applyAudit(bulkChanges(false)); } }, "Turn auditing off"),
       h("button", { type: "button", class: "btn ghost", style: "border:0", onclick: () => { audState.selT.clear(); audState.selC.clear(); renderAudit(); } }, "Clear"))) : null;
   const logRows = audState.log && !audState.log.error ? names.flatMap((n) => (audState.log.results[n] || []).map((e) => ({ ...e, env: n }))).sort((a, b) => b.at.localeCompare(a.at)) : [];
   mount(head,
@@ -1611,8 +1631,9 @@ function usTarget() {
   return out;
 }
 const usScope = () => (usState.scope === "all" ? { kind: "all" } : { kind: usState.scope, name: usState.scopeName });
-const usTargets = () => [...(usState.targets ?? new Set(envNames()))].filter((n) => envOf(n));
+const usTargets = () => [...(usState.targets ?? new Set())].filter((n) => envOf(n));
 async function usPreview() {
+  if (noTargets(usState, usTargets(), renderUserSettings)) return;
   usState.busy = true; renderUserSettings();
   const out = {};
   await Promise.all(usTargets().map(async (n) => {
@@ -1622,6 +1643,7 @@ async function usPreview() {
 }
 async function usApply() {
   const names = usTargets();
+  if (noTargets(usState, names, renderUserSettings)) return;
   if (missingReason(usState, names)) { renderUserSettings(); return; }
   const counts = usState.preview ? names.map((n) => `${n}: ${usState.preview[n]?.toChange ?? "?"} users`).join(" · ") : "";
   if (!(await confirmDialog({ title: "Apply user settings?", message: `Settings change for users in ${names.join(", ")}${usState.newUsers ? ", and become the defaults for new users" : ""}.`, details: counts ? h("p", { class: "small muted", style: "margin:0" }, counts) : null, confirmText: "Apply settings" }))) return;
@@ -1685,7 +1707,7 @@ function renderUserSettings() {
             sel("Records per page", "paginglimit", [keep, ["25", "25"], ["50", "50"], ["75", "75"], ["100", "100"], ["250", "250"]]))),
         h("section", { class: "card stack", "aria-label": "Who" },
           h("h2", {}, "Who gets these settings"),
-          envChecks(usState, envNames()),
+          envChecks(usState, envNames(), () => { usState.preview = null; renderUserSettings(); }),
           h("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px" },
             h("label", { class: "field" }, h("span", {}, "Users"), scopeSel),
             usState.scope !== "all" ? h("label", { class: "field" }, h("span", {}, "Name"), scopeName) : null),
@@ -1705,7 +1727,7 @@ function renderUserSettings() {
     h("section", { class: "card flush", "aria-label": "Who will change" },
       h("div", { class: "row between", style: "padding:14px 20px" }, h("h2", {}, "Who will change"),
         h("div", { class: "row" },
-          h("button", { type: "button", class: "btn", disabled: usState.busy || !names.length, onclick: usPreview }, usState.busy && !p ? "Checking…" : "Preview"),
+          h("button", { type: "button", class: "btn", disabled: usState.busy, onclick: usPreview }, usState.busy && !p ? "Checking…" : "Preview"),
           h("button", { type: "button", class: "btn primary", disabled: usState.busy || !p, onclick: usApply }, usState.busy && p ? "Applying…" : `Apply in ${names.length} environment${names.length === 1 ? "" : "s"}`))),
       h("div", { class: "scroll" }, h("table", { class: "envtable" },
         h("thead", {}, h("tr", {}, h("th", { scope: "col" }, ""), envHeads(names))),
