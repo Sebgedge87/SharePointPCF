@@ -415,6 +415,8 @@ body.ro [data-fedit]{cursor:default}
 .envpage{padding:18px 24px;height:100%;display:flex;flex-direction:column;min-height:0} .envwrap{flex:1;overflow:auto;border:1px solid var(--line);border-radius:12px;min-height:0}
 .envgrid{width:100%;border-collapse:collapse} .envgrid th,.envgrid td{padding:7px 10px;border-bottom:1px solid var(--line2);text-align:left;vertical-align:top} .envgrid thead th{position:sticky;top:0;background:var(--panel2);z-index:1}
 .envgrid td.envok{color:var(--faint)} .envgrid td.envdiff{color:var(--edit);background:var(--edit-bg);font-weight:600}
+.erdv g.node.sel rect[fill="none"]{stroke:#E8A317!important;stroke-width:3px} .erdband{fill:rgba(232,163,23,.12);stroke:#E8A317;stroke-width:1.5;stroke-dasharray:5 4;pointer-events:none}
+.erdv .tb [data-ea="selall"].on{background:var(--accent-bg);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -3916,24 +3918,51 @@ function erdWire(E,s,nodes,edges){
   let drag=null, raf=0;
   const scale=()=>{const m=s.getScreenCTM(); return m?m.a:1};
   const nodeOf=t=>{const g=t&&t.closest&&t.closest('g.node'); return g?nodes[+g.dataset.k]:null};
+  // selected tables move together: Ctrl+click adds or removes one, Shift+drag on the background draws a box,
+  // Ctrl+A or Select all takes every table, Esc or a click on the background clears it
+  const sel=new Set(nodes.filter(n=>E.pick&&E.pick.has(n.name)));
+  const paintSel=()=>{nodes.forEach(n=>n.g.classList.toggle('sel',sel.has(n))); E.pick=new Set([...sel].map(n=>n.name));
+    const b=document.querySelector('[data-ea="selall"]'); if(b){b.textContent=sel.size?'Clear selection ('+sel.size+')':'Select all'; b.classList.toggle('on',sel.size>0)}};
+  E.selAll=on=>{sel.clear(); if(on) nodes.forEach(n=>sel.add(n)); paintSel()};
+  paintSel();
+  const toSvg=ev=>{const pt=s.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; const m=s.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):{x:0,y:0}};
+  const routeAll=group=>{const es=new Set(); group.forEach(g=>inc.get(g.m).forEach(e=>es.add(e))); es.forEach(route)};
   s.addEventListener('pointerdown',ev=>{
     if(ev.button!==0) return; if(ev.target.closest&&ev.target.closest('.eyebtn')) return; const n=nodeOf(ev.target);
-    drag=n?{n,x:ev.clientX,y:ev.clientY,cx:n.cx,cy:n.cy,sc:scale()}:{pan:1,x:ev.clientX,y:ev.clientY,sl:cv.scrollLeft,st:cv.scrollTop};
-    if(n){n.g.parentNode.appendChild(n.g);n.g.style.cursor='grabbing'} else cv.style.cursor='grabbing';
+    if(n&&(ev.ctrlKey||ev.metaKey)){ sel.has(n)?sel.delete(n):sel.add(n); paintSel(); ev.preventDefault(); return }
+    if(!n&&ev.shiftKey){ const p0=toSvg(ev), r=document.createElementNS('http://www.w3.org/2000/svg','rect'); r.setAttribute('class','erdband'); s.appendChild(r);
+      drag={band:r,x0:p0.x,y0:p0.y,add:ev.ctrlKey||ev.metaKey}; try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault(); return }
+    if(n){
+      if(!sel.has(n)&&sel.size){sel.clear(); paintSel()}
+      const group=(sel.has(n)?[...sel]:[n]).map(m=>({m,cx:m.cx,cy:m.cy}));
+      drag={n,group,x:ev.clientX,y:ev.clientY,sc:scale()}; group.forEach(g=>g.m.g.parentNode.appendChild(g.m.g)); n.g.style.cursor='grabbing';
+    } else { drag={pan:1,x:ev.clientX,y:ev.clientY,sl:cv.scrollLeft,st:cv.scrollTop}; cv.style.cursor='grabbing' }
     try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault();
   });
+  // the space around the drawing: a click clears the selection, Shift+drag draws a box (one handler, replaced on each draw)
+  cv.onpointerdown=ev=>{
+    if(ev.button!==0||(ev.target.closest&&ev.target.closest('svg'))) return;
+    if(ev.shiftKey){ const p0=toSvg(ev), r=document.createElementNS('http://www.w3.org/2000/svg','rect'); r.setAttribute('class','erdband'); s.appendChild(r);
+      drag={band:r,x0:p0.x,y0:p0.y,add:ev.ctrlKey||ev.metaKey}; try{s.setPointerCapture(ev.pointerId)}catch(_){} ev.preventDefault(); return }
+    if(sel.size){sel.clear(); paintSel()}
+  };
   s.addEventListener('pointermove',ev=>{
     if(!drag) return;
-    if(drag.pan){cv.scrollLeft=drag.sl-(ev.clientX-drag.x);cv.scrollTop=drag.st-(ev.clientY-drag.y);return}
-    drag.tx=drag.cx+(ev.clientX-drag.x)/drag.sc; drag.ty=drag.cy+(ev.clientY-drag.y)/drag.sc;
-    if(!raf) raf=requestAnimationFrame(()=>{raf=0; if(!drag||drag.pan) return; move(drag.n,drag.tx,drag.ty); inc.get(drag.n).forEach(route)}); // only the moved table's lines, once per frame
+    if(drag.band){ const p=toSvg(ev), x=Math.min(p.x,drag.x0), y=Math.min(p.y,drag.y0); drag.box={x,y,w:Math.abs(p.x-drag.x0),h:Math.abs(p.y-drag.y0)};
+      drag.band.setAttribute('x',x); drag.band.setAttribute('y',y); drag.band.setAttribute('width',drag.box.w); drag.band.setAttribute('height',drag.box.h); return }
+    if(drag.pan){ if(Math.abs(ev.clientX-drag.x)+Math.abs(ev.clientY-drag.y)>3) drag.moved=1; cv.scrollLeft=drag.sl-(ev.clientX-drag.x);cv.scrollTop=drag.st-(ev.clientY-drag.y);return}
+    drag.dx=(ev.clientX-drag.x)/drag.sc; drag.dy=(ev.clientY-drag.y)/drag.sc;
+    if(!raf) raf=requestAnimationFrame(()=>{raf=0; if(!drag||drag.pan||drag.band) return; drag.group.forEach(g=>move(g.m,g.cx+drag.dx,g.cy+drag.dy)); routeAll(drag.group)}); // only the moved tables' lines, once per frame
   });
   s.addEventListener('pointerover',ev=>{if(drag&&!drag.pan) return; const n=nodeOf(ev.target); if(n) vis(new Set([n]))});
   s.addEventListener('pointerout',ev=>{if(drag&&!drag.pan) return; const g=ev.target.closest&&ev.target.closest('g.node'); if(g&&!(ev.relatedTarget&&g.contains(ev.relatedTarget))) vis(null)});
   const end=ev=>{
     if(!drag) return; const d=drag; drag=null; cv.style.cursor='';
-    if(d.pan) return; if(raf){cancelAnimationFrame(raf);raf=0} if(d.tx!=null){move(d.n,d.tx,d.ty); inc.get(d.n).forEach(route)}
-    d.n.g.style.cursor='grab'; E.pos[d.n.name]=[d.n.cx,d.n.cy]; persist(); fit(false);
+    if(d.band){ d.band.remove(); const b=d.box; if(!d.add) sel.clear();
+      if(b) nodes.forEach(n=>{ if(n.cx+n.w/2>=b.x&&n.cx-n.w/2<=b.x+b.w&&n.cy+n.h/2>=b.y&&n.cy-n.h/2<=b.y+b.h) sel.add(n) }); paintSel(); return }
+    if(d.pan){ if(!d.moved&&sel.size&&ev.type==='pointerup'){sel.clear(); paintSel()} return }
+    if(raf){cancelAnimationFrame(raf);raf=0} if(d.dx!=null){d.group.forEach(g=>move(g.m,g.cx+d.dx,g.cy+d.dy)); routeAll(d.group)}
+    d.n.g.style.cursor='grab'; d.group.forEach(g=>{E.pos[g.m.name]=[g.m.cx,g.m.cy]}); persist(); fit(false);
     const under=document.elementFromPoint(ev.clientX,ev.clientY); const un=nodeOf(under); vis(un===d.n?new Set([d.n]):null);
   };
   s.addEventListener('pointerup',end); s.addEventListener('pointercancel',end);
@@ -4156,7 +4185,7 @@ function renderErdPage(){
     ${hasAreas()?`<label><input type="checkbox" id="erdacol" ${E.acol?'checked':''}> Colour by area</label>`:`<span class="dim" style="font-size:12.5px">Fill in <b>Area</b> in the Table Dictionary to pick and colour tables by area.</span>`}</div></details></div></div>
     <div class="stage"><div class="tb"><span class="info" id="erdinfo"></span><span class="grow"></span>
       <button class="btn" data-ez="0.8">−</button><button class="btn" data-ez="0" title="Fit the whole diagram in the panel">Fit</button><button class="btn" data-ez="1.25">+</button>
-      <button class="btn" data-ea="names" title="Show or hide the relationship names on the lines">Names</button><button class="btn" data-ea="relayout" title="Discard your arrangement and lay the tables out again">Auto layout</button><span class="erdexp"><button class="btn" data-ea="expmenu" aria-haspopup="true">Export ▾</button><span class="erdmenu" id="erdmenu" hidden><button data-ea="drawio">draw.io (.drawio)<small>Editable, with your layout</small></button><button data-ea="svg">Picture (SVG)</button><button data-ea="png">Picture (PNG)</button><hr><button data-ea="mmd">Mermaid (.mmd)</button><button data-ea="copy">Copy Mermaid</button><button data-ea="src" class="${E.src?'on':''}">Show Mermaid source</button></span></span></div>
+      <button class="btn" data-ea="names" title="Show or hide the relationship names on the lines">Names</button><button class="btn" data-ea="selall" title="Select every table to move them together. Ctrl+click adds or removes a table; Shift+drag on the background selects an area; Esc clears">Select all</button><button class="btn" data-ea="relayout" title="Discard your arrangement and lay the tables out again">Auto layout</button><span class="erdexp"><button class="btn" data-ea="expmenu" aria-haspopup="true">Export ▾</button><span class="erdmenu" id="erdmenu" hidden><button data-ea="drawio">draw.io (.drawio)<small>Editable, with your layout</small></button><button data-ea="svg">Picture (SVG)</button><button data-ea="png">Picture (PNG)</button><hr><button data-ea="mmd">Mermaid (.mmd)</button><button data-ea="copy">Copy Mermaid</button><button data-ea="src" class="${E.src?'on':''}">Show Mermaid source</button></span></span></div>
       <div class="dim" id="erdlegend" style="padding:6px 16px;border-bottom:1px solid var(--line2)"><span style="display:inline-block;width:14px;height:10px;border:3px solid #BB1C73;border-radius:2px;vertical-align:-1px"></span> Custom table &nbsp; <span style="display:inline-block;width:14px;height:10px;border:1px solid #0A4873;border-radius:2px;vertical-align:-1px"></span> Out of the box or referenced</div>
       <div class="body ${E.dock} ${E.src?'srcopen':''}" id="erdbody" style="--sw:${E.sw}px;--sh:${E.sh}px"><div class="cv" id="erdcv"><div class="msg">Drawing…</div></div>
         <div class="sres" id="erdsres" title="Drag to resize. Double-click to reset."></div>
@@ -4289,6 +4318,7 @@ function erdSave(){const E=erdInit();S.ui.erd={acol:E.acol,nn:E.nn,attrs:E.attrs
 function erdAction(a,btn){
   const E=erdInit(); const base=S.fileName.replace(/\.[^.]+$/,'')+' - ERD';
   if(a==='expmenu'){const m=$('#erdmenu'); m.hidden=!m.hidden; if(!m.hidden) setTimeout(()=>document.addEventListener('click',function c(ev){if(!ev.target.closest('.erdexp')){m.hidden=true} document.removeEventListener('click',c)},{once:false}),0); return}
+  if(a==='selall'){ if(E.selAll) E.selAll(!(E.pick&&E.pick.size)); return }
   if(a==='names'){E.lbl=E.lbl==='hover'?'all':E.lbl==='all'?'none':'hover'; erdSave(); erdNamesBtn(); if(E.applyVis) E.applyVis(); return}
   if(a==='relayout'){const all=store.get('dme.erdpos')||{};let h=5381;const src=(E.srcText||'')+'|core:'+[...E.core].sort().join(',');for(let i=0;i<src.length;i++)h=((h<<5)+h+src.charCodeAt(i))|0;delete all['p'+(h>>>0).toString(36)];store.set('dme.erdpos',all);E.pos={};drawErd();return}
   if(a==='src'){E.src=!E.src; const bd=$('#erdbody'); bd.classList.toggle('srcopen',E.src); const sb=document.querySelector('.tb [data-ea="src"]'); if(sb){sb.classList.toggle('on',E.src); sb.textContent=E.src?'Hide Mermaid source':'Show Mermaid source'} return}
@@ -4507,6 +4537,13 @@ $('#btnMob').onclick=e=>{e.stopPropagation();mobMenu(e.currentTarget)};
 $('#btnWb').onclick=e=>{e.stopPropagation();wbMenu(e.currentTarget)};
 $('#btnTmpl').onclick=()=>{$('#tmplpanel').classList.contains('open')?$('#tmplpanel').classList.remove('open'):renderTemplate()};
 $('#tfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=ev=>{try{const u=new Uint8Array(ev.target.result);const b64=u8ToB64(u);if(!parseWorkbook(XLSX.read(u,XLSX_OPTS)).length)throw new Error('no usable sheets');loadTemplate(b64,f.name);const kept=store.set('dme.tmpl',{name:f.name,b64});conformance();updateCounts();applyAndRender();renderTemplate();toast('Template set to '+f.name+(kept?'':'. This browser could not remember it, so it goes back to the bundled one on reload.'))}catch(err){dlg({title:'Could not use that template',body:esc(err.message),ok:'OK',cancel:null,danger:true})}};r.readAsArrayBuffer(f)};
+// ERD: Ctrl+A selects every table, Esc clears the selection
+document.addEventListener('keydown',e=>{
+  if(S.cur!=='__erd'||!S.erd||!S.erd.selAll||document.querySelector('.convmask')) return; const tg=e.target;
+  if(tg&&(/^(input|textarea|select)$/i.test(tg.tagName)||tg.isContentEditable)) return;
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='a'){e.preventDefault(); S.erd.selAll(true)}
+  else if(e.key==='Escape'&&S.erd.pick&&S.erd.pick.size) S.erd.selAll(false);
+});
 $('#btnHelp').onclick=()=>go('__readme'); $('#btnHelp').title='How it works · version '+DME_VERSION;
 // Theme: Automatic (as the system), Dark or Light, kept in this browser
 const TH_ICON={auto:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>',dark:'<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'};

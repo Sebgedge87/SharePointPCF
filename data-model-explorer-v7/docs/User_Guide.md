@@ -22,6 +22,8 @@ This guide describes version 7.0, in the SharePointPCF repository under `data-mo
 
 **New in 7.0**
 
+- **Several environments in XrmToolBox:** check the workbook against Dev, Test and Production side by side, or compare a solution across them to find drift (Comparing several environments).
+- **ERD:** select several tables, or all of them, and move them together (The ERD).
 - **Dark mode.** The page follows your system's light or dark setting; the theme button in the header picks Dark or Light instead, and the page remembers it (The header). Exported ERD images and files stay light.
 - **Generic.** No company logo or name: the template's comment columns are called **Comments**, the example workbook uses the `sample_` prefix, and the Dynamics 365 solution and XrmToolBox tool are simply Data Model Explorer.
 
@@ -183,6 +185,7 @@ The side panel has the tables at the top and the display settings at the bottom.
 2. Click ★ next to a table to make it a **core table**: the diagram is laid out around it, and with **Selecting a table also selects the tables it relates to** on, its neighbours come too.
 3. Under **Show**, choose what each box shows: **Names only**, **Keys + lookups** or **All fields**. **Layout and options** (closed until you open it; the line under it sums up what is set) has the **Direction**, when relationship names show, which tables are drawn, and colour by area. **Left to right** turns a layout that comes out tall on its side, to fit a wide screen; **Top to bottom** gives a tall layout. Changing it lays the diagram out again.
 4. Drag tables to tidy the layout; **Auto layout** starts again. Layouts are remembered per selection.
+   To move several tables at once, select them first: **Select all** above the diagram (or `Ctrl`+`A`), `Ctrl`+click a table to add or remove it, or hold `Shift` and drag a box over the background. Selected tables have an amber outline, and dragging any of them moves them all. `Esc`, or a click on the background, clears the selection.
 5. To leave out a relationship, click the eye at the end of its row in the table box. Every lookup row has one, and N:N relationships have their own rows (↔ the other table) on both tables. The line disappears; the row stays in the box, faded, with its eye crossed out, so clicking it again brings the line back. A lookup to a table is hidden from the row in the table that holds the lookup. With **Names only** there are no rows, so the table's header has one eye for all of its own relationships. **show all** in the side panel brings every hidden relationship back. The tables stay where they are, and the choice is remembered in this browser.
 
 ![Hiding relationships with the eye on each row](images/18-erd-eyes.png)
@@ -405,6 +408,20 @@ Until it is in XrmToolBox's Tool Library, build it from the repository on a Wind
 1. Connect to an environment as usual. The tool asks for a connection if there is none.
 2. The page opens on **This environment**: load a solution as the model, or open a workbook and check it against the environment.
 3. Connecting to another environment (the connection button in XrmToolBox's toolbar) reopens the page on that one.
+
+### Comparing several environments
+
+In XrmToolBox, **This environment** also lists **Other environments**: the one the page is open on, plus any you add.
+
+1. Click **Add environment…** and pick a connection in XrmToolBox's connection window (for example Test and Production). Each one is listed with its address; ✕ removes it.
+2. Compare them in one of two ways:
+    - **Check this workbook against all**: the checks of This environment (not built, undocumented, type and required-level differences and, with **Managed environment** ticked, unmanaged changes) run in every environment and are lined up, a column per environment. ✓ means as the workbook. With a solution picked in the list, each environment is checked against its copy of that solution (by unique name), with its version shown.
+    - **Compare … across them** (pick a solution first): no workbook needed. The solution's tables and columns are read from each environment, and every table or column that is missing somewhere, or has a different type, required level, display name or settings (length, format, choices, targets), is listed with each environment's value.
+3. The results open on their own page: filter the rows, untick **Differences only** to see everything, and **Download CSV** to keep them. **Last comparison** in the panel opens them again.
+
+![A solution compared across two environments](images/24-environments.png)
+
+Each environment is read with its own XrmToolBox connection, and only read. Comparing several environments needs the XrmToolBox tool; inside Dynamics 365 the page reads only the environment it is open in.
 
 The page reads the environment with XrmToolBox's sign-in, as the connected user, and only reads: the tool passes on read requests and refuses anything else. Workbooks, edits and ERD layouts are kept for the next session, in XrmToolBox's settings folder. Downloads go to your Downloads folder.
 

@@ -1,6 +1,6 @@
 # Data Model Explorer 7.0
 
-Version 6.0, made **generic** (no company logo or name) and with a **dark mode**. Kept in its own folder: 1.9
+Version 6.0, made **generic** (no company logo or name), with a **dark mode**, **several environments** compared side by side in XrmToolBox, and **multi-select** in the ERD. Kept in its own folder: 1.9
 (`../data-model-explorer`), 2.0 (`../data-model-explorer-v2`), 3.0 (`../data-model-explorer-live`), 4.0
 (`../data-model-explorer-v4`), 5.0 (`../data-model-explorer-v5`) and 6.0 (`../data-model-explorer-v6`) are unchanged.
 
@@ -31,6 +31,8 @@ the connected environment's address, so the page runs in its "inside Dynamics 36
 - the page's Web API requests (`/api/data/...`) are sent on with XrmToolBox's access token for the connection, so it reads
   the environment as the connected user;
 - only read requests are passed on: the tool cannot change the environment.
+- extra XrmToolBox connections (Add environment… on the page) are listed at `/__dme/envs`, and read through
+  `/__dme/env/<id>/api/data/...` with that connection's token, for comparing several environments.
 
 ### Try it without building
 
