@@ -46,3 +46,23 @@ export const runInteractive: InteractiveRunner = (cmd, args, opts = {}) =>
     child.on("error", (err: NodeJS.ErrnoException) => resolveRun({ code: -1, notFound: err.code === "ENOENT" }));
     child.on("exit", (code) => resolveRun({ code: code ?? -1, notFound: false }));
   });
+
+export interface CapturedProcess {
+  /** Resolves with the exit code when the process ends. */
+  done: Promise<{ code: number; notFound: boolean }>;
+  kill(): void;
+}
+
+/** Starts a command with its output piped to `onOutput` as it arrives (for sign-in codes). */
+export type CapturingRunner = (cmd: string, args: string[], onOutput: (text: string) => void, opts?: RunOptions) => CapturedProcess;
+
+export const runCapturing: CapturingRunner = (cmd, args, onOutput, opts = {}) => {
+  const child = spawn(cmd, args, { env: opts.env ?? process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: needsShell(cmd) });
+  child.stdout?.on("data", (d: Buffer) => onOutput(d.toString()));
+  child.stderr?.on("data", (d: Buffer) => onOutput(d.toString()));
+  const done = new Promise<{ code: number; notFound: boolean }>((resolveDone) => {
+    child.on("error", (err: NodeJS.ErrnoException) => resolveDone({ code: -1, notFound: err.code === "ENOENT" }));
+    child.on("exit", (code) => resolveDone({ code: code ?? -1, notFound: false }));
+  });
+  return { done, kill: () => child.kill() };
+};

@@ -227,16 +227,71 @@ function foundTable() {
     h("div", { class: "row" }, h("button", { type: "button", class: "btn primary", disabled: !chosen, onclick: addPicked }, chosen ? `Add ${chosen} selected` : "Tick the environments to add"),
       h("button", { type: "button", class: "btn", onclick: () => { acctState.found = null; overview(); } }, "Close")));
 }
-async function signIn() {
-  acctState.busy = true;
-  acctState.notice = { kind: "info", text: "A Microsoft sign-in window has opened in your browser. Pick your work account there; this page refreshes when you're done." };
-  overview();
-  try {
-    await api("/api/account/login", {});
-    acctState.notice = { kind: "ok", text: "Signed in." };
-  } catch (err) { acctState.notice = { kind: "bad", text: `Sign-in didn't finish: ${err.message}` }; }
-  acctState.busy = false;
-  overview();
+/** Sign-in dialog: shows a code to enter at microsoft.com/devicelogin, and waits for it to finish. */
+let signInDialog = null;
+function signIn() {
+  if (signInDialog?.open) return;
+  const body = h("div", { class: "modal-body" });
+  const dlg = h("dialog", { class: "modal", "aria-labelledby": "signin-title" },
+    h("div", { class: "modal-head" }, h("h2", { id: "signin-title" }, "Sign in"), h("button", { type: "button", class: "iconbtn", "aria-label": "Close", onclick: () => dlg.close() }, "×")),
+    body);
+  document.body.append(dlg);
+  signInDialog = dlg;
+  let finished = false;
+  let poll = null;
+  const stop = () => { if (poll) clearInterval(poll); poll = null; };
+  const show = (...nodes) => body.replaceChildren(...nodes.flat().filter(Boolean));
+  const tenantLine = () => h("p", { class: "small muted", style: "margin:0" }, config.tenantId ? `Tenant: ${config.tenantId}. Change it under Manage environments.` : "Uses your default tenant. Set a tenant under Manage environments if your environments are in another one.");
+  const success = async () => {
+    finished = true;
+    stop();
+    show(h("div", { class: "row" }, h("span", { class: "dot ok" }), h("strong", {}, "Signed in")), h("p", { class: "muted", style: "margin:0" }, "Loading your environments…"));
+    acctState.user = null;
+    setTimeout(() => { dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." }; overview(); refreshAlertBadge(); }, 900);
+  };
+  const failed = (msg) => {
+    stop();
+    show(notice("bad", msg), h("div", { class: "row" },
+      h("button", { type: "button", class: "btn primary", onclick: startCode }, "Try again"),
+      h("button", { type: "button", class: "btn", onclick: startBrowser }, "Use a browser window instead")));
+  };
+  async function startCode() {
+    show(h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "Getting a sign-in code…"), tenantLine());
+    let start;
+    try { start = await api("/api/account/device/start", {}); } catch (err) { return failed(err.message); }
+    const copyBtn = h("button", { type: "button", class: "btn sm", onclick: async () => {
+      try { await navigator.clipboard.writeText(start.code); copyBtn.textContent = "Copied"; } catch { copyBtn.textContent = "Select and copy"; }
+    } }, "Copy");
+    show(
+      h("ol", { class: "steps" },
+        h("li", {}, "Copy this code"),
+        h("li", {}, "Open the Microsoft sign-in page and paste it"),
+        h("li", {}, "Pick your work account. This window closes by itself.")),
+      h("div", { class: "devcode" }, h("span", { class: "devcode-text", "aria-label": "Sign-in code" }, start.code), copyBtn),
+      h("a", { class: "btn primary", href: start.url, target: "_blank", rel: "noopener noreferrer", style: "justify-content:center" }, "Open Microsoft sign-in"),
+      h("div", { class: "row small muted", role: "status" }, h("span", { class: "spinner", "aria-hidden": "true" }), "Waiting for you to finish signing in…"),
+      tenantLine(),
+      h("button", { type: "button", class: "btn link", style: "align-self:flex-start;padding:0", onclick: () => { api("/api/account/device/cancel", {}).catch(() => {}); stop(); startBrowser(); } }, "Code not accepted by your organisation? Use a browser window instead"));
+    poll = setInterval(async () => {
+      try {
+        const st = await api("/api/account/device/status");
+        if (st.state === "done") success();
+        else if (st.state === "failed") failed(`Sign-in didn't finish: ${st.error || "unknown error"}`);
+      } catch { /* keep waiting */ }
+    }, 2000);
+  }
+  async function startBrowser() {
+    show(h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "A Microsoft sign-in tab has opened in your browser. Pick your work account there."), tenantLine());
+    try { await api("/api/account/login", {}); success(); } catch (err) { failed(`Sign-in didn't finish: ${err.message}`); }
+  }
+  dlg.addEventListener("close", () => {
+    stop();
+    if (!finished) api("/api/account/device/cancel", {}).catch(() => {});
+    dlg.remove();
+    signInDialog = null;
+  });
+  dlg.showModal();
+  startCode();
 }
 async function signOut() {
   if (!confirm("Sign out? The dashboard can't read any environment until you sign in again.")) return;
@@ -259,7 +314,7 @@ function accountBar() {
     h("div", {}, h("strong", {}, acctState.user ? `Signed in as ${acctState.user}` : "Sign-in"),
       h("div", { class: "small muted" }, `Uses your ${via} sign-in${config.tenantId ? ` · tenant ${config.tenantId}` : ""}.`)),
     config.canManage ? h("div", { class: "row" },
-      h("button", { type: "button", class: "btn primary", disabled: acctState.busy, onclick: signIn }, acctState.busy ? "Waiting for sign-in…" : acctState.user ? "Sign in again" : "Sign in"),
+      h("button", { type: "button", class: "btn primary", onclick: signIn }, acctState.user ? "Sign in again" : "Sign in"),
       acctState.user ? h("button", { type: "button", class: "btn", disabled: acctState.busy, onclick: signOut }, "Sign out") : null) : null);
 }
 function manageEnvironments() {

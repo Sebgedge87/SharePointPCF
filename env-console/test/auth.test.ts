@@ -77,3 +77,47 @@ test("token cache reuses tokens until five minutes before expiry and shares in-f
   now += 6 * 60_000; // 4 minutes left: refresh
   assert.equal(await cache.token("https://org.crm.dynamics.com"), "t2");
 });
+
+test("sign-in with a code reads the code from PowerShell's output and finishes when it exits", async () => {
+  let finish: (code: number) => void = () => {};
+  let killed = false;
+  let envSeen: NodeJS.ProcessEnv | undefined;
+  const capture = (_cmd: string, _args: string[], onOut: (t: string) => void, opts?: { env?: NodeJS.ProcessEnv }) => {
+    envSeen = opts?.env;
+    setTimeout(() => onOut("WARNING: To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code "), 5);
+    setTimeout(() => onOut("ABCD-1234 to authenticate.\n"), 10);
+    return { done: new Promise<{ code: number; notFound: boolean }>((r) => (finish = (code) => r({ code, notFound: false }))), kill: () => void (killed = true) };
+  };
+  const p = new PowerShellTokenProvider(async () => ok("{}"), noInteractive, ["pwsh"], capture);
+  const login = await p.startDeviceLogin("contoso.onmicrosoft.com");
+  assert.equal(login.code, "ABCD-1234");
+  assert.equal(login.url, "https://microsoft.com/devicelogin");
+  assert.equal(envSeen!.PCX_DEVICE, "1");
+  assert.equal(envSeen!.PCX_TENANT, "contoso.onmicrosoft.com");
+  finish(0);
+  await login.done;
+  login.cancel();
+  assert.equal(killed, true);
+});
+
+test("sign-in with a code reports a failure when no code appears", async () => {
+  const capture = (_c: string, _a: string[], onOut: (t: string) => void) => {
+    setTimeout(() => onOut("Connect-AzAccount: AADSTS50059: No tenant-identifying information found\n"), 5);
+    return { done: new Promise<{ code: number; notFound: boolean }>((r) => setTimeout(() => r({ code: 1, notFound: false }), 15)), kill: () => {} };
+  };
+  const p = new PowerShellTokenProvider(async () => ok("{}"), noInteractive, ["pwsh"], capture);
+  await assert.rejects(p.startDeviceLogin(), /AADSTS50059/);
+});
+
+test("Azure CLI sign-in with a code passes --use-device-code", async () => {
+  let args: string[] = [];
+  const capture = (_c: string, a: string[], onOut: (t: string) => void) => {
+    args = a;
+    setTimeout(() => onOut("To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code XYZ98765 to authenticate.\n"), 5);
+    return { done: new Promise<{ code: number; notFound: boolean }>((r) => setTimeout(() => r({ code: 0, notFound: false }), 20)), kill: () => {} };
+  };
+  const p = new AzureCliTokenProvider(async () => ok("{}"), noInteractive, "az", capture);
+  const login = await p.startDeviceLogin("11111111-2222-3333-4444-555555555555");
+  assert.equal(login.code, "XYZ98765");
+  assert.deepEqual(args, ["login", "--allow-no-subscriptions", "--use-device-code", "--tenant", "11111111-2222-3333-4444-555555555555"]);
+});

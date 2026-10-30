@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { ConfigError, findEnv, validateConfig, type PcxConfig } from "../core/config.js";
 import { readActions } from "../core/actionLog.js";
-import { AuthError, TokenCache, type TokenProvider } from "../core/auth.js";
+import { AuthError, TokenCache, type DeviceLogin, type TokenProvider } from "../core/auth.js";
 import { changeState, listComponents, PolicyError, type ComponentKind } from "../core/components.js";
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, listSolutions, publisherCounts, type Solution } from "../core/solutions.js";
@@ -23,6 +23,12 @@ import { removeUnmanagedLayer } from "../core/compare.js";
 import { evaluateAlerts, postToTeams } from "../core/alerts.js";
 import { buildReport, renderReportCsv, renderReportHtml } from "../core/report.js";
 import { discoverEnvironments, type DiscoveredEnv } from "../core/discovery.js";
+
+interface DeviceState {
+  state: "starting" | "waiting" | "done" | "failed" | "cancelled";
+  error?: string;
+  login?: DeviceLogin;
+}
 
 /** A downloadable file instead of JSON. */
 class FileResult {
@@ -145,6 +151,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const localWs = mode.kind === "local" ? mode.workspace ?? new Workspace(cfg) : undefined;
   const hostedWs = new WeakMap<Session, Workspace>();
   let loginRun: Promise<void> | undefined;
+  let device: DeviceState | undefined;
   const clearTokens = () => {
     if (localWs?.tokens instanceof TokenCache) localWs.tokens.clear();
   };
@@ -194,6 +201,40 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         loginRun ??= acct.provider.login(cfg.tenantId, false).finally(() => (loginRun = undefined));
         await loginRun;
         clearTokens();
+        return { ok: true };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/device/start") {
+        if (!acct.provider.startDeviceLogin) throw new HttpError(400, "Sign-in with a code isn't available for this sign-in method.");
+        device?.login?.cancel();
+        const current: DeviceState = { state: "starting" };
+        device = current;
+        try {
+          const login = await acct.provider.startDeviceLogin(cfg.tenantId);
+          current.login = login;
+          current.state = "waiting";
+          login.done.then(
+            () => {
+              current.state = "done";
+              clearTokens();
+            },
+            (e: Error) => {
+              if (current.state === "waiting") Object.assign(current, { state: "failed", error: e.message });
+            }
+          );
+          return { code: login.code, url: login.url };
+        } catch (e) {
+          Object.assign(current, { state: "failed", error: (e as Error).message });
+          throw e;
+        }
+      }
+      if (req.method === "GET" && url.pathname === "/api/account/device/status") {
+        return { state: device?.state ?? "none", error: device?.error };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/device/cancel") {
+        if (device && device.state !== "done") {
+          device.state = "cancelled";
+          device.login?.cancel();
+        }
         return { ok: true };
       }
       if (req.method === "POST" && url.pathname === "/api/account/logout") {

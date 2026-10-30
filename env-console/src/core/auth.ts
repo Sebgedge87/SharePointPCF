@@ -1,5 +1,5 @@
 import { isValidTenant, normaliseEnvUrl, type AuthProviderName } from "./config.js";
-import { runInteractive, runProcess, type InteractiveRunner, type Runner } from "./proc.js";
+import { runCapturing, runInteractive, runProcess, type CapturedProcess, type CapturingRunner, type InteractiveRunner, type Runner } from "./proc.js";
 
 export interface AccessToken {
   token: string;
@@ -14,6 +14,54 @@ export interface TokenProvider {
   login(tenantId?: string, deviceCode?: boolean): Promise<void>;
   /** Signs out of the borrowed session. */
   logout(): Promise<void>;
+  /** Starts a sign-in with a code (no window on this machine). Optional. */
+  startDeviceLogin?(tenantId?: string): Promise<DeviceLogin>;
+}
+
+/** A sign-in waiting for the user to enter `code` at `url`. */
+export interface DeviceLogin {
+  code: string;
+  url: string;
+  /** Resolves when the user has finished signing in; rejects if it fails or times out. */
+  done: Promise<void>;
+  cancel(): void;
+}
+
+const CODE_RE = /enter the code\s+([A-Z0-9-]{6,12})/i;
+const URL_RE = /(https:\/\/(?:www\.)?(?:microsoft\.com\/devicelogin|login\.microsoft\.com\/device|aka\.ms\/devicelogin))/i;
+
+/** Runs a device-code sign-in command and resolves once the code appears in its output. */
+function deviceLoginFrom(start: (onOutput: (t: string) => void) => CapturedProcess, toolName: string): Promise<DeviceLogin> {
+  return new Promise((resolveStart, rejectStart) => {
+    let buf = "";
+    let started = false;
+    const proc = start((t) => {
+      buf += t;
+      if (started) return;
+      const code = CODE_RE.exec(buf)?.[1];
+      if (code) {
+        started = true;
+        resolveStart({
+          code,
+          url: URL_RE.exec(buf)?.[1] ?? "https://microsoft.com/devicelogin",
+          done: proc.done.then((r) => {
+            if (r.code !== 0) throw new AuthError(`${toolName} sign-in did not complete`);
+          }),
+          cancel: () => proc.kill()
+        });
+      }
+    });
+    const timer = setTimeout(() => {
+      if (!started) {
+        proc.kill();
+        rejectStart(new AuthError(`${toolName} did not show a sign-in code. ${firstLine(buf) === "unknown error" ? "" : firstLine(buf)}`.trim()));
+      }
+    }, 60_000);
+    proc.done.then((r) => {
+      clearTimeout(timer);
+      if (!started) rejectStart(new AuthError(r.notFound ? `${toolName} was not found.` : `${toolName} sign-in stopped: ${firstLine(buf)}`));
+    });
+  });
 }
 
 export class AuthError extends Error {
@@ -79,7 +127,8 @@ if ($env:PCX_DEVICE -eq '1') { $p.UseDeviceAuthentication = $true }
 # pcx does not use Azure subscriptions: skip the subscription picker and the per-tenant warnings.
 try { Update-AzConfig -LoginExperienceV2 Off -Scope Process -WarningAction SilentlyContinue | Out-Null } catch { }
 # Device code needs its instructions shown; otherwise hide the module's banners and announcements.
-if ($p.UseDeviceAuthentication) { Connect-AzAccount @p -WarningAction SilentlyContinue | Out-Null }
+# The sign-in code is shown as a warning, so warnings stay on here.
+if ($p.UseDeviceAuthentication) { Connect-AzAccount @p | Out-Null }
 else { Connect-AzAccount @p -WarningAction SilentlyContinue *> $null }
 $c = Get-AzContext
 Write-Host ("Signed in as " + $c.Account.Id + " (tenant " + $c.Tenant.Id + ")")
@@ -94,8 +143,15 @@ export class PowerShellTokenProvider implements TokenProvider {
   constructor(
     private readonly run: Runner = runProcess,
     private readonly interactive: InteractiveRunner = runInteractive,
-    private readonly shells: string[] = process.platform === "win32" ? ["pwsh", "powershell"] : ["pwsh"]
+    private readonly shells: string[] = process.platform === "win32" ? ["pwsh", "powershell"] : ["pwsh"],
+    private readonly capture: CapturingRunner = runCapturing
   ) {}
+
+  startDeviceLogin(tenantId?: string): Promise<DeviceLogin> {
+    checkTenant(tenantId);
+    const env = { ...process.env, PCX_TENANT: tenantId ?? "", PCX_DEVICE: "1" };
+    return deviceLoginFrom((onOut) => this.capture(this.shells[0]!, ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", encodePs(PS_LOGIN)], onOut, { env }), "PowerShell");
+  }
 
   async getToken(resource: string, tenantId?: string): Promise<AccessToken> {
     const res = normaliseEnvUrl(resource);
@@ -149,8 +205,16 @@ export class AzureCliTokenProvider implements TokenProvider {
   constructor(
     private readonly run: Runner = runProcess,
     private readonly interactive: InteractiveRunner = runInteractive,
-    private readonly cmd: string = process.platform === "win32" ? "az.cmd" : "az"
+    private readonly cmd: string = process.platform === "win32" ? "az.cmd" : "az",
+    private readonly capture: CapturingRunner = runCapturing
   ) {}
+
+  startDeviceLogin(tenantId?: string): Promise<DeviceLogin> {
+    checkTenant(tenantId);
+    const args = ["login", "--allow-no-subscriptions", "--use-device-code"];
+    if (tenantId) args.push("--tenant", tenantId);
+    return deviceLoginFrom((onOut) => this.capture(this.cmd, args, onOut), "Azure CLI");
+  }
 
   async getToken(resource: string, tenantId?: string): Promise<AccessToken> {
     const res = normaliseEnvUrl(resource);
