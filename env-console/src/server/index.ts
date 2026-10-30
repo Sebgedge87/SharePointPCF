@@ -22,6 +22,7 @@ import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configd
 import { removeUnmanagedLayer } from "../core/compare.js";
 import { evaluateAlerts, postToTeams } from "../core/alerts.js";
 import { buildReport, renderReportCsv, renderReportHtml } from "../core/report.js";
+import { discoverEnvironments, type DiscoveredEnv } from "../core/discovery.js";
 
 /** A downloadable file instead of JSON. */
 class FileResult {
@@ -74,6 +75,8 @@ export interface LocalAccount {
   provider: TokenProvider;
   /** Saves the config after the environment list or tenant changes. */
   save(config: PcxConfig): void;
+  /** Lists reachable environments; defaults to the Global Discovery Service. */
+  discover?: () => Promise<DiscoveredEnv[]>;
 }
 
 export interface RunningServer {
@@ -197,6 +200,21 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         await acct.provider.logout();
         clearTokens();
         return { ok: true };
+      }
+      if (req.method === "GET" && url.pathname === "/api/account/discover") {
+        const found = await (acct.discover ? acct.discover() : discoverEnvironments(localWs!.tokens));
+        const have = new Set(cfg.environments.map((e) => e.url));
+        return { environments: found.map((f) => ({ ...f, added: have.has(f.url) })) };
+      }
+      if (req.method === "POST" && url.pathname === "/api/account/envs") {
+        // Add several at once (from the environment lookup).
+        const body = await readJson(req);
+        const list = body.environments;
+        if (!Array.isArray(list) || list.length === 0 || list.length > 50) throw new HttpError(400, "environments must be a list of 1-50 items");
+        const next = validateConfig({ ...cfg, environments: [...cfg.environments, ...list.map((e: Record<string, unknown>) => ({ name: String(e.name ?? "").trim(), url: String(e.url ?? ""), managed: e.managed !== false }))] });
+        acct.save(next);
+        cfg.environments = next.environments;
+        return { environments: cfg.environments };
       }
       if (req.method === "POST" && url.pathname === "/api/account/env") {
         const body = await readJson(req);

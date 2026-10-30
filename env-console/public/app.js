@@ -168,7 +168,65 @@ function noEnvScreen() {
 
 // ------------------------------------------------------------------ sign-in and environment list
 
-const acctState = { busy: false, notice: null, user: null };
+const acctState = { busy: false, notice: null, user: null, found: null, finding: false, findError: null, picks: new Map() };
+async function findEnvironments() {
+  acctState.finding = true; acctState.findError = null; acctState.open = true;
+  overview();
+  try {
+    const { environments } = await api("/api/account/discover");
+    // Unique suggested names that don't clash with environments already added.
+    const used = new Set(config.environments.map((e) => e.name.toUpperCase()));
+    acctState.picks = new Map();
+    for (const f of environments) {
+      if (f.added) continue;
+      let n = f.suggestedName, i = 2;
+      while (used.has(n.toUpperCase())) n = `${f.suggestedName}-${i++}`.slice(0, 32);
+      used.add(n.toUpperCase());
+      acctState.picks.set(f.url, { on: false, name: n, managed: f.suggestedManaged });
+    }
+    acctState.found = environments;
+  } catch (err) { acctState.findError = err.message; }
+  acctState.finding = false;
+  overview();
+}
+async function addPicked() {
+  const list = acctState.found.filter((f) => acctState.picks.get(f.url)?.on).map((f) => ({ url: f.url, ...acctState.picks.get(f.url) }));
+  if (!list.length) return;
+  try {
+    await api("/api/account/envs", { environments: list.map(({ url, name, managed }) => ({ url, name, managed })) });
+    await reloadConfig();
+    acctState.found = null;
+    acctState.notice = { kind: "ok", text: `Added ${list.map((e) => e.name).join(", ")}.` };
+  } catch (err) { acctState.findError = err.message; }
+  overview();
+}
+function foundTable() {
+  if (acctState.finding) return loading("the environments your account can reach");
+  if (acctState.findError) return notice("bad", acctState.findError);
+  if (!acctState.found) return null;
+  if (!acctState.found.length) return notice("info", "Your account can't reach any Dataverse environments in this tenant. Check the tenant setting below, or sign in with another account.");
+  const chosen = [...acctState.picks.values()].filter((p) => p.on).length;
+  return h("div", { class: "stack" },
+    h("div", { class: "scroll" }, h("table", {},
+      h("thead", {}, h("tr", {}, ["", "Environment", "URL", "Region", "Name in the console", "Unmanaged (DEV)"].map((t) => h("th", { scope: "col" }, t)))),
+      h("tbody", {}, acctState.found.map((f) => {
+        const p = acctState.picks.get(f.url);
+        if (!p) return h("tr", {}, h("td", {}, h("span", { class: "pill ok" }, "Added")), h("th", { scope: "row" }, f.friendlyName), h("td", { class: "mono" }, f.url), h("td", { class: "small" }, f.region || ""), h("td", {}), h("td", {}));
+        const pick = h("input", { type: "checkbox", "aria-label": `Add ${f.friendlyName}`, disabled: !f.enabled });
+        pick.checked = p.on;
+        pick.addEventListener("change", () => { p.on = pick.checked; overview(); });
+        const name = h("input", { class: "input", value: p.name, maxlength: 32, style: "width:140px", "aria-label": `Name for ${f.friendlyName}` });
+        name.addEventListener("input", () => { p.name = name.value.trim(); });
+        const unm = h("input", { type: "checkbox", "aria-label": `${f.friendlyName} is unmanaged` });
+        unm.checked = !p.managed;
+        unm.addEventListener("change", () => { p.managed = !unm.checked; });
+        return h("tr", { class: p.on ? "sel" : "" }, h("td", {}, pick),
+          h("th", { scope: "row" }, f.friendlyName, f.enabled ? null : h("span", { class: "pill", style: "margin-left:6px" }, "Disabled")),
+          h("td", { class: "mono" }, f.url), h("td", { class: "small" }, f.region || ""), h("td", {}, name), h("td", {}, unm));
+      })))),
+    h("div", { class: "row" }, h("button", { type: "button", class: "btn primary", disabled: !chosen, onclick: addPicked }, chosen ? `Add ${chosen} selected` : "Tick the environments to add"),
+      h("button", { type: "button", class: "btn", onclick: () => { acctState.found = null; overview(); } }, "Close")));
+}
 async function signIn() {
   acctState.busy = true;
   acctState.notice = { kind: "info", text: "A Microsoft sign-in window has opened in your browser. Pick your work account there; this page refreshes when you're done." };
@@ -225,9 +283,13 @@ function manageEnvironments() {
     try { await api("/api/account/tenant", { tenant: tenant.value.trim() }); await reloadConfig(); status.textContent = "Tenant saved. Sign in again if your environments live in that tenant."; status.style.color = ""; }
     catch (err) { fail(err); }
   };
-  return h("details", { class: "card", open: config.environments.length === 0 ? true : null },
+  const details = h("details", { class: "card", open: config.environments.length === 0 || acctState.open ? true : null },
     h("summary", { style: "cursor:pointer;font:600 15px var(--head)" }, `Manage environments (${config.environments.length})`),
     h("div", { class: "stack", style: "margin-top:14px" },
+      h("div", { class: "row between" },
+        h("div", { class: "small muted" }, "Pick from the environments your account can reach, or add one by URL below."),
+        h("button", { type: "button", class: "btn primary", disabled: acctState.finding, onclick: findEnvironments }, acctState.finding ? "Looking…" : "Find my environments")),
+      foundTable(),
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
         h("thead", {}, h("tr", {}, ["Name", "URL", "Type", ""].map((t) => h("th", { scope: "col" }, t)))),
         h("tbody", {}, config.environments.map((e) => h("tr", {}, h("td", {}, chip(e.name)), h("td", { class: "mono" }, e.url), h("td", {}, e.managed ? "Managed (changes need a reason)" : "Unmanaged"),
@@ -241,6 +303,8 @@ function manageEnvironments() {
         h("label", { class: "field", style: "flex:1" }, h("span", {}, "Tenant (only if your account can sign in to several)"), tenant),
         h("button", { type: "button", class: "btn", onclick: saveTenant }, "Save tenant")),
       status));
+  details.addEventListener("toggle", () => { acctState.open = details.open; });
+  return details;
 }
 
 // ------------------------------------------------------------------ overview

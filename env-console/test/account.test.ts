@@ -75,3 +75,12 @@ test("tenant can be set and cleared", async () => {
   const cleared = await post("/api/account/tenant", { tenant: "" });
   assert.equal(cleared.body.tenantId, null);
 });
+
+test("several environments can be added at once from the lookup", async () => {
+  const r = await post("/api/account/envs", { environments: [{ name: "TEST", url: "https://contoso-test.crm11.dynamics.com", managed: true }, { name: "PROD", url: "https://contoso.crm11.dynamics.com" }] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(config.environments.map((e) => e.name), ["DEV", "TEST", "PROD"]);
+  const clash = await post("/api/account/envs", { environments: [{ name: "prod", url: "https://x.crm.dynamics.com" }] });
+  assert.equal(clash.status, 400);
+  assert.deepEqual(config.environments.map((e) => e.name), ["DEV", "TEST", "PROD"]);
+});

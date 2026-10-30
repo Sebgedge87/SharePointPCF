@@ -22,6 +22,7 @@ import { changeJobs, listProblemJobs } from "../core/jobs.js";
 import { listRoles, listUserRoles } from "../core/security.js";
 import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configdata.js";
 import { runProcess } from "../core/proc.js";
+import { discoverEnvironments } from "../core/discovery.js";
 import { HostedAuth, loadHostedSettings } from "../server/hosted.js";
 import { c, table } from "./format.js";
 
@@ -35,6 +36,7 @@ Sign-in
 
 Environments
   pcx env list [--json]                 Health, version, solutions, flows and plugin steps
+  pcx env discover [--json]              List every environment your account can reach
   pcx env add <NAME> <URL> [--unmanaged]
   pcx env remove <NAME>
 
@@ -218,13 +220,21 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
     out(`${c.green("✓")} Added ${name} (${env.managed ? "managed" : "unmanaged"}) ${env.url} to ${configPath}`);
     return 0;
   }
+  if (sub === "discover") {
+    const found = await discoverEnvironments(new Workspace(config).tokens);
+    const have = new Set(config.environments.map((e) => e.url));
+    if (o.json) return out(JSON.stringify(found, null, 2)), 0;
+    out(table(["", "SUGGESTED", "NAME", "URL", "REGION"], found.map((f) => [have.has(f.url) ? c.green("added") : f.enabled ? "" : c.dim("disabled"), f.suggestedName, f.friendlyName, f.url, f.region ?? ""])));
+    out(c.dim(`${found.length} environments you can reach. Add one with: pcx env add <NAME> <URL> [--unmanaged]`));
+    return 0;
+  }
   if (sub === "remove") {
     const env = findEnv(config, pos[0] ?? "");
     saveConfig({ ...config, environments: config.environments.filter((e) => e !== env) }, configPath);
     out(`${c.green("✓")} Removed ${env.name}`);
     return 0;
   }
-  throw new UsageError("Usage: pcx env list|add|remove");
+  throw new UsageError("Usage: pcx env list|discover|add|remove");
 }
 
 async function cmdSolution(sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {

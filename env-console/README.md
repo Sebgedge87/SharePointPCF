@@ -73,7 +73,9 @@ npm link            # optional: puts `pcx` on your PATH
 
 Without `npm link`, run it from the `env-console` folder as `.\pcx env list` (PowerShell or cmd) or `node dist/src/cli/index.js env list`. Running `node env list` does not work: Node treats `env` as a file name.
 
-Add your environments. DEV is unmanaged; every other environment is managed unless you say otherwise.
+Add your environments. The easiest way is the dashboard: Overview › Manage environments › **Find my environments** lists every environment your account can reach (from Microsoft's Global Discovery Service), suggests short names, and adds the ones you tick. From the terminal, `pcx env discover` lists them.
+
+Or add them by URL. DEV is unmanaged; every other environment is managed unless you say otherwise.
 
 ```bash
 pcx env add DEV https://<org>-dev.crm11.dynamics.com --unmanaged
