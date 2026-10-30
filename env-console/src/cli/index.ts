@@ -46,7 +46,8 @@ Environments
                                         of every one you can reach; nothing is loaded otherwise)
   pcx env list [--json]                 Health, version, solutions, flows and plugin steps
   pcx env discover [--json]             List every environment your account can reach
-  pcx env add <URL> [--unmanaged]       Save one (name and short name are looked up for you)
+  pcx env add [<URL>] [--unmanaged]     Add one by URL, or with no URL pick from your environments
+                                        (name and short name are looked up for you)
   pcx env add <NAME> <URL> [--unmanaged]  (or choose the short name yourself)
   pcx env remove <NAME>                 Remove a saved one, or hide a found one
   pcx env unhide <URL>|--all            Show hidden environments again
@@ -268,6 +269,24 @@ async function cmdEnv(sub: string | undefined, pos: string[], o: Opts, config: P
     );
     for (const r of res) if (r.error) out(c.yellow(`${r.name}: ${r.error}`));
     return res.every((r) => r.connected) ? 0 : 1;
+  }
+  if (sub === "add" && pos.length === 0) {
+    // No URL: pick from what the Discovery service returns (only ones not added yet).
+    if (!(process.stdin.isTTY && process.stdout.isTTY)) throw new UsageError("Usage: pcx env add <URL> [--unmanaged]   (or run it in a terminal to pick from a list)");
+    const have = new Set(config.environments.map((e) => e.url));
+    const avail = (await discoverEnvironments(new Workspace(config).tokens)).filter((f) => f.enabled && !have.has(f.url));
+    if (!avail.length) return out("All the environments your account can reach are already added."), 0;
+    avail.forEach((f, i) => out(`${String(i + 1).padStart(3)}. ${f.friendlyName} ${c.dim(f.url)}`));
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = (await new Promise<string>((r) => rl.question("Number to add (Enter to cancel): ", r))).trim();
+    rl.close();
+    if (!answer) return out("Nothing added."), 0;
+    const f = avail[Number(answer) - 1];
+    if (!/^\d+$/.test(answer) || !f) throw new UsageError(`No environment number ${answer}`);
+    const env = await environmentFromUrl(new Workspace(config), f.url, { label: f.friendlyName, ...(o.unmanaged ? { managed: false } : {}) });
+    saveConfig({ ...config, environments: [...config.environments, env] }, configPath);
+    out(`${c.green("✓")} Added ${env.label} as ${c.bold(env.name)} (${env.managed ? "managed" : "unmanaged"}) ${env.url}`);
+    return 0;
   }
   if (sub === "add" && pos.length === 1 && /^https?:\/\//i.test(pos[0]!)) {
     // Just a URL: look up its name, suggest the short name and type.

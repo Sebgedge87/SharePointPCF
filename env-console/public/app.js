@@ -336,7 +336,7 @@ function signIn() {
     stop();
     show(h("div", { class: "row" }, h("span", { class: "dot ok" }), h("strong", {}, "Signed in")), h("p", { class: "muted", style: "margin:0" }, "Loading your environments…"));
     acctState.user = null;
-    accessData = null;
+    accessData = null; discoCache = null;
     setTimeout(async () => {
       dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." };
       try { await reloadConfig(); } catch { /* keep the old list */ }
@@ -418,9 +418,30 @@ function accountBar() {
       h("button", { type: "button", class: "btn primary", onclick: signIn }, acctState.user ? "Sign in again" : "Sign in"),
       acctState.user ? h("button", { type: "button", class: "btn", disabled: acctState.busy, onclick: signOut }, "Sign out") : null) : null);
 }
+/** What the Discovery service returned, looked up once and reused (cleared on sign-in or tenant change). */
+let discoCache = null;
+function discovered(force) {
+  if (!discoCache || force) discoCache = api("/api/account/discover").then((r) => r.environments, (err) => { discoCache = null; throw err; });
+  return discoCache;
+}
 function manageEnvironments() {
   if (!config.canManage) return null;
-  const url = h("input", { class: "input", placeholder: "https://contoso-uat.crm4.dynamics.com", style: "min-width:320px", "aria-label": "Environment URL", required: true });
+  const url = h("input", { class: "input", placeholder: "https://contoso-uat.crm4.dynamics.com", style: "min-width:280px", "aria-label": "Environment URL", required: true });
+  // Pick from what the Discovery service returns (only ones not added yet), or paste a URL.
+  const pick = h("select", { class: "input", "aria-label": "Your environments", disabled: true, style: "min-width:260px" }, h("option", { value: "" }, "Looking up your environments…"));
+  let pickedLabel = "";
+  discovered().then((list) => {
+    const have = new Set(config.environments.map((e) => e.url));
+    const avail = list.filter((f) => f.enabled && !have.has(f.url)).sort((a, b) => a.friendlyName.localeCompare(b.friendlyName));
+    pick.replaceChildren(h("option", { value: "" }, avail.length ? `Choose one (${avail.length} not added yet)` : "All your environments are added"),
+      ...avail.map((f) => h("option", { value: f.url, "data-label": f.friendlyName }, `${f.friendlyName} · ${f.url.replace(/^https:\/\//, "")}`)));
+    pick.disabled = !avail.length;
+  }, () => { pick.replaceChildren(h("option", { value: "" }, "Sign in to list your environments")); });
+  pick.addEventListener("change", () => {
+    url.value = pick.value;
+    pickedLabel = pick.selectedOptions[0]?.dataset.label || "";
+  });
+  url.addEventListener("input", () => { if (url.value.trim() !== pick.value) { pick.value = ""; pickedLabel = ""; } });
   const kind = h("select", { class: "input", "aria-label": "Type" }, h("option", { value: "" }, "Detect from its name"), h("option", { value: "managed" }, "Managed"), h("option", { value: "unmanaged" }, "Unmanaged (DEV)"));
   const addBtn = h("button", { type: "submit", class: "btn primary" }, "Add environment");
   const tenant = h("input", { class: "input", placeholder: "Leave empty for your default tenant", value: config.tenantId || "", style: "min-width:320px", "aria-label": "Tenant" });
@@ -433,6 +454,7 @@ function manageEnvironments() {
     status.textContent = "";
     try {
       const body = { url: url.value.trim() };
+      if (pickedLabel) body.label = pickedLabel;
       if (kind.value) body.managed = kind.value === "managed";
       const { environments } = await api("/api/account/env", body);
       const added = environments[environments.length - 1];
@@ -448,7 +470,7 @@ function manageEnvironments() {
   const saveTenant = async () => {
     const next = tenant.value.trim();
     if ((next || "") === (config.tenantId || "")) return;
-    try { await api("/api/account/tenant", { tenant: tenant.value.trim() }); await reloadConfig(); status.textContent = "Tenant saved. Sign in again if your environments live in that tenant."; status.style.color = ""; }
+    try { await api("/api/account/tenant", { tenant: tenant.value.trim() }); discoCache = null; await reloadConfig(); status.textContent = "Tenant saved. Sign in again if your environments live in that tenant."; status.style.color = ""; }
     catch (err) { fail(err); }
   };
   const details = h("details", { class: "card", open: config.environments.length === 0 || acctState.open ? true : null },
@@ -483,7 +505,8 @@ function manageEnvironments() {
               h("button", { type: "button", class: "btn sm", onclick: () => remove(e.name) }, e.discovered ? "Hide" : "Remove"))));
         })))) : null,
       h("form", { class: "row", style: "align-items:flex-end", onsubmit: add },
-        h("label", { class: "field", style: "flex:1" }, h("span", {}, "Environment URL (its name is looked up for you)"), url),
+        h("label", { class: "field", style: "flex:1" }, h("span", {}, "Add one of your environments"), pick),
+        h("label", { class: "field", style: "flex:1" }, h("span", {}, "or paste its URL (the name is looked up)"), url),
         h("label", { class: "field" }, h("span", {}, "Type"), kind),
         addBtn),
       h("div", { class: "row", style: "align-items:flex-end" },
@@ -508,7 +531,7 @@ async function chooseEnvironmentsDialog() {
   document.body.append(dlg);
   dlg.showModal();
   let found;
-  try { found = (await api("/api/account/discover")).environments.filter((f) => f.enabled || f.added); }
+  try { const have = new Set(config.environments.map((e) => e.url)); found = (await discovered(true)).map((f) => ({ ...f, added: have.has(f.url) })).filter((f) => f.enabled || f.added); }
   catch (err) {
     body.replaceChildren(notice("bad", err.message), h("p", { class: "small muted", style: "margin:0" }, "Sign in first, or add an environment by its URL under Manage environments."),
       h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { type: "button", class: "btn", onclick: () => dlg.close() }, "Close")));

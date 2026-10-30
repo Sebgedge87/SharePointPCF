@@ -121,7 +121,7 @@ The console only loads the environments you choose, so signing in doesn't pull i
 - **Dashboard:** after you sign in for the first time, a **Choose environments** list opens with every environment your account can reach (through the Dataverse Discovery service). It has search, and nothing is ticked except what you already use. Change the choice at any time with **Choose environments** on the Overview page. The choice is saved in your config.
 - **CLI:** `pcx env select` shows the same list, numbered. Type the numbers to use (`1,3,5-7`). In scripts: `pcx env select "FormusProLive" https://org9b818508.crm4.dynamics.com`.
 - **One-off use:** `--env` can also name an environment you haven't chosen, by its display name or URL. Only that one is looked up, and it isn't saved.
-- `pcx env add <URL>` adds one environment by its address.
+- **Add one:** under Manage environments, pick it from the list of your environments (what the Discovery service returns, minus the ones already added) or paste its URL. In the CLI, `pcx env add <URL>`, or `pcx env add` on its own to pick from a numbered list.
 - To load every reachable environment instead of choosing, run `pcx config set discovery on` (and `off` to go back).
 
 ## Roles: who can change what
@@ -187,7 +187,7 @@ pcx reads `./pcx.config.json` if it exists, then `~/.pcx/config.json`, or the fi
 pcx auth login [--device-code]
 pcx auth status
 pcx env list [--json]
-pcx env add <URL> [--unmanaged]
+pcx env add [<URL>] [--unmanaged]
 pcx env remove <NAME>
 pcx env unhide <URL>|--all
 pcx env create --name "Name" --region <region> [--type Sandbox|Production|Developer|Trial] [--domain url-name] [--currency GBP] [--language 1033] [--security-group <id>] [--dry-run] [--yes]
