@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AuthError, AzureCliTokenProvider, PowerShellTokenProvider, TokenCache, type TokenProvider } from "../src/core/auth.js";
+import { AuthError, AzureCliTokenProvider, DeviceLoginError, PowerShellTokenProvider, TokenCache, type TokenProvider } from "../src/core/auth.js";
 import type { RunResult, Runner } from "../src/core/proc.js";
 
 const ok = (stdout: string): RunResult => ({ code: 0, stdout, stderr: "", notFound: false });
@@ -106,7 +106,7 @@ test("sign-in with a code reports a failure when no code appears", async () => {
     return { done: new Promise<{ code: number; notFound: boolean }>((r) => setTimeout(() => r({ code: 1, notFound: false }), 15)), kill: () => {} };
   };
   const p = new PowerShellTokenProvider(async () => ok("{}"), noInteractive, ["pwsh"], capture);
-  await assert.rejects(p.startDeviceLogin(), /AADSTS50059/);
+  await assert.rejects(p.startDeviceLogin(), (e: unknown) => e instanceof DeviceLoginError && /stopped before showing a sign-in code/.test(e.message) && /AADSTS50059/.test(e.output));
 });
 
 test("Azure CLI sign-in with a code passes --use-device-code", async () => {
