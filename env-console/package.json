@@ -1,0 +1,24 @@
+{
+  "name": "pcx-env-console",
+  "version": "0.1.0",
+  "description": "Power Platform environment console: dashboard and pcx CLI for DEV/TEST/UAT/PREPROD/PROD",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "pcx": "dist/src/cli/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "start": "node dist/src/cli/index.js serve"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "~5.9.3"
+  }
+}
