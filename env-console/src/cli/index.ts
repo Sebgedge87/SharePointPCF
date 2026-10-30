@@ -23,7 +23,8 @@ import { listRoles, listUserRoles } from "../core/security.js";
 import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configdata.js";
 import { runProcess } from "../core/proc.js";
 import { addDiscovered } from "../core/envlist.js";
-import { getAccess, PERMISSION_LABEL } from "../core/access.js";
+import { getAccess, PERMISSION_LABEL, requireAccess } from "../core/access.js";
+import { createInterface } from "node:readline";
 import { createBody, createEnvironment, ENV_TYPES, REGIONS as ENV_REGIONS, validateNewEnvironment } from "../core/provision.js";
 import { appendAction } from "../core/actionLog.js";
 import { discoverEnvironments } from "../core/discovery.js";
@@ -113,6 +114,8 @@ Other
   pcx config set discovery on|off       Find environments automatically (default on)
   --config FILE                         Use this config file (any command)
 
+Every change shows what it will do and asks "Go ahead? [y/N]" first. In scripts, add --yes
+(without it nothing changes, exit code 3). --dry-run shows the change without asking.
 Changes in managed environments (everything except unmanaged DEV) need --reason.
 Every change first checks your roles in that environment: flows, rules, plugin steps,
 unmanaged layers, table auditing, variables and jobs need System Administrator or
@@ -121,6 +124,28 @@ System Customizer; organisation settings need System Administrator.
 Config: ./pcx.config.json, or ~/.pcx/config.json, or the PCX_CONFIG variable.`;
 
 class UsageError extends Error {}
+
+/** Exit code when a change wasn't confirmed (the dashboard terminal asks and re-runs with --yes). */
+export const NOT_CONFIRMED = 3;
+
+/**
+ * Every change is confirmed before it's applied: --yes, or "y" typed at the prompt in an
+ * interactive terminal. Without either, nothing changes.
+ */
+async function confirmChange(o: { yes?: boolean }, question = "Go ahead?"): Promise<boolean> {
+  if (o.yes) return true;
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((r) => rl.question(`${question} [y/N] `, r));
+    rl.close();
+    if (/^y(es)?$/i.test(answer.trim())) return true;
+    out("Nothing changed.");
+    return false;
+  }
+  out(c.yellow("Nothing changed. Add --yes to go ahead."));
+  return false;
+}
+const reasonLine = (reason?: string) => (reason?.trim() ? `  Reason: ${reason.trim()}` : c.dim("  No reason given (not needed in an unmanaged environment)"));
 
 function opts(argv: string[]) {
   return parseArgs({
@@ -313,10 +338,8 @@ async function cmdEnvCreate(o: Opts, config: PcxConfig, configPath: string): Pro
     out(c.dim(JSON.stringify(createBody(req), null, 2)));
     return 0;
   }
-  if (!o.yes) {
-    out(c.yellow("This creates a new environment and uses Dataverse capacity. Re-run with --yes to go ahead."));
-    return 2;
-  }
+  out(c.yellow("This creates a new environment and uses Dataverse capacity."));
+  if (!(await confirmChange(o, "Create it?"))) return NOT_CONFIRMED;
   const ws = new Workspace(config);
   let created;
   let error: string | undefined;
@@ -433,13 +456,12 @@ async function cmdComponents(group: string, sub: string | undefined, pos: string
     return 0;
   }
   checkPolicy(env, o.reason);
-  out(`${o["dry-run"] ? "Would turn" : "Turning"} ${sub} ${picked.length} ${NOUN[kind]}(s) in ${env.name}:`);
+  out(`${o["dry-run"] ? "Would turn" : "Will turn"} ${sub} ${picked.length} ${NOUN[kind]}(s) in ${env.label ?? env.name}:`);
   for (const p of picked) out(`  ${p.name} ${c.dim(p.id)}`);
+  out(reasonLine(o.reason));
   if (o["dry-run"]) return 0;
-  if (env.managed && picked.length > 1 && !o.yes) {
-    out(c.yellow(`${env.name} is managed. Re-run with --yes to change these ${picked.length} items.`));
-    return 2;
-  }
+  await requireAccess(client, "customize", `turn ${NOUN[kind]}s on or off`);
+  if (!(await confirmChange(o))) return NOT_CONFIRMED;
   let actor: string | undefined;
   try {
     actor = (await whoAmI(client)).user;
@@ -513,6 +535,14 @@ async function cmdRuns(sub: string | undefined, o: Opts, config: PcxConfig): Pro
       return 0;
     }
     if (!["off", "exceptions", "all"].includes(o.set)) throw new UsageError("--set must be off, exceptions or all");
+    checkPolicy(env, o.reason);
+    const before = await getTraceSetting(client);
+    if (before.setting === o.set) return out(`Plugin trace log in ${env.name} is already ${o.set}.`), 0;
+    out(`Will change the plugin trace log in ${env.label ?? env.name}: ${before.setting} → ${c.bold(o.set)}`);
+    out(reasonLine(o.reason));
+    if (o["dry-run"]) return 0;
+    await requireAccess(client, "admin", "change the plugin trace log setting");
+    if (!(await confirmChange(o))) return NOT_CONFIRMED;
     const actor = await whoAmI(client).then((x) => x.user, () => undefined);
     await setTraceSetting(client, o.set as TraceSetting, o.reason, actor, "cli");
     out(`${c.green("✓")} Plugin trace log in ${env.name} set to ${o.set}`);
@@ -582,6 +612,13 @@ async function cmdAudit(sub: string | undefined, pos: string[], o: Opts, config:
     if (!tables.length) throw new UsageError("Name at least one --table");
     if (o.column?.length && tables.length > 1) throw new UsageError("Use one --table when naming columns");
     const changes = o.column?.length ? o.column.map((col) => ({ table: tables[0]!, column: col, on: state === "on" })) : tables.map((t) => ({ table: t, on: state === "on" }));
+    checkPolicy(env, o.reason);
+    out(`Will turn auditing ${state} in ${env.label ?? env.name} (and publish the tables):`);
+    for (const ch of changes as { table: string; column?: string }[]) out(`  ${ch.column ? `${ch.table}.${ch.column}` : ch.table}`);
+    out(reasonLine(o.reason));
+    if (o["dry-run"]) return 0;
+    await requireAccess(client, "customize", "change auditing on tables and columns");
+    if (!(await confirmChange(o))) return NOT_CONFIRMED;
     const actor = await whoAmI(client).then((x) => x.user, () => undefined);
     const results = await setAudit(client, changes, o.reason, actor, "cli");
     for (const r of results) out(`${r.ok ? c.green("✓") : c.red("✗")} ${r.column ? `${r.table}.${r.column}` : r.table} → ${r.on ? "on" : "off"}${r.error ? c.red(` — ${r.error}`) : ""}`);
@@ -626,10 +663,11 @@ async function cmdUserSettings(sub: string | undefined, o: Opts, config: PcxConf
     return 0;
   }
   checkPolicy(env, o.reason);
-  if (env.managed && plan.toChange.length > 1 && !o.yes) {
-    out(c.yellow(`Re-run with --yes to change ${plan.toChange.length} users in ${env.name}.`));
-    return 2;
-  }
+  if (!plan.toChange.length && !o["new-users"]) return out("Nothing to change."), 0;
+  out(`Will set ${JSON.stringify(target)} for ${plan.toChange.length} users in ${env.label ?? env.name}${o["new-users"] ? ", and make it the default for new users" : ""}.`);
+  out(reasonLine(o.reason));
+  await requireAccess(client, "admin", "change other people's user settings");
+  if (!(await confirmChange(o))) return NOT_CONFIRMED;
   const actor = await whoAmI(client).then((x) => x.user, () => undefined);
   const res = await applyUserSettings(client, plan, { setOrgDefaults: !!o["new-users"], reason: o.reason, actor, source: "cli" });
   out(`${c.green("✓")} ${res.changed} users updated${res.orgDefaultsUpdated ? ", and set as the default for new users" : ""}`);
@@ -689,6 +727,8 @@ async function cmdAlerts(sub: string | undefined, o: Opts, config: PcxConfig, co
     if (!hook) throw new UsageError("No Teams webhook set. Run: pcx config set teams-webhook <url>");
     const toPost = o.all ? alerts : newAlerts(alerts);
     if (toPost.length) {
+      out(`Will post ${toPost.length} alert${toPost.length === 1 ? "" : "s"} to the Teams channel.`);
+      if (!(await confirmChange(o))) return NOT_CONFIRMED;
       await postToTeams(hook, toPost);
       rememberPosted(toPost);
       out(`${c.green("✓")} Posted ${toPost.length} alert${toPost.length === 1 ? "" : "s"} to Teams`);
@@ -732,6 +772,13 @@ async function cmdJobs(sub: string | undefined, pos: string[], o: Opts, config: 
     if (!j) throw new UsageError(`Job ${id} is not waiting, suspended or failed in ${env.name}`);
     return { id: j.id, name: j.name };
   });
+  checkPolicy(env, o.reason);
+  out(`Will ${sub} ${jobs.length} background job${jobs.length === 1 ? "" : "s"} in ${env.label ?? env.name}${sub === "cancel" ? " (cancelled jobs can't be restarted)" : ""}:`);
+  for (const j of jobs) out(`  ${j.name} ${c.dim(j.id)}`);
+  out(reasonLine(o.reason));
+  if (o["dry-run"]) return 0;
+  await requireAccess(client, "customize", `${sub} background jobs`);
+  if (!(await confirmChange(o))) return NOT_CONFIRMED;
   const actor = await whoAmI(client).then((x) => x.user, () => undefined);
   const results = await changeJobs(client, jobs, sub, { reason: o.reason, actor, source: "cli" });
   for (const r of results) out(`${r.ok ? c.green("✓") : c.red("✗")} ${r.name}${r.error ? c.red(` — ${r.error}`) : ""}`);
@@ -780,6 +827,14 @@ async function cmdVars(sub: string | undefined, pos: string[], o: Opts, config: 
     const [name, value] = pos;
     if (!name || value === undefined) throw new UsageError("Usage: pcx vars set --env NAME <schemaname> <value> --reason TEXT");
     const client = ws.client(env);
+    checkPolicy(env, o.reason);
+    const current = (await listEnvVars(client)).find((v) => v.schemaName === name);
+    if (!current) throw new UsageError(`No environment variable "${name}" in ${env.name}`);
+    out(`Will set ${name} in ${env.label ?? env.name}: ${current.secret ? "(secret)" : JSON.stringify(current.effective ?? "")} → ${JSON.stringify(value)}`);
+    out(reasonLine(o.reason));
+    if (o["dry-run"]) return 0;
+    await requireAccess(client, "customize", "set environment variables");
+    if (!(await confirmChange(o))) return NOT_CONFIRMED;
     const actor = await whoAmI(client).then((x) => x.user, () => undefined);
     await setEnvVarValue(client, name, value, { reason: o.reason, actor, source: "cli" });
     out(`${c.green("✓")} ${name} set in ${env.name}`);

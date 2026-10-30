@@ -181,7 +181,7 @@ const hideTip = () => { tip().hidden = true; };
  * Shows a dialog in the console's style. Resolves true when confirmed, false when cancelled
  * (Cancel, ×, Escape or clicking outside).
  */
-function confirmDialog({ title, message, confirmText = "OK", cancelText = "Cancel", danger = false, details = null }) {
+function confirmDialog({ title, message, confirmText = "OK", cancelText = "Cancel", danger = false, details = null, focusCancel = false }) {
   return new Promise((resolveDialog) => {
     let result = false;
     const ok = h("button", { type: "button", class: danger ? "btn danger-solid" : "btn primary", onclick: () => { result = true; dlg.close(); } }, confirmText);
@@ -197,10 +197,22 @@ function confirmDialog({ title, message, confirmText = "OK", cancelText = "Cance
     dlg.addEventListener("close", () => { dlg.remove(); resolveDialog(result); });
     document.body.append(dlg);
     dlg.showModal();
-    (danger && cancelText ? dlg.querySelector(".modal-body .btn:not(.danger-solid)") : ok).focus();
+    ((danger || focusCancel) && cancelText ? dlg.querySelector(".modal-body .row .btn:not(.danger-solid):not(.primary)") ?? ok : ok).focus();
   });
 }
 const messageDialog = (title, message) => confirmDialog({ title, message, confirmText: "OK", cancelText: null });
+
+/**
+ * Every change is confirmed before it's applied: what changes, where, and why.
+ * Cancel has the focus, so pressing Enter by accident changes nothing.
+ */
+function confirmChange({ title, message, lines = [], reason, confirmText = "Apply", danger = false }) {
+  const max = 12;
+  const details = h("div", { class: "stack", style: "gap:10px" },
+    lines.length ? h("ul", { class: "confirm-list" }, lines.slice(0, max).map((l) => h("li", {}, l)), lines.length > max ? h("li", { class: "muted" }, `…and ${lines.length - max} more`) : null) : null,
+    reason === undefined ? null : h("div", { class: "small" }, reason && reason.trim() ? [h("strong", {}, "Reason: "), reason.trim()] : h("span", { class: "muted" }, "No reason given (only allowed in unmanaged environments).")));
+  return confirmDialog({ title, message, details, confirmText, danger, focusCancel: true });
+}
 
 /** A panel that slides in from the right over the page. Returns a handle to update or close it. */
 function openFlyout({ title, subtitle, onClose }) {
@@ -434,6 +446,9 @@ function manageEnvironments() {
     try { await api("/api/account/env/remove", { name: n }); await reloadConfig(); overview(); } catch (err) { fail(err); }
   };
   const saveTenant = async () => {
+    const next = tenant.value.trim();
+    if ((next || "") === (config.tenantId || "")) return;
+    if (!(await confirmChange({ title: "Change tenant?", message: next ? `Sign-in will use the ${next} tenant. You may need to sign in again.` : "Sign-in will use your default tenant. You may need to sign in again.", confirmText: "Change tenant" }))) return;
     try { await api("/api/account/tenant", { tenant: tenant.value.trim() }); await reloadConfig(); status.textContent = "Tenant saved. Sign in again if your environments live in that tenant."; status.style.color = ""; }
     catch (err) { fail(err); }
   };
@@ -902,6 +917,7 @@ function renderAlerts() {
   const head = header("Monitoring", "Alerts", "Problems across every environment in the last 24 hours: failures, things not set up, and settings that need attention.",
     ...reportButtons(),
     d?.teams ? h("button", { type: "button", class: "btn", onclick: async () => {
+      if (!(await confirmChange({ title: "Send alerts to Teams?", message: `Alerts not posted before are sent to the Teams channel (${d.alerts.length} current alerts).`, confirmText: "Send" }))) return;
       try { const r = await api("/api/alerts/teams", {}); alertState.notice = { kind: "ok", text: `Posted ${r.posted} alerts to Teams.` }; } catch (err) { alertState.notice = { kind: "bad", text: err.message }; }
       renderAlerts();
     } }, "Send to Teams") : null);
@@ -954,6 +970,17 @@ async function components(params) {
 async function setStates(rows, names, on) {
   if (noTargets(compState, names, renderComponents)) return;
   if (missingReason(compState, names)) { renderComponents(); return; }
+  const plan = names.map((n) => ({ n, items: rows.filter((r) => r.cells[n] && r.cells[n].on !== on).map((r) => r.name) })).filter((p) => p.items.length);
+  if (!plan.length) { compState.notice = { kind: "info", text: `Nothing to change: already ${on ? "on" : "off"}.` }; renderComponents(); return; }
+  const total = plan.reduce((t, p) => t + p.items.length, 0);
+  const noun = KIND_LABEL[compState.kind].toLowerCase();
+  const what = total === 1 ? `"${plan[0].items[0]}"` : `${total} ${noun}`;
+  if (!(await confirmChange({
+    title: `Turn ${on ? "on" : "off"} ${what}?`,
+    message: `In ${plan.map((p) => envLabel(p.n)).join(", ")}.${on ? "" : " While off, they don't run."}`,
+    lines: plan.flatMap((p) => p.items.map((i) => `${envLabel(p.n)}: ${i}`)),
+    reason: compState.reason, confirmText: on ? "Turn on" : "Turn off", danger: !on
+  }))) return;
   compState.busy = true;
   renderComponents();
   const done = [], failed = [];
@@ -1039,6 +1066,8 @@ async function runs(params) {
 }
 async function setTrace(env, setting) {
   if (missingReason(runState, [env])) { renderRuns(); return; }
+  const effect = { off: "Plugin errors won't be logged any more.", exceptions: "Only plugin errors are logged.", all: "Every plugin run is logged. This fills storage quickly; turn it back down when you're done." }[setting];
+  if (!(await confirmChange({ title: `Change the plugin trace log in ${envLabel(env)}?`, message: `It will be set to "${setting}". ${effect}`, reason: runState.reason, confirmText: "Change setting" }))) { await runs(new URLSearchParams()); return; }
   try {
     await api("/api/runs/trace", { env, setting, reason: runState.reason });
     runState.notice = { kind: "ok", text: `Plugin trace log in ${env} set to "${setting}".` };
@@ -1218,7 +1247,12 @@ async function jobs() {
 async function changeJobsUi(action, rows) {
   const names = [...new Set(rows.map((r) => r.env))];
   if (missingReason(jobState, names)) { renderJobs(); return; }
-  if (action === "cancel" && !(await confirmDialog({ title: `Cancel ${rows.length} background job${rows.length === 1 ? "" : "s"}?`, message: "Cancelled jobs stop and can't be restarted.", confirmText: "Cancel jobs", cancelText: "Keep them", danger: true }))) return;
+  if (!(await confirmChange({
+    title: `${action === "cancel" ? "Cancel" : "Resume"} ${rows.length} background job${rows.length === 1 ? "" : "s"}?`,
+    message: action === "cancel" ? "Cancelled jobs stop and can't be restarted." : "Resumed jobs run again straight away.",
+    lines: rows.map((r) => `${envLabel(r.env)}: ${r.name}`),
+    reason: jobState.reason, confirmText: action === "cancel" ? "Cancel jobs" : "Resume jobs", danger: action === "cancel"
+  }))) return;
   jobState.busy = true; renderJobs();
   let ok = 0; const failed = [];
   for (const n of names) {
@@ -1326,6 +1360,12 @@ async function applyAudit(changes) {
   const names = [...new Set(changes.map((c) => c.env))];
   if (!changes.length) { audState.notice = { kind: "info", text: "Nothing to change." }; renderAudit(); return; }
   if (missingReason(audState, names)) { renderAudit(); return; }
+  if (!(await confirmChange({
+    title: `Change auditing for ${changes.length} item${changes.length === 1 ? "" : "s"}?`,
+    message: `In ${names.map(envLabel).join(", ")}. The tables are published afterwards.`,
+    lines: changes.map((c) => `${envLabel(c.env)}: ${c.column ? `${c.table}.${c.column}` : c.table} → ${c.on ? "on" : "off"}`),
+    reason: audState.reason, confirmText: "Change auditing"
+  }))) return;
   audState.busy = true;
   audState.notice = { kind: "info", text: `Updating ${changes.length} item(s) and publishing…` };
   renderAudit();
@@ -1344,6 +1384,8 @@ async function applyAudit(changes) {
 }
 async function changeSystem(env, field, value) {
   if (missingReason(audState, [env])) { renderAudit(); return; }
+  const label = field === "auditEnabled" ? "Auditing for the whole environment" : "Logging when users access the system";
+  if (!(await confirmChange({ title: `Turn ${value ? "on" : "off"} ${label.toLowerCase()}?`, message: `In ${envLabel(env)}.${!value && field === "auditEnabled" ? " While off, no changes are audited anywhere in this environment." : ""}`, reason: audState.reason, confirmText: value ? "Turn on" : "Turn off", danger: !value }))) { renderAudit(); return; }
   try {
     await api("/api/audit/system", { env, [field]: value, reason: audState.reason });
     audState.system = await api("/api/audit/system/all");
@@ -1547,6 +1589,8 @@ async function configPage() {
 }
 async function saveVar(env, schemaName) {
   if (missingReason(cfgState, [env])) { renderConfig(); return; }
+  const cur = cfgState.data?.results?.[env]?.vars?.find((v) => v.schemaName === schemaName);
+  if (!(await confirmChange({ title: `Change ${schemaName} in ${envLabel(env)}?`, message: "Flows and apps that use it pick up the new value.", lines: [`From: ${cur?.effective ?? "(no value)"}`, `To: ${cfgState.value}`], reason: cfgState.reason, confirmText: "Save value" }))) return;
   try {
     await api("/api/config/envvar", { env, schemaName, value: cfgState.value, reason: cfgState.reason });
     cfgState.notice = { kind: "ok", text: `${schemaName} saved in ${env}.` };
@@ -1646,7 +1690,7 @@ async function usApply() {
   if (noTargets(usState, names, renderUserSettings)) return;
   if (missingReason(usState, names)) { renderUserSettings(); return; }
   const counts = usState.preview ? names.map((n) => `${n}: ${usState.preview[n]?.toChange ?? "?"} users`).join(" · ") : "";
-  if (!(await confirmDialog({ title: "Apply user settings?", message: `Settings change for users in ${names.join(", ")}${usState.newUsers ? ", and become the defaults for new users" : ""}.`, details: counts ? h("p", { class: "small muted", style: "margin:0" }, counts) : null, confirmText: "Apply settings" }))) return;
+  if (!(await confirmChange({ title: "Apply user settings?", message: `Settings change for users in ${names.map(envLabel).join(", ")}${usState.newUsers ? ", and become the defaults for new users" : ""}.`, lines: counts ? counts.split(" · ") : [], reason: usState.reason, confirmText: "Apply settings" }))) return;
   usState.busy = true; renderUserSettings();
   const msgs = []; let failed = 0;
   for (const n of names) {
@@ -1820,6 +1864,11 @@ async function runCli(line) {
   catch (err) { entry.output = err.message; entry.code = 1; }
   cliState.busy = false;
   renderCli();
+  // Exit code 3: the command showed what it would change and is waiting for a yes.
+  if (entry.code === 3 && !args.includes("--yes")) {
+    const lines = (entry.output || "").split("\n").filter((l) => l.trim() && !/Add --yes to go ahead/.test(l));
+    if (await confirmChange({ title: "Apply this change?", message: `pcx ${args.join(" ")}`, lines, confirmText: "Apply" })) await runCli(`${line.trim()} --yes`);
+  }
 }
 
 function cli() { renderCli(); }

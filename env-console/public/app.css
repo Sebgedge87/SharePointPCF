@@ -313,3 +313,7 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
   .alert-row > div { grid-column: 1 / -1; }
   .alert-row > a.btn { grid-column: 1 / -1; justify-self: start; }
 }
+
+/* confirmation dialogs: the list of what will change */
+.confirm-list { margin: 0; padding: 8px 12px 8px 28px; max-height: 260px; overflow: auto; background: var(--surface-2); border-radius: 8px; font-size: 13px; color: var(--text); display: flex; flex-direction: column; gap: 3px; }
+.confirm-list li { overflow-wrap: anywhere; }

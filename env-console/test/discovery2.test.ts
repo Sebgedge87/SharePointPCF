@@ -175,3 +175,20 @@ test("creating an environment from the dashboard validates first and reports pro
     await srv.close();
   }
 });
+
+test("the CLI never changes anything without a yes: no --yes in a script means exit 3", async () => {
+  const { main, NOT_CONFIRMED } = await import("../src/cli/index.js");
+  const path = join(mkdtempSync(join(tmpdir(), "pcx-")), "config.json");
+  saveConfig({ auth: { provider: "azps" }, environments: [] }, path);
+  const write = process.stdout.write.bind(process.stdout);
+  let printed = "";
+  process.stdout.write = ((chunk: string) => ((printed += chunk), true)) as typeof process.stdout.write;
+  try {
+    const code = await main(["env", "create", "--name", "Seb Test", "--region", "unitedkingdom", "--config", path]);
+    assert.equal(code, NOT_CONFIRMED);
+    assert.match(printed, /Nothing changed\. Add --yes to go ahead/);
+  } finally {
+    process.stdout.write = write;
+    delete process.env.PCX_CONFIG;
+  }
+});

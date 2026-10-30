@@ -212,12 +212,14 @@ pcx plugins on --env PROD AccountPreUpdate --reason "Fix deployed, CHG-456"
 
 Rules for changes:
 
-- Your roles in the environment must allow the change (see Roles above).
+- Every change is confirmed first. pcx lists what will change, where, and the reason, then asks `Go ahead? [y/N]`. In scripts, add `--yes`; without it nothing changes and pcx exits with code `3`.
+- Your roles in the environment must allow the change (see Roles above). This is checked before you're asked.
 - In a managed environment, `--reason` is required.
-- Changing more than one item in a managed environment also needs `--yes`.
-- `--dry-run` shows what would change without changing it.
+- `--dry-run` shows what would change without asking or changing anything.
 
-Exit codes: `0` success, `1` something failed (an environment, a change or sign-in), `2` usage error.
+In the dashboard, every change opens a confirmation listing each item and environment and the reason. Cancel has the focus, so pressing Enter by accident changes nothing. Commands typed in the dashboard's terminal that change something open the same confirmation and run again with `--yes` once you confirm.
+
+Exit codes: `0` success, `1` something failed (an environment, a change or sign-in), `2` usage error, `3` change not confirmed (nothing changed).
 
 ## Activity log
 
