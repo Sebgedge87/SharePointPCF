@@ -115,6 +115,7 @@ $stage = Join-Path ([System.IO.Path]::GetTempPath()) "pcx-deploy-$([guid]::NewGu
 New-Item -ItemType Directory -Path (Join-Path $stage 'dist') | Out-Null
 Copy-Item -Recurse (Join-Path $appDir 'dist/src') (Join-Path $stage 'dist/src')
 Copy-Item -Recurse (Join-Path $appDir 'public') (Join-Path $stage 'public')
+Copy-Item -Recurse (Join-Path $appDir 'docs') (Join-Path $stage 'docs')
 Copy-Item (Join-Path $appDir 'package.json') $stage
 $zip = "$stage.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force

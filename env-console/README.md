@@ -2,6 +2,8 @@
 
 A dashboard and command-line tool for looking after Power Platform / Dataverse environments (DEV, TEST, UAT, PREPROD, PROD and so on) from one place.
 
+> **New here? Read the [user guide](docs/USER-GUIDE.md).** It explains every page, the safety rules, the commands and what to do when something goes wrong. The same guide is in the dashboard under **Help**, and every page has a **?** next to its title that opens its part of the guide.
+
 It runs in one of two ways:
 
 - **On your own machine:** it signs in with the PowerShell session you already use (`Connect-AzAccount`), so no Entra app registration is needed.
@@ -29,7 +31,8 @@ It runs in one of two ways:
 - **CLI page:** a terminal in the dashboard that runs `pcx` commands (on your own machine only), next to a reference of every command with examples you can click to use.
 - **Remove unmanaged changes:** from Solution compare, with a reason and confirmation.
 - **Microsoft and system items** are hidden by default on Flows & plugins; one switch shows them.
-- **Brand and themes:** follows the FormusPro brand guidelines: blue logo top left, white page with blue text, magenta only as an accent, Aptos type (Segoe UI where Aptos isn't installed), brand colours in charts and environment labels. Light is the default; there is also a dark theme built on the brand's dark blue, and a "follow the system" option.
+- **Help built in:** the user guide on a Help page (searchable, printable), a **?** on every page and next to controls.
+- **Brand and themes:** follows the FormusPro brand guidelines: blue logo top left, white page with blue text, magenta only as an accent, Aptos type (Segoe UI where Aptos isn't installed), brand colours in charts and environment labels. Light (soft white) is the default; Dark uses neutral charcoal greys; System follows Windows. Windows high-contrast themes are supported.
 
 ## Requirements
 

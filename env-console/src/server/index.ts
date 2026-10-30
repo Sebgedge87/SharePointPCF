@@ -52,7 +52,9 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
   "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
   "/brand/formuspro-logo-blue.png": { file: "brand/formuspro-logo-blue.png", type: "image/png" },
-  "/brand/formuspro-logo-white.png": { file: "brand/formuspro-logo-white.png", type: "image/png" }
+  "/brand/formuspro-logo-white.png": { file: "brand/formuspro-logo-white.png", type: "image/png" },
+  // The user guide (docs/USER-GUIDE.md), shown on the Help page.
+  "/guide.md": { file: "../docs/USER-GUIDE.md", type: "text/markdown; charset=utf-8" }
 };
 
 const SECURITY_HEADERS: Record<string, string> = {

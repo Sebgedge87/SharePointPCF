@@ -101,10 +101,41 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString() : "");
 const fmtNum = (n) => (n ?? 0).toLocaleString();
 const firstLine = (t, n = 140) => (t || "").split("\n")[0].slice(0, n);
 
+/** Which section of the user guide explains each page. */
+const HELP_FOR = {
+  overview: "overview-page", alerts: "alerts-page", solutions: "installed-solutions-page", compare: "solution-compare-page",
+  config: "connections-and-variables-page", components: "flows-business-rules-and-plugins-page", runs: "run-history-page",
+  jobs: "background-jobs-page", audit: "audit-page", security: "security-page", usersettings: "user-settings-page",
+  activity: "activity-page", cli: "cli-page"
+};
+function currentRoute() { return (location.hash.replace(/^#\/?/, "") || "overview").split("?")[0]; }
 function header(eyebrow, title, sub, ...actions) {
+  const section = HELP_FOR[currentRoute()];
   return h("header", { class: "head" },
-    h("div", {}, eyebrow ? h("div", { class: "eyebrow" }, eyebrow) : null, h("h1", {}, title), sub ? h("p", { class: "sub" }, sub) : null),
+    h("div", {}, eyebrow ? h("div", { class: "eyebrow" }, eyebrow) : null,
+      h("h1", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, title,
+        section ? h("a", { class: "helplink", href: `#/help?s=${section}`, title: "How this page works", "aria-label": `Help: how the ${title} page works` }, "?") : null),
+      sub ? h("p", { class: "sub" }, sub) : null),
     actions.length ? h("div", { class: "row" }, ...actions) : null);
+}
+
+/** A small "?" that explains the control next to it, on hover or keyboard focus. */
+function hint(text) {
+  const b = h("button", { type: "button", class: "hint", "aria-label": text }, "?");
+  const show = () => {
+    const t = tip();
+    t.replaceChildren(h("div", { style: "max-width:300px;white-space:normal;line-height:1.45" }, text));
+    t.hidden = false;
+    const r = b.getBoundingClientRect();
+    t.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - t.offsetWidth - 8))}px`;
+    t.style.top = `${r.top - t.offsetHeight - 8 < 8 ? r.bottom + 8 : r.top - t.offsetHeight - 8}px`;
+  };
+  b.addEventListener("mouseenter", show);
+  b.addEventListener("focus", show);
+  b.addEventListener("mouseleave", hideTip);
+  b.addEventListener("blur", hideTip);
+  b.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); show(); });
+  return b;
 }
 const notice = (kind, ...text) => h("div", { class: `notice ${kind}`, role: kind === "bad" ? "alert" : "status" }, ...text);
 const loading = (what) => h("div", { class: "muted" }, `Loading ${what}…`);
@@ -120,11 +151,38 @@ function seg(options, current, onPick, label, role = "group") {
   return h("div", { class: "seg", role, "aria-label": label },
     options.map(([v, text]) => h("button", { type: "button", [role === "tablist" ? "aria-selected" : "aria-pressed"]: v === current ? "true" : "false", role: role === "tablist" ? "tab" : null, onclick: () => onPick(v) }, text)));
 }
+/** Explanations shown by the "?" next to controls, keyed by the control's label. */
+const HINTS = {
+  "Show Microsoft solutions": "Microsoft's own solutions (Dynamics apps, system solutions) are hidden by default so your own solutions stand out.",
+  "Only version differences": "Show only solutions whose version differs between environments, or that are missing from one.",
+  "Include Microsoft solutions in the list": "Add Microsoft's own solutions to the solution picker.",
+  "Show Microsoft and system items": "By default only your own (custom) flows, rules and plugin steps are shown. Tick to include Microsoft's and system ones.",
+  "Only where environments differ": "Show only items that are on in some environments and off in others.",
+  "Failures only": "Hide successful runs and show only failures.",
+  "Only problems": "Show only variables without a value and connection references without a connection.",
+  "Only where roles differ": "Show only people whose roles aren't the same in every environment.",
+  "Users with no roles": "People who can sign in but have no security role, so they can't do anything.",
+  "Only differences": "Show only items that differ between environments.",
+  "Also overwrite settings users changed themselves": "By default, people who changed their own settings keep them. Tick to change them too.",
+  "Make these the defaults for new users (organisation format settings)": "Also sets the organisation's format settings, which new users start with.",
+  reason: "Why you're making this change, for example a ticket number. Needed in managed environments (everything after DEV) and written to the activity log.",
+  applyTo: "Tick the environments this change goes to. Nothing is ticked until you choose.",
+  trace: "Which plugin runs Dataverse records. Off: nothing. Exceptions: errors only (recommended). All: every run, which fills storage quickly.",
+  audit: "Master switch for the whole environment. While it's off, nothing is audited, even tables and columns that have auditing on.",
+  signin: "Records when people sign in to the environment.",
+  retention: "How long audit records are kept before Dataverse deletes them.",
+  shortName: "The name to use with pcx --env in the command line. You can also use the display name or the URL.",
+  type: "Managed environments (everything after DEV) need a reason for every change. Unmanaged is for DEV, where you build.",
+  source: "Saved: chosen by you and kept in your settings. Found: listed because 'load every environment' is on.",
+  scope: "Which people in the ticked environments get these settings: everyone, or only people with a role, in a team, or in a business unit.",
+  access: "Your security roles in this environment decide what you can change here."
+};
 function checkbox(labelText, checked, onChange) {
   const box = h("input", { type: "checkbox" });
   box.checked = !!checked;
   box.addEventListener("change", () => onChange(box.checked));
-  return h("label", { class: "check" }, box, labelText);
+  const label = h("label", { class: "check" }, box, labelText);
+  return HINTS[labelText] ? h("span", { class: "row", style: "gap:0;flex-wrap:nowrap" }, label, hint(HINTS[labelText])) : label;
 }
 function reasonInput(state, envName) {
   const input = h("input", { type: "text", placeholder: "e.g. SAP outage, ticket INC-123", value: state.reason || "", "aria-label": `Reason for changes in ${envName}` });
@@ -489,7 +547,7 @@ function manageEnvironments() {
               config.canCreate ? h("button", { type: "button", class: "btn", onclick: createEnvironmentDialog }, "Create environment") : null)),
       config.discoveryError ? notice("warn", `Couldn't list your environments automatically: ${config.discoveryError}`) : null,
       config.environments.length ? h("div", { class: "scroll" }, h("table", {},
-        h("thead", {}, h("tr", {}, ["Display name", "Short name (for pcx --env)", "URL", "Type", "Source", ""].map((t) => h("th", { scope: "col" }, t)))),
+        h("thead", {}, h("tr", {}, [["Display name"], ["Short name (for pcx --env)", HINTS.shortName], ["URL"], ["Type", HINTS.type], ["Source", HINTS.source], [""]].map(([t, x]) => h("th", { scope: "col" }, t, x ? hint(x) : null)))),
         h("tbody", {}, config.environments.map((e) => {
           const label = h("input", { class: "input", value: e.label || "", placeholder: e.name, maxlength: 100, "aria-label": `Display name for ${e.name}`, style: "min-width:200px" });
           label.addEventListener("change", async () => {
@@ -677,7 +735,7 @@ async function overview() {
     const card = h("article", { class: "card stack" },
       h("div", { class: "env-head" },
         h("h2", { class: "env-title", title: `pcx --env ${e.name}` }, h("span", { class: "envdot", style: `background:${envColor(e.name)}`, "aria-hidden": "true" }), envLabel(e.name)),
-        h("span", { class: e.managed ? "pill" : "pill ok" }, e.managed ? "Managed" : "Unmanaged")),
+        h("span", { class: e.managed ? "pill" : "pill ok", title: e.managed ? "Managed: changes here need a reason" : "Unmanaged (DEV): no reason needed for changes" }, e.managed ? "Managed" : "Unmanaged")),
       envLink(e.url), h("div", { class: "muted small" }, "Checking…"));
     cards.set(e.name, card);
     grid.append(card);
@@ -926,7 +984,7 @@ function reasonCard(state, names = envNames()) {
   const input = reasonInput(state, names.filter((n) => envOf(n).managed).join(", "));
   input.className = "input";
   input.style.flex = "1";
-  return h("label", { class: "card row", style: "padding:10px 16px" }, h("strong", { class: "small" }, `Reason for changes in ${names.filter((n) => envOf(n).managed).join(", ")}`), input);
+  return h("div", { class: "card row", style: "padding:10px 16px" }, h("label", { class: "row", style: "flex:1;gap:8px" }, h("strong", { class: "small" }, `Reason for changes in ${names.filter((n) => envOf(n).managed).map(envLabel).join(", ")}`), input), hint(HINTS.reason));
 }
 function missingReason(state, names) {
   const managed = names.filter((n) => envOf(n)?.managed);
@@ -948,7 +1006,7 @@ function envChecks(state, names = envNames(), onChange = null) {
     if (onChange) onChange();
   };
   return h("div", { class: "envchecks", role: "group", "aria-label": "Apply to environments" },
-    h("span", { class: "small" }, "Apply to"),
+    h("span", { class: "small row", style: "gap:0" }, "Apply to", hint(HINTS.applyTo)),
     boxes.map((b) => b.label),
     names.length > 2 ? h("span", { class: "row", style: "gap:4px" },
       h("button", { type: "button", class: "btn link", onclick: () => setAll(true) }, "Select all"),
@@ -1262,7 +1320,7 @@ function renderRuns() {
           metric("Failed flow runs", (x) => (x.totals.flowFailed ? h("strong", { style: "color:var(--bad)" }, fmtNum(x.totals.flowFailed)) : "0")),
           metric("Failure rate", (x) => (x.totals.flowRuns ? `${Math.round((x.totals.flowFailed / x.totals.flowRuns) * 1000) / 10}%` : "—")),
           metric("Plugin errors", (x) => (x.totals.pluginFailed ? h("strong", { style: "color:var(--bad)" }, fmtNum(x.totals.pluginFailed)) : "0")),
-          metric("Plugin trace log", (x, n) => traceSeg(n)),
+          metric(h("span", {}, "Plugin trace log", hint(HINTS.trace)), (x, n) => traceSeg(n)),
           metric("Components failing", (x) => fmtNum(x.top.length)))))),
     h("div", { class: "row between" }, h("h2", {}, "Flow runs per day"), legend(flowSeries)),
     h("div", { class: "small-multiples" }, names.map((n) => h("section", { class: "card stack", "aria-label": `Flow runs per day in ${n}` },
@@ -1527,9 +1585,9 @@ function renderAudit() {
       h("div", { class: "scroll" }, h("table", { class: "envtable" },
         h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "System"), envHeads(names))),
         h("tbody", {},
-          h("tr", {}, h("th", { scope: "row" }, "Auditing", h("div", { class: "small muted" }, "Master switch: nothing is audited while it's off")), names.map((n) => cell(sys[n] && { auditEnabled: sys[n].auditEnabled }, () => changeSystem(n, "auditEnabled", !sys[n].auditEnabled), `Auditing in ${n}`))),
-          h("tr", {}, h("th", { scope: "row" }, "User sign-in logging"), names.map((n) => cell(sys[n] && { auditEnabled: sys[n].userAccessAudit }, () => changeSystem(n, "userAccessAudit", !sys[n].userAccessAudit), `User sign-in logging in ${n}`))),
-          h("tr", {}, h("th", { scope: "row" }, "Logs kept"), names.map((n) => h("td", { class: "envcol small" }, !sys[n] || sys[n].retentionDays === undefined ? "?" : sys[n].retentionDays < 0 ? "Forever" : `${sys[n].retentionDays} days`))))))),
+          h("tr", {}, h("th", { scope: "row" }, "Auditing", hint(HINTS.audit), h("div", { class: "small muted" }, "Master switch: nothing is audited while it's off")), names.map((n) => cell(sys[n] && { auditEnabled: sys[n].auditEnabled }, () => changeSystem(n, "auditEnabled", !sys[n].auditEnabled), `Auditing in ${n}`))),
+          h("tr", {}, h("th", { scope: "row" }, "User sign-in logging", hint(HINTS.signin)), names.map((n) => cell(sys[n] && { auditEnabled: sys[n].userAccessAudit }, () => changeSystem(n, "userAccessAudit", !sys[n].userAccessAudit), `User sign-in logging in ${n}`))),
+          h("tr", {}, h("th", { scope: "row" }, "Logs kept", hint(HINTS.retention)), names.map((n) => h("td", { class: "envcol small" }, !sys[n] || sys[n].retentionDays === undefined ? "?" : sys[n].retentionDays < 0 ? "Forever" : `${sys[n].retentionDays} days`))))))),
     bulk,
     h("div", { class: "row between" },
       h("div", { class: "row" }, h("label", { class: "search" }, search), seg([["all", "All tables"], ["off", "Off somewhere"], ["diff", "Differs"], ["custom", "Custom"]], audState.only, (v) => { audState.only = v; renderAudit(); }, "Filter tables")),
@@ -1820,7 +1878,7 @@ function renderUserSettings() {
   const keep = ["", "Don't change"];
   const target = usTarget();
   const pv = sampleFormat(target);
-  const scopeSel = h("select", { class: "input" }, [["all", "All enabled users"], ["role", "Users with a security role"], ["team", "Members of a team"], ["businessunit", "Users in a business unit"]].map(([v, text]) => h("option", { value: v, selected: usState.scope === v }, text)));
+  const scopeSel = h("select", { class: "input", "aria-label": "Users" }, [["all", "All enabled users"], ["role", "Users with a security role"], ["team", "Members of a team"], ["businessunit", "Users in a business unit"]].map(([v, text]) => h("option", { value: v, selected: usState.scope === v }, text)));
   scopeSel.addEventListener("change", () => { usState.scope = scopeSel.value; usState.preview = null; renderUserSettings(); });
   const scopeName = h("input", { class: "input", type: "text", value: usState.scopeName, placeholder: usState.scope === "role" ? "e.g. Salesperson" : usState.scope === "team" ? "e.g. Service Desk" : "e.g. UK" });
   scopeName.addEventListener("change", () => { usState.scopeName = scopeName.value; usState.preview = null; });
@@ -1844,7 +1902,7 @@ function renderUserSettings() {
           h("h2", {}, "Who gets these settings"),
           envChecks(usState, envNames(), () => { usState.preview = null; renderUserSettings(); }),
           h("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px" },
-            h("label", { class: "field" }, h("span", {}, "Users"), scopeSel),
+            h("div", { class: "field" }, h("span", { class: "row", style: "gap:0" }, "Users", hint(HINTS.scope)), scopeSel),
             usState.scope !== "all" ? h("label", { class: "field" }, h("span", {}, "Name"), scopeName) : null),
           checkbox("Also overwrite settings users changed themselves", usState.overwrite, (v) => { usState.overwrite = v; usState.preview = null; renderUserSettings(); }),
           checkbox("Make these the defaults for new users (organisation format settings)", usState.newUsers, (v) => { usState.newUsers = v; renderUserSettings(); }),
@@ -2023,9 +2081,140 @@ async function activity() {
           h("td", {}, a.ok ? h("span", { class: "pill ok" }, "OK") : h("span", { class: "pill bad", title: a.error || "" }, "Failed")))))))));
 }
 
+// ------------------------------------------------------------------ help (the user guide, docs/USER-GUIDE.md)
+
+const slug = (t) => t.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/** Inline markdown: `code`, **bold** and [links](#anchor or https://…). Text only; never HTML. */
+function mdInline(text) {
+  const out = [];
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\[[^\]]+\]\([^)\s]+\))/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const t = m[0];
+    if (m[1]) out.push(h("code", {}, t.slice(1, -1)));
+    else if (m[2]) out.push(h("strong", {}, t.slice(2, -2)));
+    else {
+      const [, label, href] = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(t);
+      if (href.startsWith("#")) out.push(h("a", { href: `#/help?s=${href.slice(1)}` }, label));
+      else if (/^https:\/\//.test(href)) out.push(h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label));
+      else out.push(label);
+    }
+    last = m.index + t.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/** Block markdown: headings, paragraphs, lists (two levels), tables, notes (>) and code blocks. */
+function renderMarkdown(md) {
+  const lines = md.replace(/\r/g, "").split("\n");
+  const out = [];
+  let para = [];
+  const flush = () => { if (para.length) { out.push(h("p", {}, mdInline(para.join(" ")))); para = []; } };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      flush();
+      const code = [];
+      while (++i < lines.length && !/^```/.test(lines[i])) code.push(lines[i]);
+      out.push(h("pre", { class: "md-code" }, code.join("\n")));
+      continue;
+    }
+    const hm = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (hm) { flush(); out.push(h(`h${hm[1].length}`, { id: slug(hm[2]), class: "md-h" }, mdInline(hm[2]))); continue; }
+    if (/^\|/.test(line) && /^\|[\s:|-]+\|\s*$/.test(lines[i + 1] || "")) {
+      flush();
+      const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const head = cells(line);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && /^\|/.test(lines[i])) rows.push(cells(lines[i++]));
+      i--;
+      out.push(h("div", { class: "scroll" }, h("table", { class: "md-table" },
+        h("thead", {}, h("tr", {}, head.map((c) => h("th", { scope: "col" }, mdInline(c))))),
+        h("tbody", {}, rows.map((r) => h("tr", {}, r.map((c) => h("td", {}, mdInline(c)))))))));
+      continue;
+    }
+    const lm = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (lm) {
+      flush();
+      const ordered = /\d/.test(lm[2]);
+      const list = h(ordered ? "ol" : "ul", { class: "md-list" });
+      let lastLi = null;
+      for (; i < lines.length; i++) {
+        const m2 = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(lines[i]);
+        if (!m2) { if (/^\s{2,}\S/.test(lines[i]) && lastLi) { lastLi.append(" ", ...mdInline(lines[i].trim())); continue; } break; }
+        const li = h("li", {}, mdInline(m2[3]));
+        if (m2[1].length >= 2 && lastLi) {
+          let sub = lastLi.querySelector(":scope > ul, :scope > ol");
+          if (!sub) { sub = h(/\d/.test(m2[2]) ? "ol" : "ul", { class: "md-list" }); lastLi.append(sub); }
+          sub.append(li);
+        } else { list.append(li); lastLi = li; }
+      }
+      i--;
+      out.push(list);
+      continue;
+    }
+    const qm = /^>\s?(.*)$/.exec(line);
+    if (qm) { flush(); out.push(h("div", { class: "notice info md-note" }, mdInline(qm[1]))); continue; }
+    if (!line.trim()) { flush(); continue; }
+    para.push(line.trim());
+  }
+  flush();
+  return out;
+}
+
+let guideText = null;
+const helpState = { q: "" };
+async function help(params) {
+  const want = params.get("s");
+  mount(header("Help", "User guide", "How the console works, page by page."), loading("the user guide"));
+  try {
+    if (!guideText) {
+      const res = await fetch("/guide.md", { cache: "no-store" });
+      if (!res.ok) throw new Error(`The guide could not be loaded (HTTP ${res.status}).`);
+      guideText = await res.text();
+    }
+  } catch (err) { return mount(header("Help", "User guide"), notice("bad", err.message)); }
+  const nodes = renderMarkdown(guideText);
+  // Group the guide into sections at each ## heading, so search can show just the matching ones.
+  const sections = [];
+  let cur = { title: null, id: "top", nodes: [] };
+  for (const n of nodes) {
+    if (n.tagName === "H2") { sections.push(cur); cur = { title: n.textContent, id: n.id, nodes: [n] }; }
+    else if (n.tagName !== "H1") cur.nodes.push(n);
+  }
+  sections.push(cur);
+  const body = sections.filter((x) => x.title !== "Contents");
+  const content = h("article", { class: "md card" });
+  const toc = h("nav", { class: "help-toc card", "aria-label": "Guide contents" });
+  const search = h("input", { type: "search", placeholder: "Search the guide", value: helpState.q, "aria-label": "Search the guide" });
+  const draw = () => {
+    const q = helpState.q.trim().toLowerCase();
+    const shown = body.filter((x) => !q || x.nodes.some((n) => n.textContent.toLowerCase().includes(q)));
+    content.replaceChildren(...(shown.length ? shown.flatMap((x) => x.nodes) : [h("p", { class: "muted" }, "Nothing in the guide matches that.")]));
+    toc.replaceChildren(h("div", { class: "small muted", style: "font-weight:600;margin-bottom:6px" }, "Contents"),
+      ...body.filter((x) => x.title).map((x) => h("a", { href: `#/help?s=${x.id}`, class: shown.includes(x) ? "" : "dim" }, x.title)));
+  };
+  search.addEventListener("input", () => { helpState.q = search.value; draw(); });
+  mount(
+    header("Help", "User guide", "How the console works, page by page. Every page also has a ? next to its title that opens its part of this guide.",
+      h("a", { class: "btn", href: "/guide.md", download: "Env-Console-user-guide.md" }, "Download (.md)"),
+      h("button", { type: "button", class: "btn", onclick: () => window.print() }, "Print or save as PDF")),
+    h("label", { class: "search help-search" }, search),
+    h("div", { class: "help-layout" }, toc, content));
+  draw();
+  if (want) {
+    const el = document.getElementById(want);
+    if (el) { el.scrollIntoView({ block: "start" }); el.classList.add("md-target"); setTimeout(() => el.classList.remove("md-target"), 1600); }
+  } else window.scrollTo(0, 0);
+}
+
 // ------------------------------------------------------------------ router
 
-const ROUTES = { overview, alerts, solutions, compare, config: configPage, components, runs, jobs, audit, security, usersettings, activity, cli };
+const ROUTES = { overview, alerts, solutions, compare, config: configPage, components, runs, jobs, audit, security, usersettings, activity, cli, help };
 async function route() {
   hideTip();
   if (!config) {
@@ -2043,7 +2232,7 @@ async function route() {
     a.classList.toggle("active", a.dataset.route === name);
     a.dataset.route === name ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
-  if (config.environments.length === 0) return config.canManage ? mount(header("Overview", "Environments", "Sign in, then choose the environments to work with."), accountBar(),
+  if (config.environments.length === 0 && name !== "help") return config.canManage ? mount(header("Overview", "Environments", "Sign in, then choose the environments to work with."), accountBar(),
     h("section", { class: "card row between" }, h("div", {}, h("strong", {}, "No environments chosen yet"), h("div", { class: "small muted" }, "Only the environments you choose are loaded. You can change the choice at any time.")),
       h("button", { type: "button", class: "btn primary", onclick: chooseEnvironmentsDialog }, "Choose environments")),
     manageEnvironments()) : noEnvScreen();

@@ -242,3 +242,28 @@ test("--env can name an environment you didn't choose; only that one is looked u
   assert.equal(config.environments.length, 2, "the others are not loaded");
   assert.equal(findEnv(config, "seb g's uni project").discovered, true);
 });
+
+test("the user guide is served for the Help page, and every page's help link has a section", async () => {
+  const config: PcxConfig = { auth: { provider: "azps" }, environments: [] };
+  const srv = await startServer({ config, port: 0, key: "k".repeat(32), workspace: new Workspace(config, { token: async () => "t" }) });
+  try {
+    const text = await new Promise<string>((resolve, reject) => {
+      const req = request({ host: "127.0.0.1", port: srv.port, path: "/guide.md", headers: { host: `127.0.0.1:${srv.port}` } }, (res) => {
+        let t = "";
+        res.on("data", (d) => (t += d));
+        res.on("end", () => (res.statusCode === 200 ? resolve(t) : reject(new Error(String(res.statusCode)))));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    assert.match(text, /^# Env Console user guide/);
+    const slug = (t: string) => t.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const ids = new Set([...text.matchAll(/^#{1,4}\s+(.*)$/gm)].map((m) => slug(m[1]!)));
+    const app = readFileSync(new URL("../../public/app.js", import.meta.url), "utf8");
+    const helpFor = /const HELP_FOR = \{([\s\S]*?)\};/.exec(app)![1]!;
+    for (const [, id] of helpFor.matchAll(/"([a-z0-9-]+-page)"/g)) assert.ok(ids.has(id!), `guide has a section for ${id}`);
+    for (const [, id] of text.matchAll(/\]\(#([a-z0-9-]+)\)/g)) assert.ok(ids.has(id!), `guide link #${id} has a target`);
+  } finally {
+    await srv.close();
+  }
+});
