@@ -19,6 +19,13 @@ It runs in one of two ways:
 - **Run history:** cloud flow runs and plugin errors per environment, with daily charts, failure rates, the components that fail most, and each run's error, trace and Power Automate link. You can switch plugin trace logging on or off.
 - **Audit:** system, table and column auditing, switched on or off one at a time or in bulk, plus who changed what (old and new values).
 - **User settings:** set regional formats, time zone, language and records per page for all users, or for a security role, team or business unit. It can keep users' own changes and set the defaults for new users.
+- **One column per environment:** Flows & plugins, Run history, Background jobs, Audit, Security, Connections & variables and User settings show every environment side by side. Switch a single cell, or tick rows and choose which environments to change.
+- **Alerts:** problems across every environment in the last 24 hours (unreachable environments, flow and plugin failures, failed or stuck background jobs, variables without a value, connection references without a connection, auditing or tracing switched off). `pcx alerts run --post` sends new ones to a Teams channel, and `pcx alerts schedule --install` runs that on a schedule.
+- **Health report:** a downloadable HTML report (print it to PDF if needed) or CSV, covering health per environment, alerts and solution drift. Use `pcx report` from the command line.
+- **Background jobs:** failed, suspended, long-waiting and long-running system jobs, with bulk cancel and resume.
+- **Security:** users and their roles (direct and through teams) in every environment, users with no roles, which roles exist where, and a privilege-by-privilege comparison of a role.
+- **Connections & variables:** environment variable values in every environment (edit them in place; secrets are never shown) and whether each connection reference has a connection.
+- **Remove unmanaged changes:** from Solution compare, with a reason and confirmation.
 - **Microsoft and system items** are hidden by default on Flows & plugins; one switch shows them.
 - **Brand and themes:** FormusPro navy and magenta with Rubik and IBM Plex Sans, in a light theme and a dark theme (Light / Dark / follow the system).
 

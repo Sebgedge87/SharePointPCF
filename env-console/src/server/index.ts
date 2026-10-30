@@ -15,6 +15,22 @@ import { runReport, setTraceSetting, type TraceSetting } from "../core/runs.js";
 import { getSystemAudit, listAuditEntries, listColumnAudit, listTableAudit, setAudit, setSystemAudit } from "../core/audit.js";
 import { applyUserSettings, LANGUAGES, listUserSettings, planApply, REGIONS, TIME_ZONES, validateSettings, type FormatSettings, type UserScope } from "../core/usersettings.js";
 import { sinceDate } from "../core/util.js";
+import { acrossEnvs } from "../core/multi.js";
+import { changeJobs, listProblemJobs, type JobAction } from "../core/jobs.js";
+import { listRoles, listUserRoles, rolePrivileges } from "../core/security.js";
+import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configdata.js";
+import { removeUnmanagedLayer } from "../core/compare.js";
+import { evaluateAlerts, postToTeams } from "../core/alerts.js";
+import { buildReport, renderReportCsv, renderReportHtml } from "../core/report.js";
+
+/** A downloadable file instead of JSON. */
+class FileResult {
+  constructor(
+    readonly name: string,
+    readonly type: string,
+    readonly body: string
+  ) {}
+}
 import type { HostedAuth, Session } from "./hosted.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../../../public/", import.meta.url));
@@ -118,6 +134,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const hostedWs = new WeakMap<Session, Workspace>();
   let port = opts.port;
 
+  const teamsWebhook = () => (mode.kind === "hosted" ? process.env.PCX_TEAMS_WEBHOOK : cfg.alerts?.teamsWebhook);
   const allowedHosts = (): string[] => (mode.kind === "hosted" ? [new URL(mode.auth.settings.publicUrl).host] : [`127.0.0.1:${port}`, `localhost:${port}`]);
   const allowedOrigins = (): string[] => (mode.kind === "hosted" ? [mode.auth.settings.publicUrl] : [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
 
@@ -277,6 +294,87 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       return applyUserSettings(client, plan, { setOrgDefaults: body.setOrgDefaults === true, reason: reasonOf(body), actor: await actorFor(client), source: "dashboard" });
     }
 
+    // ---- across all environments
+    const all = <T>(fn: Parameters<typeof acrossEnvs<T>>[2]) => acrossEnvs<T>(ws, cfg.environments, fn);
+    if (req.method === "GET" && url.pathname === "/api/components/all") {
+      const kind = q("kind") as ComponentKind;
+      if (!KINDS.has(kind)) throw new HttpError(400, "kind must be flow, rule or plugin");
+      return all((c) => listComponents(c, kind, { includeSystem: q("all") === "1" }));
+    }
+    if (req.method === "GET" && url.pathname === "/api/runs/all") {
+      const since = sinceDate(q("since") || "7d");
+      return all((c, env) => runReport(c, env, since));
+    }
+    if (req.method === "GET" && url.pathname === "/api/jobs/all") {
+      const since = sinceDate(q("since") || "7d");
+      return all((c) => listProblemJobs(c, since));
+    }
+    if (req.method === "POST" && url.pathname === "/api/jobs/change") {
+      const body = await readJson(req);
+      const client = ws.client(findEnv(cfg, String(body.env ?? "")));
+      const action = body.action as JobAction;
+      if (action !== "cancel" && action !== "resume") throw new HttpError(400, "action must be cancel or resume");
+      const ids = body.ids;
+      if (!Array.isArray(ids) || !ids.length || ids.length > 500 || !ids.every((i) => typeof i === "string" && isGuid(i))) throw new HttpError(400, "ids must be job IDs");
+      const known = new Map((await listProblemJobs(client, sinceDate("30d"))).map((j) => [j.id.toLowerCase(), j]));
+      const jobs = (ids as string[]).map((i) => known.get(i.toLowerCase()));
+      if (jobs.some((j) => !j)) throw new HttpError(400, "Some jobs are no longer waiting, suspended or failed. Refresh and try again.");
+      return { results: await changeJobs(client, jobs.map((j) => ({ id: j!.id, name: j!.name })), action, { reason: reasonOf(body), actor: await actorFor(client), source: "dashboard" }) };
+    }
+    if (req.method === "GET" && url.pathname === "/api/audit/system/all") return all((c) => getSystemAudit(c));
+    if (req.method === "GET" && url.pathname === "/api/audit/tables/all") return all((c) => listTableAudit(c));
+    if (req.method === "GET" && url.pathname === "/api/audit/columns/all") return all((c) => listColumnAudit(c, q("table")));
+    if (req.method === "GET" && url.pathname === "/api/audit/log/all") {
+      const since = sinceDate(q("since") || "7d");
+      return all((c) => listAuditEntries(c, q("table"), since, { column: q("column") || undefined }));
+    }
+    if (req.method === "GET" && url.pathname === "/api/security/users/all") return all((c) => listUserRoles(c));
+    if (req.method === "GET" && url.pathname === "/api/security/roles/all") return all((c) => listRoles(c));
+    if (req.method === "GET" && url.pathname === "/api/security/privileges") {
+      const role = q("role");
+      if (!role || role.length > 200) throw new HttpError(400, "Choose a role");
+      return all(async (c) => {
+        const r = (await listRoles(c)).find((x) => x.name === role);
+        return r ? rolePrivileges(c, r.id) : null;
+      });
+    }
+    if (req.method === "GET" && url.pathname === "/api/config/all") return all(async (c) => ({ vars: await listEnvVars(c), refs: await listConnectionRefs(c) }));
+    if (req.method === "POST" && url.pathname === "/api/config/envvar") {
+      const body = await readJson(req);
+      const client = ws.client(findEnv(cfg, String(body.env ?? "")));
+      if (typeof body.schemaName !== "string" || !/^[A-Za-z0-9_]{1,200}$/.test(body.schemaName) || typeof body.value !== "string") throw new HttpError(400, "schemaName and value are required");
+      await setEnvVarValue(client, body.schemaName, body.value, { reason: reasonOf(body), actor: await actorFor(client), source: "dashboard" });
+      return { ok: true };
+    }
+    if (req.method === "POST" && url.pathname === "/api/compare/remove-layer") {
+      const body = await readJson(req);
+      const client = ws.client(findEnv(cfg, String(body.env ?? "")));
+      const type = Number(body.type);
+      if (!Number.isInteger(type) || typeof body.id !== "string" || !isGuid(body.id)) throw new HttpError(400, "Bad component");
+      await removeUnmanagedLayer(client, type, body.id, String(body.name ?? body.id).slice(0, 200), { reason: reasonOf(body), actor: await actorFor(client), source: "dashboard" });
+      return { ok: true };
+    }
+    if (req.method === "GET" && url.pathname === "/api/alerts") {
+      const alerts = await evaluateAlerts(ws, cfg.environments, sinceDate(q("since") || "24h"));
+      return { alerts, teams: !!teamsWebhook() };
+    }
+    if (req.method === "POST" && url.pathname === "/api/alerts/teams") {
+      const hook = teamsWebhook();
+      if (!hook) throw new HttpError(400, "No Teams webhook set. Run: pcx config set teams-webhook <url>");
+      const alerts = await evaluateAlerts(ws, cfg.environments, sinceDate("24h"));
+      if (alerts.length) await postToTeams(hook, alerts);
+      return { posted: alerts.length };
+    }
+    if (req.method === "GET" && url.pathname === "/api/report") {
+      const days = Math.min(30, Math.max(1, Number(q("days") || 7)));
+      const report = await buildReport(ws, cfg, days);
+      const stamp = report.generatedAt.slice(0, 10);
+      const format = q("format") || "html";
+      if (format === "csv") return new FileResult(`env-health-${stamp}.csv`, "text/csv; charset=utf-8", renderReportCsv(report));
+      if (format === "json") return new FileResult(`env-health-${stamp}.json`, "application/json; charset=utf-8", JSON.stringify(report, null, 2));
+      return new FileResult(`env-health-${stamp}.html`, "text/html; charset=utf-8", renderReportHtml(report));
+    }
+
     if (req.method === "GET" && url.pathname === "/api/actions") {
       return { actions: readActions(200) };
     }
@@ -300,7 +398,11 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
         const origin = req.headers.origin;
         if (req.method !== "GET" && origin && !allowedOrigins().includes(origin)) throw new HttpError(403, "Cross-site request refused");
         const who = caller(req);
-        send(res, 200, await api(req, url, who));
+        const result = await api(req, url, who);
+        if (result instanceof FileResult) {
+          res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": result.type, "Content-Disposition": `attachment; filename="${result.name}"` });
+          res.end(result.body);
+        } else send(res, 200, result);
         return;
       }
       const s = STATIC[url.pathname];

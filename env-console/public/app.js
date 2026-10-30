@@ -179,7 +179,16 @@ async function overview() {
     grid.append(card);
   }
   const via = config.mode === "hosted" ? `signed in as ${config.user}` : `signed in through ${config.provider === "azps" ? "PowerShell" : "Azure CLI"}`;
-  mount(header("Overview", "Environments", `${config.environments.length} environments · ${via}`, h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")), grid);
+  const alertBox = h("section", { class: "card row between", "aria-label": "Alerts" }, h("span", { class: "muted" }, "Checking for alerts…"));
+  mount(header("Overview", "Environments", `${config.environments.length} environments · ${via}`, ...reportButtons(), h("button", { class: "btn", type: "button", onclick: () => overview() }, "Refresh")), alertBox, grid);
+  api("/api/alerts").then((d) => {
+    alertState.data = d;
+    const c = (sv) => d.alerts.filter((a) => a.severity === sv).length;
+    alertBox.replaceChildren(
+      h("div", { class: "row" }, h("strong", {}, d.alerts.length ? `${d.alerts.length} alerts in the last 24 hours` : "No alerts in the last 24 hours"),
+        c("critical") ? h("span", { class: "pill bad" }, `${c("critical")} critical`) : null, c("warning") ? h("span", { class: "pill warn" }, `${c("warning")} warnings`) : null, c("info") ? h("span", { class: "pill info" }, `${c("info")} info`) : null),
+      h("a", { class: "btn sm", href: "#/alerts" }, "View alerts"));
+  }, () => alertBox.remove());
   let anyLogin = false;
   await Promise.all(config.environments.map(async (e) => {
     const card = cards.get(e.name);
@@ -195,7 +204,7 @@ async function overview() {
            h("div", {}, h("dt", {}, "Flows on"), h("dd", {}, st.flowsTotal !== undefined ? `${st.flowsOn} / ${st.flowsTotal}` : "—")),
            h("div", {}, h("dt", {}, "Plugin steps on"), h("dd", {}, st.pluginStepsTotal !== undefined ? `${st.pluginStepsOn} / ${st.pluginStepsTotal}` : "—"))),
          st.error ? h("div", { class: "small muted" }, st.error) : null,
-         h("div", { class: "row small" }, h("a", { href: `#/components${q}` }, "Flows & plugins"), h("a", { href: `#/runs${q}` }, "Run history"), h("a", { href: `#/audit${q}` }, "Audit"))]
+         h("div", { class: "row small" }, h("a", { href: "#/components" }, "Flows & plugins"), h("a", { href: `#/runs${q}` }, "Run history"), h("a", { href: "#/jobs" }, "Background jobs"))]
       : [h("div", { class: "row small" }, h("span", { class: "dot bad" }), h("strong", {}, st.needsLogin ? "Sign-in needed" : "Not reachable")), h("div", { class: "small muted" }, st.error || "")];
     card.replaceChildren(card.children[0], card.children[1], ...body.filter(Boolean));
   }));
@@ -299,6 +308,26 @@ async function showDiff(row) {
   renderCompare();
   document.getElementById("diff-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
+function removeLayerBox(row, env) {
+  const reason = reasonInput(cmpState, env);
+  reason.className = "input";
+  return h("div", { class: "notice warn stack" },
+    h("div", {}, `Someone changed this directly in ${env}, which is managed. That unmanaged change hides what the next import brings. Removing it puts the managed version back; anything changed directly in ${env} is lost, so move it to DEV first if you need it.`),
+    h("label", { class: "field" }, h("span", {}, `Reason (required in ${env})`), reason),
+    h("div", {}, h("button", { type: "button", class: "btn danger", disabled: cmpState.busy, onclick: () => removeLayer(row, env) }, `Remove unmanaged change in ${env}`)));
+}
+async function removeLayer(row, env) {
+  if (missingReason(cmpState, [env])) { cmpState.error = cmpState.notice.text; renderCompare(); return; }
+  if (!confirm(`Remove the unmanaged change to "${row.name}" in ${env}? This can't be undone.`)) return;
+  cmpState.busy = true; renderCompare();
+  try {
+    await api("/api/compare/remove-layer", { env, type: row.type, id: row.objectId, name: row.name, reason: cmpState.reason });
+    cmpState.busy = false;
+    await runCompare();
+    cmpState.error = null;
+    main().prepend(notice("ok", `Unmanaged change removed from ${row.name} in ${env}.`));
+  } catch (err) { cmpState.busy = false; cmpState.error = err.message; renderCompare(); }
+}
 function renderCompare() {
   const solRows = solState.data ? solState.data.rows.filter((r) => cmpState.ms || !r.isMicrosoft) : [];
   const select = h("select", { class: "input", "aria-label": "Solution", style: "min-width:260px" },
@@ -343,7 +372,7 @@ function renderCompare() {
         cmpState.sel ? h("section", { id: "diff-panel", class: "card stack", style: "flex:2 1 420px", "aria-label": "Difference" },
           h("div", {}, h("div", { class: "small muted" }, cmpState.sel.typeName + (cmpState.sel.parent ? ` · ${cmpState.sel.parent}` : "")), h("h2", {}, cmpState.sel.name)),
           h("div", { class: "row small" }, chip(A), h("span", { "aria-hidden": "true" }, "→"), chip(B), h("span", { class: "muted" }, "red lines are only in " + A + ", green only in " + B)),
-          (cmpState.sel.layerA || cmpState.sel.layerB) ? notice("warn", `Someone changed this directly in ${cmpState.sel.layerA ? A : B}, which is managed. That unmanaged change hides the next import: remove it in the maker portal, or move the change back to DEV.`) : null,
+          (cmpState.sel.layerA || cmpState.sel.layerB) ? removeLayerBox(cmpState.sel, cmpState.sel.layerA ? A : B) : null,
           cmpState.diff?.loading ? loading("both definitions") :
           cmpState.diff?.error ? notice("bad", cmpState.diff.error) :
           cmpState.diff?.tooLarge ? notice("info", "These definitions are too large to show line by line, but they are different.") :
@@ -354,122 +383,255 @@ function renderCompare() {
   );
 }
 
-// ------------------------------------------------------------------ flows, rules, plugins
+// ------------------------------------------------------------------ environment-column helpers
 
-const compState = { kind: "flow", sel: new Set(), reason: "", data: null, notice: null, all: false, q: "" };
+const envNames = () => config.environments.map((e) => e.name);
+const anyManaged = (names) => names.some((n) => envOf(n)?.managed);
+function envHeads(names, extra) {
+  return names.map((n) => h("th", { scope: "col", class: "envcol" }, chip(n), extra ? h("div", { class: "small muted", style: "margin-top:4px;font-weight:400" }, extra(n)) : null));
+}
+/** Lines up per-environment lists into rows keyed by `key`, one cell per environment. */
+function toMatrix(results, names, key, base) {
+  const rows = new Map();
+  for (const n of names) for (const item of results[n] || []) {
+    const k = key(item);
+    if (!rows.has(k)) rows.set(k, { key: k, ...base(item), cells: {} });
+    rows.get(k).cells[n] = item;
+  }
+  return [...rows.values()];
+}
+function errorsNotice(errors) {
+  const e = Object.entries(errors || {});
+  return e.length ? notice("bad", e.map(([n, m]) => `${n}: ${m}`).join(" · ")) : null;
+}
+/** Reason box shown once per page when any environment involved is managed. */
+function reasonCard(state, names = envNames()) {
+  if (!anyManaged(names)) return null;
+  const input = reasonInput(state, names.filter((n) => envOf(n).managed).join(", "));
+  input.className = "input";
+  input.style.flex = "1";
+  return h("label", { class: "card row", style: "padding:10px 16px" }, h("strong", { class: "small" }, `Reason for changes in ${names.filter((n) => envOf(n).managed).join(", ")}`), input);
+}
+function missingReason(state, names) {
+  const managed = names.filter((n) => envOf(n)?.managed);
+  if (managed.length && (state.reason || "").trim().length < 3) {
+    state.notice = { kind: "warn", text: `${managed.join(", ")} ${managed.length > 1 ? "are" : "is"} managed: enter a reason first.` };
+    return true;
+  }
+  return false;
+}
+function envChecks(state, names = envNames()) {
+  state.targets ??= new Set(names);
+  return h("div", { class: "envchecks", role: "group", "aria-label": "Apply to environments" },
+    h("span", { class: "small" }, "Apply to"),
+    names.map((n) => checkbox(n, state.targets.has(n), (v) => { v ? state.targets.add(n) : state.targets.delete(n); })));
+}
+async function download(path) {
+  const res = await fetch(path, { headers: { "x-pcx-request": "1", ...(key() ? { "x-pcx-key": key() } : {}) } });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+  const name = (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/)?.[1] || "report";
+  const url = URL.createObjectURL(await res.blob());
+  const a = h("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+function reportButtons() {
+  const go = (fmt) => async (ev) => {
+    const b = ev.currentTarget;
+    const label = b.textContent;
+    b.disabled = true;
+    b.textContent = "Building report…";
+    try { await download(`/api/report?format=${fmt}&days=7`); } catch (err) { alert(err.message); }
+    b.disabled = false;
+    b.textContent = label;
+  };
+  return [h("button", { type: "button", class: "btn primary", onclick: go("html") }, "Download report"), h("button", { type: "button", class: "btn", onclick: go("csv") }, "CSV")];
+}
+
+// ------------------------------------------------------------------ alerts
+
+const alertState = { data: null, error: null, sev: "all", notice: null };
+async function refreshAlertBadge() {
+  try {
+    const d = await api("/api/alerts");
+    alertState.data = d;
+    const n = d.alerts.filter((a) => a.severity !== "info").length;
+    const b = document.getElementById("alert-badge");
+    b.hidden = n === 0;
+    b.textContent = String(n);
+  } catch { /* badge is optional */ }
+}
+async function alerts() {
+  alertState.error = null;
+  renderAlerts();
+  try { alertState.data = await api("/api/alerts"); } catch (err) { alertState.error = err.message; }
+  renderAlerts();
+}
+function renderAlerts() {
+  const d = alertState.data;
+  const head = header("Monitoring", "Alerts", "Problems across every environment in the last 24 hours: failures, things not set up, and settings that need attention.",
+    ...reportButtons(),
+    d?.teams ? h("button", { type: "button", class: "btn", onclick: async () => {
+      try { const r = await api("/api/alerts/teams", {}); alertState.notice = { kind: "ok", text: `Posted ${r.posted} alerts to Teams.` }; } catch (err) { alertState.notice = { kind: "bad", text: err.message }; }
+      renderAlerts();
+    } }, "Send to Teams") : null);
+  if (alertState.error) return mount(head, notice("bad", alertState.error));
+  if (!d) return mount(head, loading("alerts from every environment"));
+  const list = d.alerts.filter((a) => alertState.sev === "all" || a.severity === alertState.sev);
+  const count = (s) => d.alerts.filter((a) => a.severity === s).length;
+  const names = envNames();
+  const kinds = [...new Set(d.alerts.map((a) => a.kind))];
+  const kindLabel = { access: "Access", flow: "Flow failures", plugin: "Plugin errors", tracing: "Plugin tracing", jobs: "Background jobs", variable: "Variables", connection: "Connections", audit: "Auditing" };
+  mount(head,
+    alertState.notice ? notice(alertState.notice.kind, alertState.notice.text) : null,
+    !d.teams ? notice("info", "To get these in a Teams channel, add a webhook: ", h("code", {}, "pcx config set teams-webhook <url>"), ", then ", h("code", {}, "pcx alerts schedule --install"), ".") : null,
+    h("section", { class: "tiles" },
+      [["critical", "Critical", "var(--bad)"], ["warning", "Warnings", "var(--warn-text)"], ["info", "Info", "var(--accent-text)"]].map(([k, t, col]) =>
+        h("div", { class: "tile" }, h("div", { class: "k" }, t), h("div", { class: "v", style: count(k) ? `color:${col}` : "" }, count(k))))),
+    kinds.length ? h("section", { class: "card flush", "aria-label": "Alerts by environment" },
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Area"), envHeads(names))),
+        h("tbody", {}, kinds.map((k) => h("tr", {}, h("th", { scope: "row" }, kindLabel[k] || k),
+          names.map((n) => {
+            const x = d.alerts.filter((a) => a.kind === k && a.env === n);
+            const worst = x.some((a) => a.severity === "critical") ? "bad" : x.some((a) => a.severity === "warning") ? "warn" : x.length ? "info" : "ok";
+            return h("td", { class: "envcol" }, x.length ? h("span", { class: `pill ${worst}` }, x.length) : h("span", { class: "muted" }, "—"));
+          }))))))) : null,
+    seg([["all", `All (${d.alerts.length})`], ["critical", "Critical"], ["warning", "Warnings"], ["info", "Info"]], alertState.sev, (v) => { alertState.sev = v; renderAlerts(); }, "Severity"),
+    h("section", { class: "card flush" },
+      list.length === 0 ? h("div", { class: "empty" }, "No alerts. Everything looks healthy.") :
+      h("ul", { class: "list" }, list.map((a) => h("li", { style: "display:grid;grid-template-columns:90px 90px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 20px" },
+        h("span", { class: `pill ${a.severity === "critical" ? "bad" : a.severity === "warning" ? "warn" : "info"}` }, a.severity === "critical" ? "Critical" : a.severity === "warning" ? "Warning" : "Info"),
+        chip(a.env),
+        h("div", { style: "min-width:0" }, h("div", { style: "font-weight:600" }, a.title), a.detail ? h("div", { class: "small muted", style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, a.detail) : null),
+        h("a", { class: "btn sm", href: a.route }, "Open"))))));
+}
+
+// ------------------------------------------------------------------ flows, rules, plugins (one column per environment)
+
+const compState = { kind: "flow", sel: new Set(), reason: "", data: null, notice: null, all: false, q: "", onlyDiff: false, busy: false };
 async function components(params) {
-  pickEnv(params);
   if (params.get("kind") && KIND_LABEL[params.get("kind")]) compState.kind = params.get("kind");
   if (params.get("q") !== null) compState.q = params.get("q") || "";
   compState.sel.clear();
   compState.data = null;
   renderComponents();
-  try { compState.data = await api(`/api/components?env=${encodeURIComponent(shared.env)}&kind=${compState.kind}${compState.all ? "&all=1" : ""}`); }
-  catch (err) { compState.data = { error: err.message, items: [] }; }
+  try { compState.data = await api(`/api/components/all?kind=${compState.kind}${compState.all ? "&all=1" : ""}`); }
+  catch (err) { compState.data = { error: err.message }; }
   renderComponents();
 }
-async function setState(ids, on) {
-  if (needsReason(shared.env, compState)) { renderComponents(); return; }
-  try {
-    const { results } = await api("/api/components/state", { env: shared.env, kind: compState.kind, ids, on, reason: compState.reason });
-    const failed = results.filter((r) => !r.ok);
-    compState.notice = failed.length
-      ? { kind: "bad", text: `${results.length - failed.length} changed, ${failed.length} failed: ${failed.map((f) => `${f.name} (${f.error})`).join("; ")}` }
-      : { kind: "ok", text: `${results.length} ${results.length === 1 ? "item" : "items"} turned ${on ? "on" : "off"} in ${shared.env}${envOf(shared.env).managed ? " · reason logged" : ""}.` };
-  } catch (err) { compState.notice = { kind: "bad", text: err.message }; }
+/** Turns the given rows on or off in the given environments (one request per environment). */
+async function setStates(rows, names, on) {
+  if (missingReason(compState, names)) { renderComponents(); return; }
+  compState.busy = true;
+  renderComponents();
+  const done = [], failed = [];
+  for (const n of names) {
+    const ids = rows.map((r) => r.cells[n]).filter((c) => c && c.on !== on).map((c) => c.id);
+    if (!ids.length) continue;
+    try {
+      const { results } = await api("/api/components/state", { env: n, kind: compState.kind, ids, on, reason: compState.reason });
+      results.forEach((r) => (r.ok ? done : failed).push(`${n}: ${r.name}${r.error ? ` (${r.error})` : ""}`));
+    } catch (err) { failed.push(`${n}: ${err.message}`); }
+  }
+  compState.notice = failed.length ? { kind: "bad", text: `${done.length} changed, ${failed.length} failed. ${failed.slice(0, 5).join("; ")}` } : done.length ? { kind: "ok", text: `${done.length} change${done.length === 1 ? "" : "s"} made: turned ${on ? "on" : "off"} in ${names.join(", ")}.` } : { kind: "info", text: `Nothing to change: already ${on ? "on" : "off"}.` };
+  compState.busy = false;
   await components(new URLSearchParams());
 }
 function renderComponents() {
-  const env = envOf(shared.env);
   const d = compState.data;
+  const names = d?.environments?.filter((n) => d.results[n]) ?? envNames();
   const q = compState.q.trim().toLowerCase();
-  const items = d ? d.items.filter((i) => !q || `${i.name} ${i.target} ${i.solution || ""}`.toLowerCase().includes(q)) : [];
+  let rows = d && !d.error ? toMatrix(d.results, names, (i) => i.id.toLowerCase(), (i) => ({ name: i.name, target: i.target, solution: i.solution, custom: i.custom })) : [];
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  rows = rows.filter((r) => !q || `${r.name} ${r.target} ${r.solution || ""}`.toLowerCase().includes(q));
+  if (compState.onlyDiff) rows = rows.filter((r) => new Set(names.map((n) => (r.cells[n] ? String(r.cells[n].on) : "-"))).size > 1);
   const search = h("input", { type: "search", placeholder: "Search name, table or solution", value: compState.q, "aria-label": "Search" });
   search.addEventListener("input", () => { compState.q = search.value; const pos = search.selectionStart; renderComponents(); const el = main().querySelector("input[type=search]"); el.focus(); el.setSelectionRange(pos, pos); });
   const allBox = h("input", { type: "checkbox", "aria-label": "Select all shown" });
-  allBox.checked = items.length > 0 && items.every((i) => compState.sel.has(i.id));
-  allBox.addEventListener("change", () => { allBox.checked ? items.forEach((i) => compState.sel.add(i.id)) : compState.sel.clear(); renderComponents(); });
-  const reason = reasonInput(compState, env.name);
-  const onCount = items.filter((i) => i.on).length;
-  const bulk = compState.sel.size
-    ? h("section", { class: "bulk", "aria-label": "Change selected" },
-        h("strong", {}, `${compState.sel.size} selected`),
-        env.managed ? h("label", {}, `Reason (required in ${env.name})`, reason) : null,
-        h("div", { class: "row", style: "margin-left:auto" },
-          h("button", { type: "button", class: "btn good", onclick: () => setState([...compState.sel], true) }, "Turn on"),
-          h("button", { type: "button", class: "btn ghost", onclick: () => setState([...compState.sel], false) }, "Turn off"),
-          h("button", { type: "button", class: "btn ghost", style: "border:0", onclick: () => { compState.sel.clear(); renderComponents(); } }, "Clear")))
-    : env.managed ? h("label", { class: "card row small", style: "padding:10px 16px" }, h("strong", {}, `Reason for changes in ${env.name}`), h("span", { style: "flex:1;display:flex" }, Object.assign(reason, { className: "input", style: "flex:1" }))) : null;
+  allBox.checked = rows.length > 0 && rows.every((r) => compState.sel.has(r.key));
+  allBox.addEventListener("change", () => { allBox.checked ? rows.forEach((r) => compState.sel.add(r.key)) : compState.sel.clear(); renderComponents(); });
+  const selRows = rows.filter((r) => compState.sel.has(r.key));
+  const bulk = selRows.length ? h("section", { class: "bulk", "aria-label": "Change selected" },
+    h("strong", {}, `${selRows.length} selected`), envChecks(compState, names),
+    h("div", { class: "row", style: "margin-left:auto" },
+      h("button", { type: "button", class: "btn good", disabled: compState.busy, onclick: () => setStates(selRows, [...compState.targets].filter((n) => names.includes(n)), true) }, "Turn on"),
+      h("button", { type: "button", class: "btn ghost", disabled: compState.busy, onclick: () => setStates(selRows, [...compState.targets].filter((n) => names.includes(n)), false) }, "Turn off"),
+      h("button", { type: "button", class: "btn ghost", style: "border:0", onclick: () => { compState.sel.clear(); renderComponents(); } }, "Clear"))) : null;
+  const onCount = (n) => rows.filter((r) => r.cells[n]?.on).length;
   mount(
-    header("Automation", "Flows, business rules & plugins", "Turn items on or off one at a time, or tick several and change them together.", envPicker(env.name, (n) => { shared.env = n; compState.notice = null; components(new URLSearchParams()); })),
+    header("Automation", "Flows, business rules & plugins", "Every environment side by side. Switch one cell, or tick rows and choose which environments to change."),
     h("div", { class: "row between" },
       seg(Object.entries(KIND_LABEL), compState.kind, (k) => { compState.kind = k; compState.notice = null; components(new URLSearchParams()); }, "Type", "tablist"),
       h("div", { class: "row" }, h("label", { class: "search" }, search),
+        checkbox("Only where environments differ", compState.onlyDiff, (v) => { compState.onlyDiff = v; renderComponents(); }),
         checkbox("Show Microsoft and system items", compState.all, (v) => { compState.all = v; components(new URLSearchParams()); }))),
     compState.notice ? notice(compState.notice.kind, compState.notice.text) : null,
+    d ? errorsNotice(d.errors) : null,
+    reasonCard(compState, names),
     bulk,
     h("section", { class: "card flush", "aria-label": KIND_LABEL[compState.kind] },
-      !d ? h("div", { class: "empty" }, "Loading…") :
+      !d ? h("div", { class: "empty" }, "Loading from every environment…") :
       d.error ? h("div", { style: "padding:16px" }, notice("bad", d.error)) :
-      items.length === 0 ? h("div", { class: "empty" }, `No ${KIND_LABEL[compState.kind].toLowerCase()} ${q ? "match your search" : `in ${env.name}`}${compState.all ? "" : " (custom only)"}.`) :
-      [h("div", { class: "row between small muted", style: "padding:12px 20px" }, h("span", {}, `${items.length} shown · ${onCount} on · ${items.length - onCount} off`), h("span", {}, compState.all ? "Including Microsoft and system items" : "Custom items only")),
-       h("div", { class: "scroll" }, h("table", {},
-        h("thead", {}, h("tr", {}, h("th", { scope: "col", style: "width:44px" }, allBox), h("th", { scope: "col" }, "Name"), h("th", { scope: "col" }, compState.kind === "plugin" ? "Table · message · stage" : "Table"), h("th", { scope: "col" }, "Solution"), h("th", { scope: "col" }, "Modified"), h("th", { scope: "col", style: "text-align:right" }, "State"))),
-        h("tbody", {}, items.map((i) => {
-          const box = h("input", { type: "checkbox", "aria-label": `Select ${i.name}` });
-          box.checked = compState.sel.has(i.id);
-          box.addEventListener("change", () => { box.checked ? compState.sel.add(i.id) : compState.sel.delete(i.id); renderComponents(); });
-          return h("tr", { class: compState.sel.has(i.id) ? "sel" : "" },
+      rows.length === 0 ? h("div", { class: "empty" }, `No ${KIND_LABEL[compState.kind].toLowerCase()} ${q || compState.onlyDiff ? "match" : "found"}${compState.all ? "" : " (custom only)"}.`) :
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col", style: "width:44px" }, allBox), h("th", { scope: "col" }, "Name"), h("th", { scope: "col" }, compState.kind === "plugin" ? "Table · message · stage" : "Table"), h("th", { scope: "col" }, "Solution"),
+          envHeads(names, (n) => `${onCount(n)} on`))),
+        h("tbody", {}, rows.map((r) => {
+          const box = h("input", { type: "checkbox", "aria-label": `Select ${r.name}` });
+          box.checked = compState.sel.has(r.key);
+          box.addEventListener("change", () => { box.checked ? compState.sel.add(r.key) : compState.sel.delete(r.key); renderComponents(); });
+          const states = new Set(names.map((n) => (r.cells[n] ? String(r.cells[n].on) : "-")));
+          return h("tr", { class: compState.sel.has(r.key) ? "sel" : "" },
             h("td", {}, box),
-            h("th", { scope: "row" }, i.name, i.custom ? null : h("span", { class: "pill", style: "margin-left:8px" }, "Microsoft / system")),
-            h("td", { class: "muted" }, i.target),
-            h("td", { class: "muted small" }, i.solution || ""),
-            h("td", { class: "muted small", style: "white-space:nowrap" }, fmtDate(i.modifiedOn)),
-            h("td", { style: "text-align:right;white-space:nowrap" },
-              h("span", { class: "small", style: `font-weight:600;margin-right:6px;color:${i.on ? "var(--ok)" : "var(--muted)"}` }, i.on ? "On" : "Off"),
-              switchButton(i.on, `${i.on ? "Turn off" : "Turn on"} ${i.name}`, () => setState([i.id], !i.on))));
-        }))))]),
-    h("p", { class: "small muted", style: "margin:0" }, "Every change is logged on the Activity page. Managed environments need a reason for each change.")
-  );
+            h("th", { scope: "row" }, r.name, r.custom ? null : h("span", { class: "pill", style: "margin-left:8px" }, "Microsoft / system")),
+            h("td", { class: "muted small" }, r.target),
+            h("td", { class: "muted small" }, r.solution || ""),
+            names.map((n) => {
+              const c = r.cells[n];
+              if (!c) return h("td", { class: "envcol muted" }, "—");
+              return h("td", { class: `envcol${states.size > 1 ? " differs" : ""}` }, switchButton(c.on, `${c.on ? "Turn off" : "Turn on"} ${r.name} in ${n}`, () => setStates([r], [n], !c.on)));
+            }));
+        }))))),
+    h("p", { class: "small muted", style: "margin:0" }, "Highlighted rows are on in some environments and off in others. — means it isn't in that environment. Every change is logged on the Activity page."));
 }
 
-// ------------------------------------------------------------------ run history
+// ------------------------------------------------------------------ run history (all environments)
 
-const runState = { since: "7d", data: null, error: null, tab: "flows", failedOnly: true, open: null, reason: "", notice: null };
+const runState = { since: "7d", data: null, error: null, tab: "flows", failedOnly: true, open: null, reason: "", notice: null, envFilter: "all" };
 async function runs(params) {
-  pickEnv(params);
+  if (params.get("env") && envOf(params.get("env"))) runState.envFilter = params.get("env");
   runState.data = null; runState.error = null; runState.open = null;
   renderRuns();
-  try { runState.data = await api(`/api/runs?env=${encodeURIComponent(shared.env)}&since=${runState.since}`); }
-  catch (err) { runState.error = err.message; }
+  try { runState.data = await api(`/api/runs/all?since=${runState.since}`); } catch (err) { runState.error = err.message; }
   renderRuns();
 }
-async function setTrace(setting) {
-  if (needsReason(shared.env, runState)) { renderRuns(); return; }
+async function setTrace(env, setting) {
+  if (missingReason(runState, [env])) { renderRuns(); return; }
   try {
-    await api("/api/runs/trace", { env: shared.env, setting, reason: runState.reason });
-    runState.notice = { kind: "ok", text: `Plugin trace log in ${shared.env} set to "${setting}".` };
+    await api("/api/runs/trace", { env, setting, reason: runState.reason });
+    runState.notice = { kind: "ok", text: `Plugin trace log in ${env} set to "${setting}".` };
   } catch (err) { runState.notice = { kind: "bad", text: err.message }; }
   await runs(new URLSearchParams());
 }
 
 /** Stacked daily bars: succeeded below, failed on top, 2px gap, rounded top. */
 function dailyChart(points, series, label, W = 760) {
-  const H = 220, L = 40, R = 8, T = 10, B = 26;
-  const totals = points.map((p) => series.reduce((a, s) => a + (p[s.key] || 0), 0));
+  const H = 200, L = 36, R = 8, T = 10, B = 26;
+  const totals = points.map((p) => series.reduce((a, s2) => a + (p[s2.key] || 0), 0));
   const max = Math.max(1, ...totals);
   const step = niceStep(max);
   const top = Math.ceil(max / step) * step;
   const y = (v) => T + (H - T - B) * (1 - v / top);
-  const bw = (W - L - R) / points.length;
-  const barW = Math.max(3, Math.min(28, bw * 0.6));
+  const bw = (W - L - R) / Math.max(1, points.length);
+  const barW = Math.max(3, Math.min(24, bw * 0.6));
   const svg = s("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": label });
   const grid = s("g", { class: "grid" });
-  for (let v = 0; v <= top; v += step) {
-    grid.append(s("line", { x1: L, x2: W - R, y1: y(v), y2: y(v) }), s("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, fmtNum(v)));
-  }
+  for (let v = 0; v <= top; v += step) grid.append(s("line", { x1: L, x2: W - R, y1: y(v), y2: y(v) }), s("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, fmtNum(v)));
   svg.append(grid);
-  const every = Math.ceil(points.length / 10);
+  const every = Math.ceil(points.length / (W / 70));
   points.forEach((p, i) => {
     const cx = L + bw * i + bw / 2;
     const col = s("g", { class: "col" });
@@ -493,10 +655,10 @@ function dailyChart(points, series, label, W = 760) {
   });
   return svg;
 }
-function barPath(x, y, w, h, r) {
-  if (r <= 0) return `M${x},${y}h${w}v${h}h${-w}Z`;
-  r = Math.min(r, h);
-  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+function barPath(x, y, w, hgt, r) {
+  if (r <= 0) return `M${x},${y}h${w}v${hgt}h${-w}Z`;
+  r = Math.min(r, hgt);
+  return `M${x},${y + hgt}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + hgt}Z`;
 }
 function niceStep(max) {
   const raw = max / 4;
@@ -507,87 +669,87 @@ function niceStep(max) {
 function legend(items) {
   return h("div", { class: "legend" }, items.map((i) => h("span", {}, h("i", { style: `background:var(${i.color})` }), i.label)));
 }
-
-function renderRuns() {
-  const env = envOf(shared.env);
-  const d = runState.data;
-  const head = header("Monitoring", "Run history", "Cloud flow runs and plugin errors, with the error behind every failure.",
-    envPicker(env.name, (n) => { shared.env = n; runState.notice = null; runs(new URLSearchParams()); }),
-    seg([["24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"]], runState.since, (v) => { runState.since = v; runs(new URLSearchParams()); }, "Time range"));
-  if (runState.error) return mount(head, notice("bad", runState.error));
-  if (!d) return mount(head, loading(`runs from ${env.name}`));
-  const t = d.totals;
-  const rate = t.flowRuns ? Math.round((t.flowFailed / t.flowRuns) * 1000) / 10 : 0;
-  const trace = d.plugins.setting;
-  const flowSeries = [{ key: "flowSucceeded", label: "Succeeded", cls: "ok", color: "--chart-ok" }, { key: "flowFailed", label: "Failed", cls: "bad", color: "--chart-bad" }];
-  const pluginSeries = trace === "all"
-    ? [{ key: "pluginSucceeded", label: "Succeeded", cls: "ok", color: "--chart-ok" }, { key: "pluginFailed", label: "Failed", cls: "bad", color: "--chart-bad" }]
-    : [{ key: "pluginFailed", label: "Errors", cls: "bad", color: "--chart-bad" }];
-  const maxFail = Math.max(1, ...d.top.map((g) => g.failures));
-  const flowRows = d.flows.runs.filter((r) => !runState.failedOnly || r.status === "failed");
-  const logRows = d.plugins.logs.filter((l) => !runState.failedOnly || l.failed);
-  const reason = reasonInput(runState, env.name);
-  reason.className = "input";
-  mount(
-    head,
-    runState.notice ? notice(runState.notice.kind, runState.notice.text) : null,
-    h("section", { class: "tiles", "aria-label": "Totals" },
-      h("div", { class: "tile" }, h("div", { class: "k" }, "Flow runs"), h("div", { class: "v" }, fmtNum(t.flowRuns)), h("div", { class: "d" }, d.flows.available ? `last ${runState.since}` : "run history not available")),
-      h("div", { class: "tile" }, h("div", { class: "k" }, "Failed flow runs"), h("div", { class: "v", style: t.flowFailed ? "color:var(--bad)" : "" }, fmtNum(t.flowFailed)), h("div", { class: "d" }, `${rate}% of runs`)),
-      h("div", { class: "tile" }, h("div", { class: "k" }, "Plugin errors"), h("div", { class: "v", style: t.pluginFailed ? "color:var(--bad)" : "" }, fmtNum(t.pluginFailed)), h("div", { class: "d" }, `trace log: ${trace || "unknown"}`)),
-      h("div", { class: "tile" }, h("div", { class: "k" }, "Components failing"), h("div", { class: "v" }, fmtNum(d.top.length)), h("div", { class: "d" }, "flows and plugins"))),
-    trace === "off" || trace === undefined
-      ? notice("warn", `Plugin tracing is ${trace || "unknown"} in ${env.name}, so plugin errors are not recorded. Turn it on below.`)
-      : null,
-    !d.flows.available ? notice("info", d.flows.error || "Flow run history is not stored in Dataverse for this environment.") : null,
-    h("div", { class: "cols" },
-      h("section", { class: "card stack", style: "flex:3 1 520px", "aria-label": "Flow runs per day" },
-        h("div", { class: "row between" }, h("h2", {}, "Flow runs per day"), legend(flowSeries)),
-        dailyChart(d.daily, flowSeries, `Flow runs per day in ${env.name}: succeeded and failed`)),
-      h("section", { class: "card stack", style: "flex:2 1 360px", "aria-label": "Plugin activity per day" },
-        h("div", { class: "row between" }, h("h2", {}, trace === "all" ? "Plugin executions per day" : "Plugin errors per day"), pluginSeries.length > 1 ? legend(pluginSeries) : null),
-        dailyChart(d.daily, pluginSeries, `Plugin ${trace === "all" ? "executions" : "errors"} per day in ${env.name}`, 480))),
-    h("div", { class: "cols" },
-      h("section", { class: "card", style: "flex:3 1 520px", "aria-label": "Most failures" },
-        h("h2", {}, "Most failures"),
-        d.top.length === 0 ? h("p", { class: "muted" }, "Nothing failed in this period.") :
-        h("ul", { class: "list" }, d.top.slice(0, 10).map((g) => h("li", { style: "display:grid;grid-template-columns:minmax(0,1fr) 140px 64px auto;gap:12px;align-items:center;padding:10px 0" },
-          h("div", { style: "min-width:0" }, h("div", { style: "font-weight:600" }, g.name), h("div", { class: "small muted", style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, `${g.kind === "flow" ? "Cloud flow" : "Plugin"} · ${firstLine(g.lastError, 120)}`)),
-          h("span", { class: "bar-track", "aria-hidden": "true" }, h("span", { class: "bar-fill", style: `width:${Math.round((g.failures / maxFail) * 100)}%` })),
-          h("span", { class: "small", style: "text-align:right" }, h("strong", { style: "color:var(--bad)" }, g.failures), ` / ${g.total}`),
-          h("a", { class: "btn sm", href: `#/components?env=${encodeURIComponent(env.name)}&kind=${g.kind === "flow" ? "flow" : "plugin"}&q=${encodeURIComponent(g.kind === "flow" ? g.name : g.name.split(".").pop())}` }, "Turn off…"))))),
-      h("section", { class: "card stack", style: "flex:2 1 360px", "aria-label": "Plugin trace log" },
-        h("h2", {}, "Plugin trace log"),
-        h("p", { class: "small muted", style: "margin:0" }, "\"Exceptions\" records only failures (recommended). \"All\" records every execution, which adds load; use it briefly."),
-        seg([["off", "Off"], ["exceptions", "Exceptions"], ["all", "All"]], trace, (v) => { if (v !== trace) setTrace(v); }, "Trace setting"),
-        env.managed ? h("label", { class: "field" }, h("span", {}, `Reason (required in ${env.name})`), reason) : null)),
-    h("section", { class: "card flush", "aria-label": "Runs" },
-      h("div", { class: "row between", style: "padding:12px 20px" },
-        seg([["flows", `Flow runs (${flowRows.length})`], ["plugins", `Plugin log (${logRows.length})`]], runState.tab, (v) => { runState.tab = v; runState.open = null; renderRuns(); }, "Run list", "tablist"),
-        checkbox("Failures only", runState.failedOnly, (v) => { runState.failedOnly = v; renderRuns(); })),
-      runState.tab === "flows" ? runTable(flowRows) : pluginTable(logRows))
-  );
-}
 function statusPill(status) {
   const map = { succeeded: ["Succeeded", "ok"], failed: ["Failed", "bad"], cancelled: ["Cancelled", ""], running: ["Running", "info"], other: ["Other", ""] };
   const [t, c] = map[status] || [status, ""];
   return h("span", { class: `pill ${c}` }, t);
 }
+function renderRuns() {
+  const d = runState.data;
+  const head = header("Monitoring", "Run history", "Cloud flow runs and plugin errors in every environment, with the error behind every failure.",
+    seg([["24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"]], runState.since, (v) => { runState.since = v; runs(new URLSearchParams()); }, "Time range"));
+  if (runState.error) return mount(head, notice("bad", runState.error));
+  if (!d) return mount(head, loading("runs from every environment"));
+  const names = d.environments.filter((n) => d.results[n]);
+  const R = d.results;
+  const flowSeries = [{ key: "flowSucceeded", label: "Succeeded", cls: "ok", color: "--chart-ok" }, { key: "flowFailed", label: "Failed", cls: "bad", color: "--chart-bad" }];
+  const metric = (label, f) => h("tr", {}, h("th", { scope: "row" }, label), names.map((n) => h("td", { class: "envcol" }, f(R[n], n))));
+  const traceSeg = (n) => {
+    const sel = h("select", { class: "input", style: "min-height:32px", "aria-label": `Plugin trace log in ${n}` }, [["off", "Off"], ["exceptions", "Exceptions"], ["all", "All"]].map(([v, t]) => h("option", { value: v, selected: R[n].plugins.setting === v }, t)));
+    sel.addEventListener("change", () => setTrace(n, sel.value));
+    return sel;
+  };
+  // failures by component across environments
+  const comp = new Map();
+  for (const n of names) for (const g of R[n].top) {
+    const k = `${g.kind}:${g.name}`;
+    if (!comp.has(k)) comp.set(k, { kind: g.kind, name: g.name, cells: {}, total: 0, lastError: g.lastError });
+    comp.get(k).cells[n] = g;
+    comp.get(k).total += g.failures;
+  }
+  const failing = [...comp.values()].sort((a, b) => b.total - a.total).slice(0, 15);
+  const pick = runState.envFilter;
+  const allFlows = names.flatMap((n) => R[n].flows.runs.map((r) => ({ ...r, env: n }))).filter((r) => (pick === "all" || r.env === pick) && (!runState.failedOnly || r.status === "failed")).sort((a, b) => b.start.localeCompare(a.start));
+  const allLogs = names.flatMap((n) => R[n].plugins.logs.map((l) => ({ ...l, env: n }))).filter((l) => (pick === "all" || l.env === pick) && (!runState.failedOnly || l.failed)).sort((a, b) => b.at.localeCompare(a.at));
+  mount(head,
+    runState.notice ? notice(runState.notice.kind, runState.notice.text) : null,
+    errorsNotice(d.errors),
+    reasonCard(runState, names),
+    h("section", { class: "card flush", "aria-label": "Summary by environment" },
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, `Last ${runState.since}`), envHeads(names))),
+        h("tbody", {},
+          metric("Flow runs", (x) => (x.flows.available ? fmtNum(x.totals.flowRuns) : h("span", { class: "muted", title: x.flows.error || "" }, "not available"))),
+          metric("Failed flow runs", (x) => (x.totals.flowFailed ? h("strong", { style: "color:var(--bad)" }, fmtNum(x.totals.flowFailed)) : "0")),
+          metric("Failure rate", (x) => (x.totals.flowRuns ? `${Math.round((x.totals.flowFailed / x.totals.flowRuns) * 1000) / 10}%` : "—")),
+          metric("Plugin errors", (x) => (x.totals.pluginFailed ? h("strong", { style: "color:var(--bad)" }, fmtNum(x.totals.pluginFailed)) : "0")),
+          metric("Plugin trace log", (x, n) => traceSeg(n)),
+          metric("Components failing", (x) => fmtNum(x.top.length)))))),
+    h("div", { class: "row between" }, h("h2", {}, "Flow runs per day"), legend(flowSeries)),
+    h("div", { class: "small-multiples" }, names.map((n) => h("section", { class: "card stack", "aria-label": `Flow runs per day in ${n}` },
+      h("div", { class: "row between" }, chip(n), h("span", { class: "small muted" }, `${fmtNum(R[n].totals.flowFailed)} failed of ${fmtNum(R[n].totals.flowRuns)}`)),
+      dailyChart(R[n].daily, flowSeries, `Flow runs per day in ${n}: succeeded and failed`, 460)))),
+    h("section", { class: "card flush", "aria-label": "Failures by component" },
+      h("h2", { style: "padding:16px 20px 8px" }, "Failures by component"),
+      failing.length === 0 ? h("div", { class: "empty" }, "Nothing failed in this period.") :
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Component"), envHeads(names), h("th", { scope: "col" }, ""))),
+        h("tbody", {}, failing.map((g) => h("tr", {},
+          h("th", { scope: "row" }, g.name, h("div", { class: "small muted", style: "max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, `${g.kind === "flow" ? "Cloud flow" : "Plugin"} · ${firstLine(g.lastError, 120)}`)),
+          names.map((n) => h("td", { class: "envcol" }, g.cells[n] ? [h("strong", { style: "color:var(--bad)" }, g.cells[n].failures), h("span", { class: "muted" }, ` / ${g.cells[n].total}`)] : h("span", { class: "muted" }, "—"))),
+          h("td", { style: "text-align:right" }, h("a", { class: "btn sm", href: `#/components?kind=${g.kind === "flow" ? "flow" : "plugin"}&q=${encodeURIComponent(g.kind === "flow" ? g.name : g.name.split(".").pop())}` }, "Turn off…")))))))),
+    h("section", { class: "card flush", "aria-label": "Runs" },
+      h("div", { class: "row between", style: "padding:12px 20px" },
+        seg([["flows", `Flow runs (${allFlows.length})`], ["plugins", `Plugin log (${allLogs.length})`]], runState.tab, (v) => { runState.tab = v; runState.open = null; renderRuns(); }, "Run list", "tablist"),
+        h("div", { class: "row" }, seg([["all", "All environments"], ...names.map((n) => [n, n])], pick, (v) => { runState.envFilter = v; renderRuns(); }, "Environment"),
+          checkbox("Failures only", runState.failedOnly, (v) => { runState.failedOnly = v; renderRuns(); }))),
+      runState.tab === "flows" ? runTable(allFlows) : pluginTable(allLogs)));
+}
 function runTable(rows) {
   if (!rows.length) return h("div", { class: "empty" }, runState.failedOnly ? "No failed flow runs in this period." : "No flow runs in this period.");
   return h("div", { class: "scroll" }, h("table", {},
-    h("thead", {}, h("tr", {}, ["Status", "Flow", "Started", "Duration", "Error", ""].map((t) => h("th", { scope: "col" }, t)))),
+    h("thead", {}, h("tr", {}, ["Env", "Status", "Flow", "Started", "Duration", "Error", ""].map((t) => h("th", { scope: "col" }, t)))),
     h("tbody", {}, rows.slice(0, 300).flatMap((r) => {
-      const open = runState.open === r.id;
-      const main = h("tr", { class: open ? "sel" : "" },
-        h("td", {}, statusPill(r.status)),
-        h("th", { scope: "row" }, r.flowName),
+      const id = `${r.env}:${r.id}`;
+      const open = runState.open === id;
+      const row = h("tr", { class: open ? "sel" : "" },
+        h("td", {}, chip(r.env)), h("td", {}, statusPill(r.status)), h("th", { scope: "row" }, r.flowName),
         h("td", { class: "small", style: "white-space:nowrap" }, fmtDate(r.start)),
         h("td", { class: "mono" }, r.durationMs !== undefined ? `${(r.durationMs / 1000).toFixed(1)}s` : ""),
-        h("td", { class: "small", style: "color:var(--bad-text);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, r.errorCode || firstLine(r.errorMessage)),
-        h("td", { style: "text-align:right" }, (r.errorMessage || r.link) ? h("button", { type: "button", class: "btn sm", "aria-expanded": open ? "true" : "false", onclick: () => { runState.open = open ? null : r.id; renderRuns(); } }, open ? "Hide" : "Details") : null));
-      if (!open) return [main];
-      return [main, h("tr", {}, h("td", { colspan: 6 }, h("div", { class: "stack" },
+        h("td", { class: "small", style: "color:var(--bad-text);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, r.errorCode || firstLine(r.errorMessage)),
+        h("td", { style: "text-align:right" }, (r.errorMessage || r.link) ? h("button", { type: "button", class: "btn sm", "aria-expanded": open ? "true" : "false", onclick: () => { runState.open = open ? null : id; renderRuns(); } }, open ? "Hide" : "Details") : null));
+      if (!open) return [row];
+      return [row, h("tr", {}, h("td", { colspan: 7 }, h("div", { class: "stack" },
         r.errorMessage ? h("div", { class: "code wrap" }, h("div", {}, r.errorMessage)) : null,
         h("div", { class: "row small muted" }, r.trigger ? `Trigger: ${r.trigger}` : null, r.link ? h("a", { href: r.link, target: "_blank", rel: "noopener noreferrer" }, "Open this run in Power Automate") : null))))];
     }))));
@@ -595,35 +757,123 @@ function runTable(rows) {
 function pluginTable(rows) {
   if (!rows.length) return h("div", { class: "empty" }, runState.failedOnly ? "No plugin errors recorded in this period." : "Nothing in the plugin trace log for this period.");
   return h("div", { class: "scroll" }, h("table", {},
-    h("thead", {}, h("tr", {}, ["Status", "Plugin", "Message", "When", "Duration", ""].map((t) => h("th", { scope: "col" }, t)))),
+    h("thead", {}, h("tr", {}, ["Env", "Status", "Plugin", "Message", "When", "Duration", ""].map((t) => h("th", { scope: "col" }, t)))),
     h("tbody", {}, rows.slice(0, 300).flatMap((l) => {
-      const open = runState.open === l.id;
-      const main = h("tr", { class: open ? "sel" : "" },
-        h("td", {}, statusPill(l.failed ? "failed" : "succeeded")),
-        h("th", { scope: "row" }, l.typeName, h("div", { class: "small muted", style: "color:var(--bad-text)" }, l.failed ? firstLine(l.exception, 120) : "")),
+      const id = `${l.env}:${l.id}`;
+      const open = runState.open === id;
+      const row = h("tr", { class: open ? "sel" : "" },
+        h("td", {}, chip(l.env)), h("td", {}, statusPill(l.failed ? "failed" : "succeeded")),
+        h("th", { scope: "row" }, l.typeName, h("div", { class: "small", style: "color:var(--bad-text)" }, l.failed ? firstLine(l.exception, 120) : "")),
         h("td", { class: "small" }, `${l.table || "any"} · ${l.message} · ${l.mode}`),
         h("td", { class: "small", style: "white-space:nowrap" }, fmtDate(l.at)),
         h("td", { class: "mono" }, l.durationMs !== undefined ? `${l.durationMs} ms` : ""),
-        h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", "aria-expanded": open ? "true" : "false", onclick: () => { runState.open = open ? null : l.id; renderRuns(); } }, open ? "Hide" : "Details")));
-      if (!open) return [main];
-      return [main, h("tr", {}, h("td", { colspan: 6 }, h("div", { class: "stack" },
+        h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", "aria-expanded": open ? "true" : "false", onclick: () => { runState.open = open ? null : id; renderRuns(); } }, open ? "Hide" : "Details")));
+      if (!open) return [row];
+      return [row, h("tr", {}, h("td", { colspan: 7 }, h("div", { class: "stack" },
         l.exception ? [h("h3", {}, "Exception"), h("div", { class: "code wrap" }, l.exception.split("\n").map((x) => h("div", {}, x)))] : null,
         l.trace ? [h("h3", {}, "Trace"), h("div", { class: "code wrap" }, l.trace.split("\n").map((x) => h("div", {}, x)))] : null,
         h("div", { class: "small muted" }, `Depth ${l.depth ?? "?"} · correlation ${l.correlationId || "?"}`))))];
     }))));
 }
 
-// ------------------------------------------------------------------ audit
+// ------------------------------------------------------------------ background jobs
 
-const audState = { system: null, tables: null, table: null, columns: null, column: null, log: null, since: "7d", q: "", only: "all", selT: new Set(), selC: new Set(), reason: "", notice: null, error: null };
-async function audit(params) {
-  const before = shared.env;
-  pickEnv(params);
-  if (before !== shared.env || !audState.tables) Object.assign(audState, { system: null, tables: null, table: null, columns: null, column: null, log: null, error: null });
+const PROBLEM = { failed: ["Failed", "bad"], suspended: ["Suspended", "warn"], waiting: ["Waiting over 1 hour", "warn"], "long-running": ["Running over 2 hours", "info"] };
+const jobState = { since: "7d", data: null, error: null, sel: new Set(), reason: "", notice: null, envFilter: "all", problem: "all", busy: false };
+async function jobs() {
+  jobState.data = null; jobState.error = null; jobState.sel.clear();
+  renderJobs();
+  try { jobState.data = await api(`/api/jobs/all?since=${jobState.since}`); } catch (err) { jobState.error = err.message; }
+  renderJobs();
+}
+async function changeJobsUi(action, rows) {
+  const names = [...new Set(rows.map((r) => r.env))];
+  if (missingReason(jobState, names)) { renderJobs(); return; }
+  if (action === "cancel" && !confirm(`Cancel ${rows.length} background job${rows.length === 1 ? "" : "s"}? This can't be undone.`)) return;
+  jobState.busy = true; renderJobs();
+  let ok = 0; const failed = [];
+  for (const n of names) {
+    try {
+      const { results } = await api("/api/jobs/change", { env: n, action, ids: rows.filter((r) => r.env === n).map((r) => r.id), reason: jobState.reason });
+      results.forEach((r) => (r.ok ? ok++ : failed.push(`${n}: ${r.name} (${r.error})`)));
+    } catch (err) { failed.push(`${n}: ${err.message}`); }
+  }
+  jobState.notice = failed.length ? { kind: "bad", text: `${ok} done, ${failed.length} failed. ${failed.slice(0, 4).join("; ")}` } : { kind: "ok", text: `${ok} job${ok === 1 ? "" : "s"} ${action === "cancel" ? "cancelled" : "resumed"}.` };
+  jobState.busy = false;
+  await jobs();
+}
+function renderJobs() {
+  const d = jobState.data;
+  const head = header("Automation", "Background jobs", "System jobs that failed, are suspended, or have been waiting or running far too long, in every environment.",
+    seg([["24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"]], jobState.since, (v) => { jobState.since = v; jobs(); }, "Time range"));
+  if (jobState.error) return mount(head, notice("bad", jobState.error));
+  if (!d) return mount(head, loading("background jobs from every environment"));
+  const names = d.environments.filter((n) => d.results[n]);
+  const all = names.flatMap((n) => d.results[n].map((j) => ({ ...j, env: n, key: `${n}:${j.id}` }))).sort((a, b) => b.created.localeCompare(a.created));
+  const rows = all.filter((j) => (jobState.envFilter === "all" || j.env === jobState.envFilter) && (jobState.problem === "all" || j.problem === jobState.problem));
+  const sel = rows.filter((j) => jobState.sel.has(j.key));
+  const allBox = h("input", { type: "checkbox", "aria-label": "Select all shown" });
+  allBox.checked = rows.length > 0 && rows.every((j) => jobState.sel.has(j.key));
+  allBox.addEventListener("change", () => { allBox.checked ? rows.forEach((j) => jobState.sel.add(j.key)) : jobState.sel.clear(); renderJobs(); });
+  // by job name across environments
+  const byName = new Map();
+  for (const j of all) {
+    if (!byName.has(j.name)) byName.set(j.name, { name: j.name, type: j.type, cells: {} });
+    const c = byName.get(j.name).cells;
+    c[j.env] = (c[j.env] || 0) + 1;
+  }
+  const grouped = [...byName.values()].sort((a, b) => Object.values(b.cells).reduce((x, y) => x + y, 0) - Object.values(a.cells).reduce((x, y) => x + y, 0)).slice(0, 12);
+  mount(head,
+    jobState.notice ? notice(jobState.notice.kind, jobState.notice.text) : null,
+    errorsNotice(d.errors),
+    h("section", { class: "card flush", "aria-label": "Summary by environment" },
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Problem"), envHeads(names))),
+        h("tbody", {}, Object.entries(PROBLEM).map(([k, [label, cls]]) => h("tr", {}, h("th", { scope: "row" }, label),
+          names.map((n) => {
+            const c = d.results[n].filter((j) => j.problem === k).length;
+            return h("td", { class: "envcol" }, c ? h("span", { class: `pill ${cls}` }, c) : h("span", { class: "muted" }, "0"));
+          }))))))),
+    grouped.length ? h("section", { class: "card flush", "aria-label": "Jobs by name" },
+      h("h2", { style: "padding:16px 20px 8px" }, "Which jobs"),
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Job"), h("th", { scope: "col" }, "Type"), envHeads(names))),
+        h("tbody", {}, grouped.map((g) => h("tr", {}, h("th", { scope: "row" }, g.name), h("td", { class: "muted small" }, g.type), names.map((n) => h("td", { class: "envcol" }, g.cells[n] || h("span", { class: "muted" }, "—"))))))))) : null,
+    reasonCard(jobState, names),
+    sel.length ? h("section", { class: "bulk", "aria-label": "Change selected" }, h("strong", {}, `${sel.length} selected`),
+      h("div", { class: "row", style: "margin-left:auto" },
+        h("button", { type: "button", class: "btn good", disabled: jobState.busy || !sel.some((j) => j.problem === "suspended"), onclick: () => changeJobsUi("resume", sel.filter((j) => j.problem === "suspended")) }, "Resume suspended"),
+        h("button", { type: "button", class: "btn ghost", disabled: jobState.busy, onclick: () => changeJobsUi("cancel", sel.filter((j) => j.problem !== "failed")) }, "Cancel"),
+        h("button", { type: "button", class: "btn ghost", style: "border:0", onclick: () => { jobState.sel.clear(); renderJobs(); } }, "Clear"))) : null,
+    h("section", { class: "card flush", "aria-label": "Jobs" },
+      h("div", { class: "row between", style: "padding:12px 20px" },
+        seg([["all", "All"], ...Object.entries(PROBLEM).map(([k, [l]]) => [k, l])], jobState.problem, (v) => { jobState.problem = v; renderJobs(); }, "Problem"),
+        seg([["all", "All environments"], ...names.map((n) => [n, n])], jobState.envFilter, (v) => { jobState.envFilter = v; renderJobs(); }, "Environment")),
+      rows.length === 0 ? h("div", { class: "empty" }, "No background jobs need attention.") :
+      h("div", { class: "scroll" }, h("table", {},
+        h("thead", {}, h("tr", {}, h("th", { scope: "col", style: "width:44px" }, allBox), ["Env", "Problem", "Job", "Type", "Created", "Message"].map((t) => h("th", { scope: "col" }, t)))),
+        h("tbody", {}, rows.slice(0, 300).map((j) => {
+          const box = h("input", { type: "checkbox", "aria-label": `Select ${j.name}`, disabled: j.problem === "failed" });
+          box.checked = jobState.sel.has(j.key);
+          box.addEventListener("change", () => { box.checked ? jobState.sel.add(j.key) : jobState.sel.delete(j.key); renderJobs(); });
+          return h("tr", { class: jobState.sel.has(j.key) ? "sel" : "" },
+            h("td", {}, box), h("td", {}, chip(j.env)), h("td", {}, h("span", { class: `pill ${PROBLEM[j.problem][1]}` }, PROBLEM[j.problem][0])),
+            h("th", { scope: "row" }, j.name, j.regarding ? h("div", { class: "small muted" }, j.regarding) : null),
+            h("td", { class: "small muted" }, j.type), h("td", { class: "small", style: "white-space:nowrap" }, fmtDate(j.created)),
+            h("td", { class: "small", style: "max-width:380px" }, firstLine(j.message, 200)));
+        }))))),
+    h("p", { class: "small muted", style: "margin:0" }, "Failed jobs are finished and can't be changed; they're listed so you can see why they failed."));
+}
+
+// ------------------------------------------------------------------ audit (all environments)
+
+const audState = { system: null, tables: null, table: null, columns: null, column: null, log: null, since: "7d", q: "", only: "all", selT: new Set(), selC: new Set(), reason: "", notice: null, error: null, busy: false };
+async function audit() {
+  audState.error = null;
   renderAudit();
   try {
-    const [sys, tables] = await Promise.all([api(`/api/audit/system?env=${encodeURIComponent(shared.env)}`), api(`/api/audit/tables?env=${encodeURIComponent(shared.env)}`)]);
-    audState.system = sys; audState.tables = tables.tables;
+    const [sys, tables] = await Promise.all([api("/api/audit/system/all"), api("/api/audit/tables/all")]);
+    audState.system = sys; audState.tables = tables;
   } catch (err) { audState.error = err.message; }
   renderAudit();
   if (audState.table) loadAuditTable(audState.table);
@@ -631,137 +881,301 @@ async function audit(params) {
 async function loadAuditTable(t) {
   audState.table = t; audState.column = null; audState.columns = null; audState.log = null; audState.selC.clear();
   renderAudit();
-  const e = encodeURIComponent(shared.env);
-  const [cols, log] = await Promise.allSettled([api(`/api/audit/columns?env=${e}&table=${t}`), api(`/api/audit/log?env=${e}&table=${t}&since=${audState.since}`)]);
-  audState.columns = cols.status === "fulfilled" ? cols.value.columns : [];
-  audState.log = log.status === "fulfilled" ? log.value.entries : { error: log.reason.message };
+  const [cols, log] = await Promise.allSettled([api(`/api/audit/columns/all?table=${t}`), api(`/api/audit/log/all?table=${t}&since=${audState.since}`)]);
+  audState.columns = cols.status === "fulfilled" ? cols.value : { error: cols.reason.message };
+  audState.log = log.status === "fulfilled" ? log.value : { error: log.reason.message };
   renderAudit();
 }
 async function loadAuditLog() {
   audState.log = null; renderAudit();
   const col = audState.column ? `&column=${audState.column}` : "";
-  try { audState.log = (await api(`/api/audit/log?env=${encodeURIComponent(shared.env)}&table=${audState.table}${col}&since=${audState.since}`)).entries; }
-  catch (err) { audState.log = { error: err.message }; }
+  try { audState.log = await api(`/api/audit/log/all?table=${audState.table}${col}&since=${audState.since}`); } catch (err) { audState.log = { error: err.message }; }
   renderAudit();
 }
-async function changeAudit(changes) {
-  if (needsReason(shared.env, audState)) { renderAudit(); return; }
+/** changes: [{env, table, column?, on}] */
+async function applyAudit(changes) {
+  const names = [...new Set(changes.map((c) => c.env))];
+  if (!changes.length) { audState.notice = { kind: "info", text: "Nothing to change." }; renderAudit(); return; }
+  if (missingReason(audState, names)) { renderAudit(); return; }
+  audState.busy = true;
   audState.notice = { kind: "info", text: `Updating ${changes.length} item(s) and publishing…` };
   renderAudit();
-  try {
-    const { results } = await api("/api/audit/set", { env: shared.env, changes, reason: audState.reason });
-    const failed = results.filter((r) => !r.ok);
-    audState.notice = failed.length ? { kind: "bad", text: `${results.length - failed.length} changed, ${failed.length} failed: ${failed.map((f) => `${f.column || f.table} (${f.error})`).join("; ")}` } : { kind: "ok", text: `Auditing updated for ${results.length} item(s) and published.` };
-  } catch (err) { audState.notice = { kind: "bad", text: err.message }; }
+  let ok = 0; const failed = [];
+  for (const n of names) {
+    try {
+      const { results } = await api("/api/audit/set", { env: n, changes: changes.filter((c) => c.env === n).map(({ table, column, on }) => ({ table, column, on })), reason: audState.reason });
+      results.forEach((r) => (r.ok ? ok++ : failed.push(`${n}: ${r.column || r.table} (${r.error})`)));
+    } catch (err) { failed.push(`${n}: ${err.message}`); }
+  }
+  audState.notice = failed.length ? { kind: "bad", text: `${ok} changed, ${failed.length} failed. ${failed.slice(0, 4).join("; ")}` } : { kind: "ok", text: `Auditing updated for ${ok} item(s) and published.` };
+  audState.busy = false;
   audState.selT.clear(); audState.selC.clear();
-  const t = audState.table;
-  audState.tables = (await api(`/api/audit/tables?env=${encodeURIComponent(shared.env)}`)).tables;
-  if (t) await loadAuditTable(t); else renderAudit();
+  audState.tables = await api("/api/audit/tables/all");
+  if (audState.table) await loadAuditTable(audState.table); else renderAudit();
 }
-async function changeSystem(field, value) {
-  if (needsReason(shared.env, audState)) { renderAudit(); return; }
+async function changeSystem(env, field, value) {
+  if (missingReason(audState, [env])) { renderAudit(); return; }
   try {
-    audState.system = await api("/api/audit/system", { env: shared.env, [field]: value, reason: audState.reason });
-    audState.notice = { kind: "ok", text: "System auditing updated." };
+    await api("/api/audit/system", { env, [field]: value, reason: audState.reason });
+    audState.system = await api("/api/audit/system/all");
+    audState.notice = { kind: "ok", text: `System auditing updated in ${env}.` };
   } catch (err) { audState.notice = { kind: "bad", text: err.message }; }
   renderAudit();
 }
 function renderAudit() {
-  const env = envOf(shared.env);
-  const head = header("Governance", "Audit", "Auditing from the whole system down to each table and column, and what changed.", envPicker(env.name, (n) => { shared.env = n; audState.notice = null; audit(new URLSearchParams()); }));
+  const head = header("Governance", "Audit", "Auditing in every environment: the whole system, each table and each column, and what changed.");
   if (audState.error) return mount(head, notice("bad", audState.error));
-  if (!audState.tables) return mount(head, loading(`audit settings from ${env.name}`));
-  const sys = audState.system;
-  const reason = reasonInput(audState, env.name);
-  reason.className = "input";
+  if (!audState.tables || !audState.system) return mount(head, loading("audit settings from every environment"));
+  const names = audState.tables.environments.filter((n) => audState.tables.results[n]);
+  const sys = audState.system.results;
   const q = audState.q.trim().toLowerCase();
-  const tables = audState.tables.filter((t) => (!q || `${t.displayName} ${t.logicalName}`.toLowerCase().includes(q)) && (audState.only === "all" || (audState.only === "on" ? t.auditEnabled : audState.only === "off" ? !t.auditEnabled : t.isCustom)));
+  let tables = toMatrix(audState.tables.results, names, (t) => t.logicalName, (t) => ({ logicalName: t.logicalName, displayName: t.displayName, isCustom: t.isCustom }));
+  tables.sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const differs = (r) => new Set(names.map((n) => (r.cells[n] ? String(r.cells[n].auditEnabled) : "-"))).size > 1;
+  tables = tables.filter((t) => (!q || `${t.displayName} ${t.logicalName}`.toLowerCase().includes(q)) &&
+    (audState.only === "all" || (audState.only === "off" ? names.some((n) => t.cells[n] && !t.cells[n].auditEnabled) : audState.only === "diff" ? differs(t) : t.isCustom)));
   const search = h("input", { type: "search", placeholder: "Search tables", value: audState.q, "aria-label": "Search tables" });
   search.addEventListener("input", () => { audState.q = search.value; const pos = search.selectionStart; renderAudit(); const el = main().querySelector("input[type=search]"); el.focus(); el.setSelectionRange(pos, pos); });
-  const tableObj = audState.tables.find((t) => t.logicalName === audState.table);
+  const cell = (item, onToggle, label) => (!item ? h("td", { class: "envcol muted" }, "—") : h("td", { class: "envcol" }, item.canChange === false ? h("span", { class: `pill ${item.auditEnabled ? "ok" : ""}` }, item.auditEnabled ? "On" : "Off") : switchButton(item.auditEnabled, label, onToggle)));
+  const tObj = tables.find((t) => t.logicalName === audState.table) || toMatrix(audState.tables.results, names, (t) => t.logicalName, (t) => ({ displayName: t.displayName })).find((t) => t.key === audState.table);
+  const cols = audState.columns && !audState.columns.error ? toMatrix(audState.columns.results, names, (c) => c.logicalName, (c) => ({ logicalName: c.logicalName, displayName: c.displayName, type: c.type })).sort((a, b) => a.displayName.localeCompare(b.displayName)) : [];
   const selCount = audState.selT.size + audState.selC.size;
+  const bulkChanges = (on) => {
+    const t = [...audState.targets].filter((n) => names.includes(n));
+    const out = [];
+    for (const n of t) {
+      for (const tb of audState.selT) { const c = audState.tables.results[n]?.find((x) => x.logicalName === tb); if (c && c.auditEnabled !== on) out.push({ env: n, table: tb, on }); }
+      if (audState.table) for (const col of audState.selC) { const c = audState.columns?.results?.[n]?.find((x) => x.logicalName === col); if (c && c.auditEnabled !== on) out.push({ env: n, table: audState.table, column: col, on }); }
+    }
+    return out;
+  };
   const bulk = selCount ? h("section", { class: "bulk", "aria-label": "Change selected" },
-    h("strong", {}, `${audState.selT.size ? `${audState.selT.size} tables` : ""}${audState.selT.size && audState.selC.size ? " and " : ""}${audState.selC.size ? `${audState.selC.size} columns` : ""} selected`),
+    h("strong", {}, [audState.selT.size ? `${audState.selT.size} tables` : "", audState.selC.size ? `${audState.selC.size} columns` : ""].filter(Boolean).join(" and ") + " selected"),
+    envChecks(audState, names),
     h("div", { class: "row", style: "margin-left:auto" },
-      h("button", { type: "button", class: "btn good", onclick: () => changeAudit(bulkChanges(true)) }, "Turn auditing on"),
-      h("button", { type: "button", class: "btn ghost", onclick: () => changeAudit(bulkChanges(false)) }, "Turn auditing off"),
+      h("button", { type: "button", class: "btn good", disabled: audState.busy, onclick: () => applyAudit(bulkChanges(true)) }, "Turn auditing on"),
+      h("button", { type: "button", class: "btn ghost", disabled: audState.busy, onclick: () => applyAudit(bulkChanges(false)) }, "Turn auditing off"),
       h("button", { type: "button", class: "btn ghost", style: "border:0", onclick: () => { audState.selT.clear(); audState.selC.clear(); renderAudit(); } }, "Clear"))) : null;
-  const sysRow = (labelText, on, field, help) => h("div", { class: "row between", style: "padding:6px 0" },
-    h("div", {}, h("div", { style: "font-weight:600" }, labelText), h("div", { class: "small muted" }, help)),
-    h("div", { class: "row" }, h("span", { class: "small", style: `font-weight:600;color:${on ? "var(--ok)" : "var(--muted)"}` }, on ? "On" : "Off"), switchButton(on, `${on ? "Turn off" : "Turn on"} ${labelText}`, () => changeSystem(field, !on))));
-  mount(
-    head,
+  const logRows = audState.log && !audState.log.error ? names.flatMap((n) => (audState.log.results[n] || []).map((e) => ({ ...e, env: n }))).sort((a, b) => b.at.localeCompare(a.at)) : [];
+  mount(head,
     audState.notice ? notice(audState.notice.kind, audState.notice.text) : null,
-    h("div", { class: "cols" },
-      h("section", { class: "card", style: "flex:3 1 480px", "aria-label": "System" },
-        h("h2", {}, `System · ${env.name}`),
-        sys ? h("div", { class: "stack", style: "gap:4px" },
-          sysRow("Auditing", sys.auditEnabled, "auditEnabled", "Master switch: nothing is audited while this is off."),
-          sysRow("User sign-in logging", sys.userAccessAudit, "userAccessAudit", "Records when users access the environment."),
-          h("div", { class: "small muted" }, `Audit logs kept: ${sys.retentionDays === undefined ? "unknown" : sys.retentionDays < 0 ? "forever" : `${sys.retentionDays} days`}`)) : loading("system settings")),
-      env.managed ? h("section", { class: "card stack", style: "flex:2 1 300px", "aria-label": "Reason" },
-        h("h2", {}, "Reason for changes"),
-        h("p", { class: "small muted", style: "margin:0" }, `${env.name} is managed, so every audit change needs a reason. It is logged with your name.`), reason) : null),
+    errorsNotice(audState.tables.errors),
+    reasonCard(audState, names),
+    h("section", { class: "card flush", "aria-label": "System auditing" },
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "System"), envHeads(names))),
+        h("tbody", {},
+          h("tr", {}, h("th", { scope: "row" }, "Auditing", h("div", { class: "small muted" }, "Master switch: nothing is audited while it's off")), names.map((n) => cell(sys[n] && { auditEnabled: sys[n].auditEnabled }, () => changeSystem(n, "auditEnabled", !sys[n].auditEnabled), `Auditing in ${n}`))),
+          h("tr", {}, h("th", { scope: "row" }, "User sign-in logging"), names.map((n) => cell(sys[n] && { auditEnabled: sys[n].userAccessAudit }, () => changeSystem(n, "userAccessAudit", !sys[n].userAccessAudit), `User sign-in logging in ${n}`))),
+          h("tr", {}, h("th", { scope: "row" }, "Logs kept"), names.map((n) => h("td", { class: "envcol small" }, !sys[n] || sys[n].retentionDays === undefined ? "?" : sys[n].retentionDays < 0 ? "Forever" : `${sys[n].retentionDays} days`))))))),
     bulk,
-    h("nav", { "aria-label": "Breadcrumb", class: "row small" },
-      h("button", { type: "button", class: "btn link", onclick: () => { audState.table = null; audState.column = null; renderAudit(); } }, `${env.name} system`),
-      tableObj ? [h("span", { "aria-hidden": "true" }, "/"), h("button", { type: "button", class: "btn link", onclick: () => { audState.column = null; loadAuditLog(); } }, tableObj.displayName)] : null,
-      audState.column ? [h("span", { "aria-hidden": "true" }, "/"), h("span", { class: "mono" }, audState.column)] : null),
-    h("div", { class: "cols" },
-      h("section", { class: "card flush", style: "flex:1 1 300px", "aria-label": "Tables" },
-        h("div", { class: "stack", style: "padding:14px 16px 8px" },
-          h("div", { class: "row between" }, h("h2", {}, "Tables"), h("span", { class: "small muted" }, `${audState.tables.filter((t) => t.auditEnabled).length} of ${audState.tables.length} audited`)),
-          h("label", { class: "search", style: "max-width:none" }, search),
-          seg([["all", "All"], ["on", "Audited"], ["off", "Not audited"], ["custom", "Custom"]], audState.only, (v) => { audState.only = v; renderAudit(); }, "Filter tables")),
-        h("ul", { class: "list", style: "max-height:520px;overflow:auto" }, tables.slice(0, 400).map((t) => {
-          const box = h("input", { type: "checkbox", "aria-label": `Select ${t.displayName}`, disabled: !t.canChange });
+    h("div", { class: "row between" },
+      h("div", { class: "row" }, h("label", { class: "search" }, search), seg([["all", "All tables"], ["off", "Off somewhere"], ["diff", "Differs"], ["custom", "Custom"]], audState.only, (v) => { audState.only = v; renderAudit(); }, "Filter tables")),
+      h("span", { class: "small muted" }, `${tables.length} tables`)),
+    h("section", { class: "card flush", "aria-label": "Tables" },
+      h("div", { class: "scroll", style: "max-height:520px;overflow:auto" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col", style: "width:44px" }, ""), h("th", { scope: "col" }, "Table"), envHeads(names, (n) => `${(audState.tables.results[n] || []).filter((t) => t.auditEnabled).length} audited`))),
+        h("tbody", {}, tables.slice(0, 400).map((t) => {
+          const box = h("input", { type: "checkbox", "aria-label": `Select ${t.displayName}` });
           box.checked = audState.selT.has(t.logicalName);
           box.addEventListener("change", () => { box.checked ? audState.selT.add(t.logicalName) : audState.selT.delete(t.logicalName); renderAudit(); });
-          return h("li", { style: "display:flex;align-items:center;padding-left:16px" }, box,
-            h("button", { type: "button", class: "item", "aria-current": audState.table === t.logicalName ? "true" : "false", onclick: () => loadAuditTable(t.logicalName) },
-              h("span", { style: "flex:1;min-width:0" }, h("span", { style: "display:block;font-weight:500" }, t.displayName), h("span", { class: "mono muted" }, t.logicalName)),
-              h("span", { class: `pill ${t.auditEnabled ? "ok" : ""}` }, t.auditEnabled ? "On" : "Off")));
-        }))),
-      h("section", { class: "card flush", style: "flex:1 1 300px", "aria-label": "Columns" },
-        h("div", { class: "row between", style: "padding:14px 16px 8px" }, h("h2", {}, tableObj ? `Columns in ${tableObj.displayName}` : "Columns"),
-          audState.columns ? h("span", { class: "small muted" }, `${audState.columns.filter((c) => c.auditEnabled).length} of ${audState.columns.length} audited`) : null),
-        !audState.table ? h("div", { class: "empty" }, "Pick a table to see its columns.") :
-        !audState.columns ? h("div", { class: "empty" }, "Loading…") :
-        h("ul", { class: "list", style: "max-height:600px;overflow:auto" }, audState.columns.map((c) => {
-          const box = h("input", { type: "checkbox", "aria-label": `Select ${c.displayName}`, disabled: !c.canChange });
-          box.checked = audState.selC.has(c.logicalName);
-          box.addEventListener("change", () => { box.checked ? audState.selC.add(c.logicalName) : audState.selC.delete(c.logicalName); renderAudit(); });
-          return h("li", { style: "display:flex;align-items:center;padding-left:16px" }, box,
-            h("button", { type: "button", class: "item", "aria-current": audState.column === c.logicalName ? "true" : "false", onclick: () => { audState.column = audState.column === c.logicalName ? null : c.logicalName; loadAuditLog(); } },
-              h("span", { style: "flex:1;min-width:0" }, h("span", { style: "display:block;font-weight:500" }, c.displayName), h("span", { class: "mono muted" }, `${c.logicalName} · ${c.type}`)),
-              h("span", { class: `pill ${c.auditEnabled ? "ok" : ""}` }, c.auditEnabled ? "On" : "Off")));
-        }))),
-      h("section", { class: "card stack", style: "flex:2 1 400px", "aria-label": "Audit log" },
-        h("div", { class: "row between" }, h("h2", {}, `Changes${audState.table ? ` · ${audState.column ? `${audState.table}.${audState.column}` : audState.table}` : ""}`),
-          audState.table ? seg([["24h", "24h"], ["7d", "7 days"], ["30d", "30 days"]], audState.since, (v) => { audState.since = v; loadAuditLog(); }, "Time range") : null),
-        !audState.table ? h("p", { class: "muted" }, "Pick a table (and optionally a column) to see who changed what.") :
-        !audState.log ? loading("audit history") :
-        audState.log.error ? notice("bad", audState.log.error) :
-        audState.log.length === 0 ? h("p", { class: "muted" }, "No audited changes in this period. Auditing may be off for it.") :
-        h("ol", { class: "list" }, audState.log.slice(0, 200).map((e) => h("li", { style: "display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:10px 0" },
-          h("div", { class: "small muted" }, fmtDate(e.at)),
+          return h("tr", { class: audState.table === t.logicalName ? "sel" : "" },
+            h("td", {}, box),
+            h("th", { scope: "row" }, h("button", { type: "button", class: "btn link", style: "padding:0;font-weight:600", onclick: () => loadAuditTable(t.logicalName) }, t.displayName), h("div", { class: "mono muted" }, t.logicalName)),
+            names.map((n) => cell(t.cells[n], () => applyAudit([{ env: n, table: t.logicalName, on: !t.cells[n].auditEnabled }]), `Auditing for ${t.displayName} in ${n}`)));
+        }))))),
+    audState.table ? h("div", { class: "cols" },
+      h("section", { class: "card flush", style: "flex:3 1 520px", "aria-label": "Columns" },
+        h("div", { class: "row between", style: "padding:14px 16px 8px" }, h("h2", {}, `Columns in ${tObj?.displayName || audState.table}`), h("span", { class: "small muted" }, "Click a column name to see its history")),
+        !audState.columns ? h("div", { class: "empty" }, "Loading…") : audState.columns.error ? h("div", { style: "padding:16px" }, notice("bad", audState.columns.error)) :
+        h("div", { class: "scroll", style: "max-height:560px;overflow:auto" }, h("table", { class: "envtable" },
+          h("thead", {}, h("tr", {}, h("th", { scope: "col", style: "width:44px" }, ""), h("th", { scope: "col" }, "Column"), envHeads(names))),
+          h("tbody", {}, cols.map((c) => {
+            const box = h("input", { type: "checkbox", "aria-label": `Select ${c.displayName}` });
+            box.checked = audState.selC.has(c.logicalName);
+            box.addEventListener("change", () => { box.checked ? audState.selC.add(c.logicalName) : audState.selC.delete(c.logicalName); renderAudit(); });
+            return h("tr", { class: audState.column === c.logicalName ? "sel" : "" },
+              h("td", {}, box),
+              h("th", { scope: "row" }, h("button", { type: "button", class: "btn link", style: "padding:0;font-weight:600", onclick: () => { audState.column = audState.column === c.logicalName ? null : c.logicalName; loadAuditLog(); } }, c.displayName), h("div", { class: "mono muted" }, `${c.logicalName} · ${c.type}`)),
+              names.map((n) => cell(c.cells[n], () => applyAudit([{ env: n, table: audState.table, column: c.logicalName, on: !c.cells[n].auditEnabled }]), `Auditing for ${c.displayName} in ${n}`)));
+          }))))),
+      h("section", { class: "card stack", style: "flex:2 1 400px", "aria-label": "Audit history" },
+        h("div", { class: "row between" }, h("h2", {}, `Changes · ${audState.column ? `${audState.table}.${audState.column}` : audState.table}`),
+          seg([["24h", "24h"], ["7d", "7 days"], ["30d", "30 days"]], audState.since, (v) => { audState.since = v; loadAuditLog(); }, "Time range")),
+        !audState.log ? loading("audit history") : audState.log.error ? notice("bad", audState.log.error) :
+        logRows.length === 0 ? h("p", { class: "muted" }, "No audited changes in this period.") :
+        h("ol", { class: "list" }, logRows.slice(0, 200).map((e) => h("li", { style: "display:grid;grid-template-columns:70px 110px minmax(0,1fr);gap:12px;padding:10px 0" },
+          chip(e.env), h("div", { class: "small muted" }, fmtDate(e.at)),
           h("div", { class: "stack", style: "gap:4px" },
             h("div", { class: "row small" }, h("span", { class: "pill info" }, e.action || e.operation), h("strong", {}, e.record), h("span", { class: "muted" }, `by ${e.user}`)),
-            e.changes.slice(0, 8).map((c) => h("div", { class: "row mono" }, h("span", { class: "muted" }, c.column), h("span", { class: "pill bad", style: "text-decoration:line-through" }, c.old || "∅"), h("span", { "aria-hidden": "true" }, "→"), h("span", { class: "pill ok" }, c.new || "∅"))))))))
-  ));
-}
-function bulkChanges(on) {
-  const ch = [...audState.selT].map((t) => ({ table: t, on }));
-  if (audState.table) ch.push(...[...audState.selC].map((c) => ({ table: audState.table, column: c, on })));
-  return ch;
+            e.changes.slice(0, 8).map((c) => h("div", { class: "row mono" }, h("span", { class: "muted" }, c.column), h("span", { class: "pill bad", style: "text-decoration:line-through" }, c.old || "∅"), h("span", { "aria-hidden": "true" }, "→"), h("span", { class: "pill ok" }, c.new || "∅")))))))))
+    : h("p", { class: "muted" }, "Click a table name to see its columns and change history."));
 }
 
-// ------------------------------------------------------------------ user settings
+// ------------------------------------------------------------------ security
 
-const usState = { options: null, target: { region: "en-GB", dateformatstring: "", timeformatstring: "", timezonecode: "", uilanguageid: "", paginglimit: "" }, scope: "all", scopeName: "", overwrite: false, newUsers: false, preview: null, result: null, reason: "", notice: null, busy: false };
-async function usersettings(params) {
-  pickEnv(params);
-  usState.preview = null; usState.result = null;
+const secState = { tab: "users", users: null, roles: null, error: null, q: "", onlyDiff: false, role: "", noRoles: false, privRole: null, priv: null, privDiff: true };
+async function security() {
+  secState.error = null;
+  renderSecurity();
+  try {
+    const [users, roles] = await Promise.all([api("/api/security/users/all"), api("/api/security/roles/all")]);
+    secState.users = users; secState.roles = roles;
+  } catch (err) { secState.error = err.message; }
+  renderSecurity();
+}
+async function loadPrivileges(role) {
+  secState.privRole = role; secState.priv = null; renderSecurity();
+  try { secState.priv = await api(`/api/security/privileges?role=${encodeURIComponent(role)}`); } catch (err) { secState.priv = { error: err.message }; }
+  renderSecurity();
+  document.getElementById("priv-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function renderSecurity() {
+  const head = header("Governance", "Security", "Who has which roles in every environment, and how roles differ between environments.");
+  if (secState.error) return mount(head, notice("bad", secState.error));
+  if (!secState.users || !secState.roles) return mount(head, loading("users and roles from every environment"));
+  const names = secState.users.environments.filter((n) => secState.users.results[n]);
+  const tabs = seg([["users", "Users"], ["roles", "Roles"]], secState.tab, (v) => { secState.tab = v; renderSecurity(); }, "View", "tablist");
+  if (secState.tab === "roles") return renderRoles(head, tabs, names);
+  const q = secState.q.trim().toLowerCase();
+  const key = (u) => (u ? [...u.roles].sort().join("|") : "-");
+  let rows = toMatrix(secState.users.results, names, (u) => u.login, (u) => ({ name: u.name, login: u.login })).sort((a, b) => a.name.localeCompare(b.name));
+  rows = rows.filter((r) => (!q || `${r.name} ${r.login}`.toLowerCase().includes(q)) &&
+    (!secState.onlyDiff || new Set(names.map((n) => key(r.cells[n]))).size > 1) &&
+    (!secState.role || names.some((n) => r.cells[n]?.roles.includes(secState.role))) &&
+    (!secState.noRoles || names.some((n) => r.cells[n] && r.cells[n].roles.length === 0 && r.cells[n].teamRoles.length === 0)));
+  const allRoles = [...new Set(names.flatMap((n) => secState.users.results[n].flatMap((u) => u.roles)))].sort();
+  const roleSel = h("select", { class: "input", "aria-label": "Role" }, h("option", { value: "" }, "Any role"), allRoles.map((r) => h("option", { value: r, selected: r === secState.role }, r)));
+  roleSel.addEventListener("change", () => { secState.role = roleSel.value; renderSecurity(); });
+  const search = h("input", { type: "search", placeholder: "Search people", value: secState.q, "aria-label": "Search people" });
+  search.addEventListener("input", () => { secState.q = search.value; const pos = search.selectionStart; renderSecurity(); const el = main().querySelector("input[type=search]"); el.focus(); el.setSelectionRange(pos, pos); });
+  mount(head, tabs, errorsNotice(secState.users.errors),
+    h("div", { class: "row" }, h("label", { class: "search" }, search), roleSel,
+      checkbox("Only where roles differ", secState.onlyDiff, (v) => { secState.onlyDiff = v; renderSecurity(); }),
+      checkbox("Users with no roles", secState.noRoles, (v) => { secState.noRoles = v; renderSecurity(); })),
+    h("section", { class: "card flush", "aria-label": "Users and roles" },
+      h("div", { class: "small muted", style: "padding:12px 20px" }, `${rows.length} people · enabled users only · roles from teams shown in italics`),
+      rows.length === 0 ? h("div", { class: "empty" }, "Nobody matches.") :
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Person"), envHeads(names, (n) => `${secState.users.results[n].length} users`))),
+        h("tbody", {}, rows.slice(0, 500).map((r) => {
+          const differs = new Set(names.map((n) => key(r.cells[n]))).size > 1;
+          return h("tr", {}, h("th", { scope: "row" }, r.name, h("div", { class: "small muted" }, r.login)),
+            names.map((n) => {
+              const u = r.cells[n];
+              if (!u) return h("td", { class: "envcol muted" }, "—");
+              return h("td", { class: `envcol${differs ? " differs" : ""}` },
+                u.roles.length || u.teamRoles.length ? h("div", { class: "roles" }, u.roles.map((x) => h("span", { class: "pill info" }, x)), u.teamRoles.filter((x) => !u.roles.includes(x)).map((x) => h("span", { class: "pill", style: "font-style:italic" }, x))) : h("span", { class: "pill warn" }, "No roles"));
+            }));
+        }))))),
+    h("p", { class: "small muted", style: "margin:0" }, "— means the person has no user record in that environment. Highlighted rows have different roles between environments."));
+}
+function renderRoles(head, tabs, names) {
+  const rows = toMatrix(secState.roles.results, names, (r) => r.name, (r) => ({ name: r.name, managed: r.managed })).sort((a, b) => a.name.localeCompare(b.name));
+  const p = secState.priv;
+  let privRows = [];
+  if (p && !p.error) {
+    const pn = p.environments.filter((n) => p.results[n] !== undefined);
+    const m = new Map();
+    for (const n of pn) for (const x of p.results[n] || []) { if (!m.has(x.name)) m.set(x.name, {}); m.get(x.name)[n] = x.depth; }
+    privRows = [...m.entries()].map(([name, cells]) => ({ name, cells, differs: new Set(pn.map((n) => cells[n] || "-")).size > 1 })).filter((r) => !secState.privDiff || r.differs).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  mount(head, tabs, errorsNotice(secState.roles.errors),
+    h("section", { class: "card flush", "aria-label": "Roles" },
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Role"), envHeads(names), h("th", { scope: "col" }, ""))),
+        h("tbody", {}, rows.map((r) => h("tr", { class: secState.privRole === r.name ? "sel" : "" },
+          h("th", { scope: "row" }, r.name, r.managed ? h("span", { class: "pill", style: "margin-left:8px" }, "Managed") : null),
+          names.map((n) => h("td", { class: "envcol" }, r.cells[n] ? `${r.cells[n].users} user${r.cells[n].users === 1 ? "" : "s"}` : h("span", { class: "pill warn" }, "Missing"))),
+          h("td", { style: "text-align:right" }, h("button", { type: "button", class: "btn sm", onclick: () => loadPrivileges(r.name) }, "Compare privileges")))))))),
+    secState.privRole ? h("section", { id: "priv-panel", class: "card flush", "aria-label": "Privileges" },
+      h("div", { class: "row between", style: "padding:14px 20px" }, h("h2", {}, `Privileges · ${secState.privRole}`), checkbox("Only differences", secState.privDiff, (v) => { secState.privDiff = v; renderSecurity(); })),
+      !p ? h("div", { class: "empty" }, "Loading privileges from every environment…") : p.error ? h("div", { style: "padding:16px" }, notice("bad", p.error)) :
+      privRows.length === 0 ? h("div", { class: "empty" }, secState.privDiff ? "This role grants the same privileges at the same level everywhere." : "No privileges.") :
+      h("div", { class: "scroll", style: "max-height:560px;overflow:auto" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Privilege"), envHeads(names))),
+        h("tbody", {}, privRows.map((r) => h("tr", {}, h("th", { scope: "row", class: "mono" }, r.name),
+          names.map((n) => h("td", { class: `envcol small${r.differs ? " differs" : ""}` }, p.results[n] === null ? h("span", { class: "muted" }, "role missing") : r.cells[n] || h("span", { class: "muted" }, "none"))))))))) : null);
+}
+
+// ------------------------------------------------------------------ connections & environment variables
+
+const cfgState = { data: null, error: null, reason: "", notice: null, editing: null, value: "", onlyProblems: false, q: "" };
+async function configPage() {
+  cfgState.error = null; cfgState.editing = null;
+  renderConfig();
+  try { cfgState.data = await api("/api/config/all"); } catch (err) { cfgState.error = err.message; }
+  renderConfig();
+}
+async function saveVar(env, schemaName) {
+  if (missingReason(cfgState, [env])) { renderConfig(); return; }
+  try {
+    await api("/api/config/envvar", { env, schemaName, value: cfgState.value, reason: cfgState.reason });
+    cfgState.notice = { kind: "ok", text: `${schemaName} saved in ${env}.` };
+    cfgState.editing = null;
+    cfgState.data = await api("/api/config/all");
+  } catch (err) { cfgState.notice = { kind: "bad", text: err.message }; }
+  renderConfig();
+}
+function renderConfig() {
+  const head = header("Solutions", "Connections & variables", "Environment variable values and connection references in every environment. These are the usual reason a flow won't switch on after a deployment.");
+  if (cfgState.error) return mount(head, notice("bad", cfgState.error));
+  const d = cfgState.data;
+  if (!d) return mount(head, loading("variables and connections from every environment"));
+  const names = d.environments.filter((n) => d.results[n]);
+  const q = cfgState.q.trim().toLowerCase();
+  const vars = toMatrix(Object.fromEntries(names.map((n) => [n, d.results[n].vars])), names, (v) => v.schemaName, (v) => ({ schemaName: v.schemaName, displayName: v.displayName, type: v.type, secret: v.secret }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .filter((v) => (!q || `${v.displayName} ${v.schemaName}`.toLowerCase().includes(q)) && (!cfgState.onlyProblems || names.some((n) => !v.cells[n] || v.cells[n].missing)));
+  const refs = toMatrix(Object.fromEntries(names.map((n) => [n, d.results[n].refs])), names, (r) => r.logicalName, (r) => ({ logicalName: r.logicalName, displayName: r.displayName, connector: r.connector }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .filter((r) => (!q || `${r.displayName} ${r.logicalName} ${r.connector}`.toLowerCase().includes(q)) && (!cfgState.onlyProblems || names.some((n) => !r.cells[n] || !r.cells[n].connected)));
+  const search = h("input", { type: "search", placeholder: "Search variables and connections", value: cfgState.q, "aria-label": "Search" });
+  search.addEventListener("input", () => { cfgState.q = search.value; const pos = search.selectionStart; renderConfig(); const el = main().querySelector("input[type=search]"); el.focus(); el.setSelectionRange(pos, pos); });
+  const varCell = (v, n) => {
+    const c = v.cells[n];
+    if (!c) return h("td", { class: "envcol" }, h("span", { class: "pill warn" }, "Not here"));
+    if (c.secret) return h("td", { class: "envcol muted small" }, "Secret (Key Vault)");
+    const id = `${n}:${v.schemaName}`;
+    if (cfgState.editing === id) {
+      const input = h("input", { class: "input", value: cfgState.value, "aria-label": `New value for ${v.schemaName} in ${n}`, style: "min-width:200px" });
+      input.addEventListener("input", () => { cfgState.value = input.value; });
+      setTimeout(() => input.focus());
+      return h("td", { class: "envcol" }, h("div", { class: "row", style: "justify-content:center" }, input,
+        h("button", { type: "button", class: "btn sm primary", onclick: () => saveVar(n, v.schemaName) }, "Save"),
+        h("button", { type: "button", class: "btn sm", onclick: () => { cfgState.editing = null; renderConfig(); } }, "Cancel")));
+    }
+    const differs = new Set(names.map((x) => v.cells[x]?.effective ?? "∅")).size > 1;
+    return h("td", { class: `envcol${differs ? " differs" : ""}` },
+      c.missing ? h("span", { class: "pill bad" }, "No value") : [h("span", { class: "cellval", title: c.effective }, c.effective), c.currentValue ? null : h("span", { class: "tag" }, "default")],
+      h("button", { type: "button", class: "btn link sm", "aria-label": `Edit ${v.schemaName} in ${n}`, onclick: () => { cfgState.editing = id; cfgState.value = c.currentValue ?? c.effective ?? ""; renderConfig(); } }, "Edit"));
+  };
+  mount(head,
+    cfgState.notice ? notice(cfgState.notice.kind, cfgState.notice.text) : null,
+    errorsNotice(d.errors),
+    h("div", { class: "row" }, h("label", { class: "search" }, search), checkbox("Only problems", cfgState.onlyProblems, (v) => { cfgState.onlyProblems = v; renderConfig(); })),
+    reasonCard(cfgState, names),
+    h("section", { class: "card flush", "aria-label": "Environment variables" },
+      h("h2", { style: "padding:16px 20px 8px" }, `Environment variables (${vars.length})`),
+      vars.length === 0 ? h("div", { class: "empty" }, "None.") :
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Variable"), envHeads(names, (n) => { const m = d.results[n].vars.filter((x) => x.missing).length; return m ? `${m} without a value` : "all set"; }))),
+        h("tbody", {}, vars.map((v) => h("tr", {}, h("th", { scope: "row" }, v.displayName, h("div", { class: "mono muted" }, `${v.schemaName} · ${v.type}`)), names.map((n) => varCell(v, n)))))))),
+    h("section", { class: "card flush", "aria-label": "Connection references" },
+      h("h2", { style: "padding:16px 20px 8px" }, `Connection references (${refs.length})`),
+      refs.length === 0 ? h("div", { class: "empty" }, "None.") :
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Connection reference"), h("th", { scope: "col" }, "Connector"), envHeads(names, (n) => { const m = d.results[n].refs.filter((x) => !x.connected).length; return m ? `${m} not connected` : "all connected"; }))),
+        h("tbody", {}, refs.map((r) => h("tr", {}, h("th", { scope: "row" }, r.displayName, h("div", { class: "mono muted" }, r.logicalName)), h("td", { class: "small muted" }, r.connector),
+          names.map((n) => h("td", { class: "envcol" }, !r.cells[n] ? h("span", { class: "pill warn" }, "Not here") : r.cells[n].connected ? h("span", { class: "pill ok" }, "Connected") : h("span", { class: "pill bad" }, "Not connected"))))))))),
+    h("p", { class: "small muted", style: "margin:0" }, "Connections are set up per environment in the maker portal (Solutions › Connection references). Secret variables live in Azure Key Vault and are never shown."));
+}
+
+// ------------------------------------------------------------------ user settings (several environments at once)
+
+const usState = { options: null, target: { region: "en-GB", dateformatstring: "", timeformatstring: "", timezonecode: "", uilanguageid: "", paginglimit: "" }, scope: "all", scopeName: "", overwrite: false, newUsers: false, preview: null, reason: "", notice: null, busy: false, targets: null };
+async function usersettings() {
+  usState.preview = null;
   renderUserSettings();
   if (!usState.options) { try { usState.options = await api("/api/usersettings/options"); } catch (err) { usState.notice = { kind: "bad", text: err.message }; } }
   renderUserSettings();
@@ -778,29 +1192,37 @@ function usTarget() {
   if (t.paginglimit) out.paginglimit = Number(t.paginglimit);
   return out;
 }
-function usScope() { return usState.scope === "all" ? { kind: "all" } : { kind: usState.scope, name: usState.scopeName }; }
+const usScope = () => (usState.scope === "all" ? { kind: "all" } : { kind: usState.scope, name: usState.scopeName });
+const usTargets = () => [...(usState.targets ?? new Set(envNames()))].filter((n) => envOf(n));
 async function usPreview() {
-  usState.busy = true; usState.result = null; renderUserSettings();
-  try { usState.preview = await api("/api/usersettings/preview", { env: shared.env, target: usTarget(), scope: usScope(), overwrite: usState.overwrite }); usState.notice = null; }
-  catch (err) { usState.notice = { kind: "bad", text: err.message }; }
-  usState.busy = false; renderUserSettings();
+  usState.busy = true; renderUserSettings();
+  const out = {};
+  await Promise.all(usTargets().map(async (n) => {
+    try { out[n] = await api("/api/usersettings/preview", { env: n, target: usTarget(), scope: usScope(), overwrite: usState.overwrite }); } catch (err) { out[n] = { error: err.message }; }
+  }));
+  usState.preview = out; usState.notice = null; usState.busy = false; renderUserSettings();
 }
 async function usApply() {
-  if (needsReason(shared.env, usState)) { renderUserSettings(); return; }
+  const names = usTargets();
+  if (missingReason(usState, names)) { renderUserSettings(); return; }
+  if (!confirm(`Apply these settings in ${names.join(", ")}?`)) return;
   usState.busy = true; renderUserSettings();
-  try {
-    usState.result = await api("/api/usersettings/apply", { env: shared.env, target: usTarget(), scope: usScope(), overwrite: usState.overwrite, setOrgDefaults: usState.newUsers, reason: usState.reason });
-    usState.notice = usState.result.failed.length ? { kind: "bad", text: `${usState.result.changed} updated, ${usState.result.failed.length} failed: ${usState.result.failed.slice(0, 5).map((f) => `${f.name} (${f.error})`).join("; ")}` } : { kind: "ok", text: `${usState.result.changed} users updated${usState.result.orgDefaultsUpdated ? ", and set as the default for new users" : ""}. They see it next time they open an app.` };
-    usState.preview = null;
-  } catch (err) { usState.notice = { kind: "bad", text: err.message }; }
-  usState.busy = false; renderUserSettings();
+  const msgs = []; let failed = 0;
+  for (const n of names) {
+    try {
+      const r = await api("/api/usersettings/apply", { env: n, target: usTarget(), scope: usScope(), overwrite: usState.overwrite, setOrgDefaults: usState.newUsers, reason: usState.reason });
+      msgs.push(`${n}: ${r.changed} users${r.orgDefaultsUpdated ? " + new-user defaults" : ""}${r.failed.length ? `, ${r.failed.length} failed` : ""}`);
+      failed += r.failed.length;
+    } catch (err) { msgs.push(`${n}: ${err.message}`); failed++; }
+  }
+  usState.notice = { kind: failed ? "bad" : "ok", text: msgs.join(" · ") };
+  usState.preview = null; usState.busy = false; renderUserSettings();
 }
 /** Formats the sample date/time and numbers the way Dataverse will. */
 function sampleFormat(t) {
   const d = { yyyy: "2026", MM: "10", M: "10", dd: "30", d: "30" };
   const date = (t.dateformatstring || "dd/MM/yyyy").replace(/yyyy|MM|M|dd|d/g, (m) => d[m]);
-  const tf = t.timeformatstring || "HH:mm";
-  const time = tf.replace(/HH|H|hh|h|mm|tt/g, (m) => ({ HH: "14", H: "14", hh: "02", h: "2", mm: "05", tt: "PM" })[m]);
+  const time = (t.timeformatstring || "HH:mm").replace(/HH|H|hh|h|mm|tt/g, (m) => ({ HH: "14", H: "14", hh: "02", h: "2", mm: "05", tt: "PM" })[m]);
   const dec = t.decimalsymbol ?? ".", grp = t.numberseparator ?? ",";
   const num = `1${grp}234${grp}567${dec}89`;
   const sym = { 2057: "£", 1033: "$", 6153: "€", 1031: "€", 1036: "€" }[t.localeid] || "¤";
@@ -810,15 +1232,13 @@ function sampleFormat(t) {
   return { date, time, num, money: cur(num), neg };
 }
 function renderUserSettings() {
-  const env = envOf(shared.env);
   const o = usState.options;
   const t = usState.target;
-  const head = header("People", "Global user settings", "Set one standard for regional formats, time zone, language and page size, and apply it to users in bulk.",
-    envPicker(env.name, (n) => { shared.env = n; usState.preview = null; usState.result = null; usState.notice = null; renderUserSettings(); }));
+  const head = header("People", "Global user settings", "Set one standard for regional formats, time zone, language and page size, and apply it to users in several environments at once.");
   if (!o) return mount(head, usState.notice ? notice(usState.notice.kind, usState.notice.text) : loading("options"));
-  const sel = (labelText, key, options) => {
-    const el = h("select", { class: "input" }, options.map(([v, text]) => h("option", { value: v, selected: String(t[key]) === String(v) }, text)));
-    el.addEventListener("change", () => { t[key] = el.value; usState.preview = null; renderUserSettings(); });
+  const sel = (labelText, k, options) => {
+    const el = h("select", { class: "input" }, options.map(([v, text]) => h("option", { value: v, selected: String(t[k]) === String(v) }, text)));
+    el.addEventListener("change", () => { t[k] = el.value; usState.preview = null; renderUserSettings(); });
     return h("label", { class: "field" }, h("span", {}, labelText), el);
   };
   const keep = ["", "Don't change"];
@@ -828,11 +1248,10 @@ function renderUserSettings() {
   scopeSel.addEventListener("change", () => { usState.scope = scopeSel.value; usState.preview = null; renderUserSettings(); });
   const scopeName = h("input", { class: "input", type: "text", value: usState.scopeName, placeholder: usState.scope === "role" ? "e.g. Salesperson" : usState.scope === "team" ? "e.g. Service Desk" : "e.g. UK" });
   scopeName.addEventListener("change", () => { usState.scopeName = scopeName.value; usState.preview = null; });
-  const reason = reasonInput(usState, env.name);
-  reason.className = "input";
+  const names = usTargets();
   const p = usState.preview;
-  mount(
-    head,
+  const metric = (label, f) => h("tr", {}, h("th", { scope: "row" }, label), names.map((n) => h("td", { class: "envcol" }, !p?.[n] ? "—" : p[n].error ? h("span", { class: "pill bad", title: p[n].error }, "Error") : f(p[n]))));
+  mount(head,
     usState.notice ? notice(usState.notice.kind, usState.notice.text) : null,
     h("div", { class: "cols" },
       h("div", { class: "stack", style: "flex:3 1 520px" },
@@ -847,31 +1266,36 @@ function renderUserSettings() {
             sel("Records per page", "paginglimit", [keep, ["25", "25"], ["50", "50"], ["75", "75"], ["100", "100"], ["250", "250"]]))),
         h("section", { class: "card stack", "aria-label": "Who" },
           h("h2", {}, "Who gets these settings"),
+          envChecks(usState, envNames()),
           h("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px" },
             h("label", { class: "field" }, h("span", {}, "Users"), scopeSel),
             usState.scope !== "all" ? h("label", { class: "field" }, h("span", {}, "Name"), scopeName) : null),
           checkbox("Also overwrite settings users changed themselves", usState.overwrite, (v) => { usState.overwrite = v; usState.preview = null; renderUserSettings(); }),
           checkbox("Make these the defaults for new users (organisation format settings)", usState.newUsers, (v) => { usState.newUsers = v; renderUserSettings(); }),
-          h("p", { class: "small muted", style: "margin:0" }, "Without the first box, only users still on the organisation's defaults are changed. Interface language must be installed in the environment."))),
+          h("p", { class: "small muted", style: "margin:0" }, "Without the first box, only users still on the organisation's defaults are changed. Interface language must be installed in each environment."))),
       h("div", { class: "stack", style: "flex:2 1 340px" },
         h("section", { class: "card stack", "aria-label": "Preview" },
-          h("h2", {}, "Preview"),
+          h("h2", {}, "How it will look"),
           h("dl", { style: "margin:0;display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:13px" },
             h("dt", { class: "muted" }, "Date and time"), h("dd", { class: "mono", style: "margin:0" }, `${pv.date} ${pv.time}`),
             h("dt", { class: "muted" }, "Number"), h("dd", { class: "mono", style: "margin:0" }, pv.num),
             h("dt", { class: "muted" }, "Currency"), h("dd", { class: "mono", style: "margin:0" }, pv.money),
             h("dt", { class: "muted" }, "Negative"), h("dd", { class: "mono", style: "margin:0" }, pv.neg),
             h("dt", { class: "muted" }, "Records per page"), h("dd", { class: "mono", style: "margin:0" }, target.paginglimit ?? "unchanged"))),
-        h("section", { class: "card stack", "aria-label": "Apply" },
-          h("h2", {}, `Apply in ${env.name}`),
-          h("button", { type: "button", class: "btn", disabled: usState.busy, onclick: usPreview }, usState.busy && !p ? "Checking…" : "Preview affected users"),
-          p ? h("div", { class: "stack", style: "gap:6px" },
-            h("div", {}, h("strong", { style: "font:600 22px var(--head)" }, fmtNum(p.toChange)), ` of ${fmtNum(p.inScope)} users will change`),
-            h("div", { class: "small muted" }, `${fmtNum(p.alreadyMatching)} already match · ${fmtNum(p.skippedPersonalised)} kept because they changed their own settings`),
-            p.sample.length ? h("details", {}, h("summary", { class: "small" }, "Show who"), h("ul", { class: "small", style: "max-height:200px;overflow:auto;margin:6px 0 0;padding-left:18px" }, p.sample.map((u) => h("li", {}, `${u.name} `, h("span", { class: "muted" }, u.login))))) : null) : null,
-          env.managed ? h("label", { class: "field" }, h("span", {}, `Reason (required in ${env.name})`), reason) : null,
-          h("button", { type: "button", class: "btn primary", disabled: usState.busy || !p || (p.toChange === 0 && !usState.newUsers), onclick: usApply }, usState.busy && p ? "Applying…" : "Apply settings"),
-          h("p", { class: "small muted", style: "margin:0" }, "Preview first. Changing other users' settings needs the System Administrator role.")))));
+        reasonCard(usState, names))),
+    h("section", { class: "card flush", "aria-label": "Who will change" },
+      h("div", { class: "row between", style: "padding:14px 20px" }, h("h2", {}, "Who will change"),
+        h("div", { class: "row" },
+          h("button", { type: "button", class: "btn", disabled: usState.busy || !names.length, onclick: usPreview }, usState.busy && !p ? "Checking…" : "Preview"),
+          h("button", { type: "button", class: "btn primary", disabled: usState.busy || !p, onclick: usApply }, usState.busy && p ? "Applying…" : `Apply in ${names.length} environment${names.length === 1 ? "" : "s"}`))),
+      h("div", { class: "scroll" }, h("table", { class: "envtable" },
+        h("thead", {}, h("tr", {}, h("th", { scope: "col" }, ""), envHeads(names))),
+        h("tbody", {},
+          metric("Users in scope", (x) => fmtNum(x.inScope)),
+          metric("Will change", (x) => h("strong", {}, fmtNum(x.toChange))),
+          metric("Already match", (x) => fmtNum(x.alreadyMatching)),
+          metric("Kept (own settings)", (x) => fmtNum(x.skippedPersonalised))))),
+      !p ? h("p", { class: "small muted", style: "margin:0;padding:0 20px 14px" }, "Press Preview to count users in each environment. Changing other users' settings needs the System Administrator role.") : null));
 }
 
 // ------------------------------------------------------------------ activity
@@ -897,7 +1321,7 @@ async function activity() {
 
 // ------------------------------------------------------------------ router
 
-const ROUTES = { overview, solutions, compare, components, runs, audit, usersettings, activity };
+const ROUTES = { overview, alerts, solutions, compare, config: configPage, components, runs, jobs, audit, security, usersettings, activity };
 async function route() {
   hideTip();
   if (!config) {
@@ -907,6 +1331,7 @@ async function route() {
       return mount(header(null, "Env Console"), notice("bad", err.message));
     }
     if (config.mode === "hosted") document.getElementById("who").replaceChildren(h("div", {}, config.name || config.user), h("div", {}, config.user), h("a", { href: "/auth/logout" }, "Sign out"));
+    if (config.environments.length) refreshAlertBadge();
   }
   const [path, query] = (location.hash.replace(/^#\/?/, "") || "overview").split("?");
   const name = ROUTES[path] ? path : "overview";

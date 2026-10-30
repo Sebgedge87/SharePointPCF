@@ -184,3 +184,22 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); 
   .side { flex-basis: 100%; max-width: none; }
 }
 .stack > .search, .stack > label.search { flex: none; max-width: none; }
+
+/* navigation groups and badges */
+.nav-group { margin: 14px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--side-muted); }
+.badge { margin-left: auto; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--brand); color: #FFFFFF; font-size: 11px; font-weight: 700; text-align: center; }
+
+/* environment-column tables */
+.envtable th.envcol, .envtable td.envcol { text-align: center; white-space: nowrap; border-left: 1px solid var(--line-soft); }
+.envtable thead th.envcol { padding-top: 8px; padding-bottom: 8px; }
+.envtable td.envcol .switch { margin: -10px 0; }
+.envtable .roles { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 260px; margin: 0 auto; }
+.envtable td.differs { background: var(--warn-soft); }
+.cellval { font-family: var(--mono); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+.small-multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.envchecks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.envchecks label.check { min-height: 32px; }
+.bulk .envchecks { color: var(--inverse-text); }
+.bulk .envchecks label.check { flex: none; font-size: 13px; min-height: 32px; }
+.bulk .envchecks { align-items: center; }
+.chip { width: fit-content; height: fit-content; align-self: start; }

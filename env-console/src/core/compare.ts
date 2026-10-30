@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { odataString, type DataverseClient } from "./dataverse.js";
+import { assertGuid, odataString, type DataverseClient } from "./dataverse.js";
+import { appendAction } from "./actionLog.js";
+import { checkPolicy } from "./components.js";
 import { diffLines, prettyJson, prettyXml, type DiffLine } from "./diff.js";
 import { mapLimit } from "./util.js";
 
@@ -245,4 +247,53 @@ export async function diffComponent(a: DataverseClient, b: DataverseClient, type
   if (!CONTENT[type]) return { lines: [], changed: false, supported: false };
   const [ta, tb] = await Promise.all([componentContent(a, type, id).catch(() => ""), componentContent(b, type, id).catch(() => "")]);
   return { ...diffLines(ta ?? "", tb ?? ""), supported: true };
+}
+
+// ------------------------------------------------------------------ remove unmanaged layer
+
+/** Names RemoveActiveCustomizations expects, per component type. */
+export const LAYER_NAMES: Record<number, string> = {
+  1: "Entity",
+  2: "Attribute",
+  3: "Relationship",
+  9: "OptionSet",
+  10: "EntityRelationship",
+  20: "Role",
+  26: "SavedQuery",
+  29: "Workflow",
+  59: "SavedQueryVisualization",
+  60: "SystemForm",
+  61: "WebResource",
+  62: "SiteMap",
+  80: "AppModule",
+  92: "SdkMessageProcessingStep",
+  380: "EnvironmentVariableDefinition"
+};
+
+/**
+ * Removes the unmanaged (active) layer from a managed component, so the managed version shows again.
+ * Managed environments need a reason; the change is logged.
+ */
+export async function removeUnmanagedLayer(
+  client: DataverseClient,
+  type: number,
+  id: string,
+  name: string,
+  opts: { reason?: string; actor?: string; source: "cli" | "dashboard" },
+  log = appendAction
+): Promise<void> {
+  checkPolicy(client.env, opts.reason);
+  const componentName = LAYER_NAMES[type];
+  if (!componentName) throw new Error(`Unmanaged changes on this component type (${typeName(type)}) can't be removed here; use the maker portal.`);
+  assertGuid(id);
+  let ok = true;
+  let error: string | undefined;
+  try {
+    await client.request("POST", "RemoveActiveCustomizations", { SolutionComponentName: componentName, ComponentId: id });
+  } catch (e) {
+    ok = false;
+    error = (e as Error).message;
+  }
+  log({ at: new Date().toISOString(), env: client.env.name, action: "remove unmanaged change", kind: typeName(type), id, name, reason: opts.reason?.trim() || undefined, actor: opts.actor, source: opts.source, ok, error });
+  if (!ok) throw new Error(error);
 }

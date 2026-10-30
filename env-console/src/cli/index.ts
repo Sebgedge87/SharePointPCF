@@ -14,6 +14,14 @@ import { getTraceSetting, runReport, setTraceSetting, type TraceSetting } from "
 import { getSystemAudit, listAuditEntries, listColumnAudit, listTableAudit, setAudit } from "../core/audit.js";
 import { applyUserSettings, listUserSettings, planApply, REGIONS, validateSettings, type UserScope } from "../core/usersettings.js";
 import { sinceDate } from "../core/util.js";
+import { writeFileSync } from "node:fs";
+import { acrossEnvs, matrix } from "../core/multi.js";
+import { evaluateAlerts, newAlerts, postToTeams, rememberPosted, validateWebhook } from "../core/alerts.js";
+import { buildReport, renderReportCsv, renderReportHtml } from "../core/report.js";
+import { changeJobs, listProblemJobs } from "../core/jobs.js";
+import { listRoles, listUserRoles } from "../core/security.js";
+import { listConnectionRefs, listEnvVars, setEnvVarValue } from "../core/configdata.js";
+import { runProcess } from "../core/proc.js";
 import { HostedAuth, loadHostedSettings } from "../server/hosted.js";
 import { c, table } from "./format.js";
 
@@ -59,6 +67,22 @@ User settings
                     [--role R | --team T | --bu B] [--overwrite] [--new-users]
                     [--dry-run] [--yes] [--reason TEXT]
 
+Across all environments
+  pcx flows|rules|plugins list          (no --env) one column per environment
+  pcx security users [--diff-only]      Users and their roles in every environment
+  pcx security roles                    Which roles exist where
+  pcx vars list                         Environment variable values in every environment
+  pcx vars set --env NAME <schema> <value> --reason TEXT
+  pcx connections list                  Connection references and whether they are connected
+  pcx jobs list [--env NAME] [--since 7d]   Failed, suspended or stuck background jobs
+  pcx jobs cancel|resume --env NAME <job-id>... --reason TEXT
+
+Alerts and reports
+  pcx alerts list                       Current problems across all environments
+  pcx alerts run --post [--all]         Post new alerts to Teams (needs teams-webhook)
+  pcx alerts schedule [--every 60] [--install]   Check on a schedule (Windows Task Scheduler)
+  pcx report [--days 7] [--format html|csv|json] [--out FILE]
+
 Dashboard
   pcx serve [--port 4820] [--open]      Start the dashboard on this machine (--open opens the browser)
 
@@ -66,6 +90,8 @@ Other
   pcx config path                       Show which config file is used
   pcx config set tenant <id-or-domain>  Sign in to a specific tenant (empty to clear)
   pcx config set provider azps|azcli    Sign in with PowerShell (default) or Azure CLI
+  pcx config set teams-webhook <url>    Teams channel for alerts (empty to remove)
+  --config FILE                         Use this config file (any command)
 
 Changes in managed environments (everything except unmanaged DEV) need --reason.
 Config: ./pcx.config.json, or ~/.pcx/config.json, or the PCX_CONFIG variable.`;
@@ -114,6 +140,13 @@ function opts(argv: string[]) {
       team: { type: "string" },
       bu: { type: "string" },
       "show-same": { type: "boolean" },
+      every: { type: "string" },
+      install: { type: "boolean" },
+      post: { type: "boolean" },
+      days: { type: "string" },
+      format: { type: "string" },
+      out: { type: "string" },
+      config: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" }
     }
@@ -246,6 +279,7 @@ const NOUN: Record<ComponentKind, string> = { flow: "flow", rule: "business rule
 
 async function cmdComponents(group: string, sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {
   const kind = KIND[group]!;
+  if (sub === "list" && (!o.env || o.env.length !== 1)) return cmdComponentsMatrix(kind, o, config);
   const env = oneEnv(config, o);
   const ws = new Workspace(config);
   const client = ws.client(env);
@@ -470,6 +504,166 @@ async function cmdUserSettings(sub: string | undefined, o: Opts, config: PcxConf
   return res.failed.length ? 1 : 0;
 }
 
+// ---- cross-environment helpers for the CLI
+
+function matrixTable(envNames: string[], rows: { label: string; cells: Record<string, string> }[], firstHeader: string): string {
+  return table([firstHeader, ...envNames], rows.map((r) => [r.label, ...envNames.map((e) => r.cells[e] ?? c.dim("—"))]));
+}
+
+async function cmdComponentsMatrix(kind: ComponentKind, o: Opts, config: PcxConfig): Promise<number> {
+  const ws = new Workspace(config);
+  const res = await acrossEnvs(ws, envsFrom(config), (client) => listComponents(client, kind, { includeSystem: !!o["include-system"] }));
+  const names = res.environments.filter((n) => res.results[n]);
+  const rows = matrix(res.results, names, (i) => i.id.toLowerCase(), (i) => ({ name: i.name, custom: i.custom }));
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  const shown = o.off ? rows.filter((r) => names.some((n) => r.cells[n] && !r.cells[n]!.on)) : rows;
+  if (o.json) return out(JSON.stringify({ environments: names, rows: shown, errors: res.errors }, null, 2)), 0;
+  out(matrixTable(names, shown.map((r) => ({ label: r.name, cells: Object.fromEntries(names.map((n) => [n, r.cells[n] ? (r.cells[n]!.on ? c.green("on") : c.yellow("off")) : c.dim("—")])) })), NOUN[kind].toUpperCase()));
+  for (const [e, m] of Object.entries(res.errors)) out(c.red(`${e}: ${m}`));
+  return Object.keys(res.errors).length ? 1 : 0;
+}
+
+async function cmdAlerts(sub: string | undefined, o: Opts, config: PcxConfig, configPath: string): Promise<number> {
+  const ws = new Workspace(config);
+  if (sub === "schedule") {
+    const every = Number(o.every ?? 60);
+    if (!Number.isInteger(every) || every < 15 || every > 1440) throw new UsageError("--every must be 15-1440 minutes");
+    const node = process.execPath;
+    const cli = fileURLToPath(import.meta.url);
+    const tr = `"${node}" "${cli}" alerts run --post --config "${configPath}"`;
+    const args = ["/Create", "/SC", "MINUTE", "/MO", String(every), "/TN", "Env Console alerts", "/TR", tr, "/F"];
+    if (process.platform !== "win32") {
+      out(`Add this to your crontab (crontab -e) to check every ${every} minutes:\n\n  */${Math.min(every, 59)} * * * * ${tr.replace(/"/g, "'")}`);
+      return 0;
+    }
+    if (!o.install) {
+      out(`This creates a Windows scheduled task that checks every ${every} minutes and posts new alerts to Teams:\n\n  schtasks ${args.map((a) => (a.includes(" ") ? `"${a.replace(/"/g, '\\"')}"` : a)).join(" ")}\n\nRun again with --install to create it.`);
+      return 0;
+    }
+    const r = await runProcess("schtasks", args);
+    if (r.code !== 0) throw new Error(`schtasks failed: ${r.stderr || r.stdout}`);
+    out(`${c.green("✓")} Scheduled "Env Console alerts" every ${every} minutes. It runs while you are signed in to Windows.`);
+    return 0;
+  }
+  if (sub !== "list" && sub !== "run") throw new UsageError("Usage: pcx alerts list [--json] | pcx alerts run [--post] [--all] | pcx alerts schedule [--every 60] [--install]");
+  const alerts = await evaluateAlerts(ws, envsFrom(config), sinceDate(o.since ?? "24h"));
+  if (o.json) return out(JSON.stringify(alerts, null, 2)), 0;
+  const sevColor = { critical: c.red, warning: c.yellow, info: c.blue };
+  if (!alerts.length) out(c.green("No alerts."));
+  else out(table(["SEVERITY", "ENV", "ALERT", "DETAIL"], alerts.map((a) => [sevColor[a.severity](a.severity), a.env, a.title, (a.detail ?? "").slice(0, 80)])));
+  if (sub === "run" && o.post) {
+    const hook = config.alerts?.teamsWebhook;
+    if (!hook) throw new UsageError("No Teams webhook set. Run: pcx config set teams-webhook <url>");
+    const toPost = o.all ? alerts : newAlerts(alerts);
+    if (toPost.length) {
+      await postToTeams(hook, toPost);
+      rememberPosted(toPost);
+      out(`${c.green("✓")} Posted ${toPost.length} alert${toPost.length === 1 ? "" : "s"} to Teams`);
+    } else out(c.dim("Nothing new to post."));
+  }
+  return alerts.some((a) => a.severity === "critical") ? 1 : 0;
+}
+
+async function cmdReport(o: Opts, config: PcxConfig): Promise<number> {
+  const days = Number(o.days ?? 7);
+  if (!Number.isInteger(days) || days < 1 || days > 30) throw new UsageError("--days must be 1-30");
+  const format = o.format ?? "html";
+  if (!["html", "csv", "json"].includes(format)) throw new UsageError("--format must be html, csv or json");
+  const report = await buildReport(new Workspace(config), config, days);
+  const body = format === "csv" ? renderReportCsv(report) : format === "json" ? JSON.stringify(report, null, 2) : renderReportHtml(report);
+  const file = o.out ?? `env-health-${report.generatedAt.slice(0, 10)}.${format}`;
+  writeFileSync(file, body);
+  out(`${c.green("✓")} Report saved to ${file}`);
+  return 0;
+}
+
+async function cmdJobs(sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {
+  const ws = new Workspace(config);
+  if (sub === "list") {
+    const since = sinceDate(o.since ?? "7d");
+    const res = await acrossEnvs(ws, envsFrom(config, o.env), (client) => listProblemJobs(client, since));
+    if (o.json) return out(JSON.stringify(res, null, 2)), 0;
+    const rows = Object.entries(res.results).flatMap(([env, jobs]) => jobs.map((j) => ({ env, ...j })));
+    rows.sort((a, b) => b.created.localeCompare(a.created));
+    out(table(["ENV", "PROBLEM", "JOB", "TYPE", "CREATED", "MESSAGE", "ID"], rows.slice(0, 100).map((j) => [j.env, j.problem === "failed" ? c.red(j.problem) : c.yellow(j.problem), j.name, j.type, j.created.replace("T", " ").slice(0, 16), (j.message ?? "").split("\n")[0]!.slice(0, 60), c.dim(j.id)])));
+    for (const [e, m] of Object.entries(res.errors)) out(c.red(`${e}: ${m}`));
+    return 0;
+  }
+  if (sub !== "cancel" && sub !== "resume") throw new UsageError("Usage: pcx jobs list [--env NAME] [--since 7d] | pcx jobs cancel|resume --env NAME <job-id>... --reason TEXT");
+  const env = oneEnv(config, o);
+  const client = ws.client(env);
+  if (!pos.length) throw new UsageError("Give one or more job IDs (from pcx jobs list)");
+  const known = new Map((await listProblemJobs(client, sinceDate("30d"))).map((j) => [j.id.toLowerCase(), j]));
+  const jobs = pos.map((id) => {
+    const j = known.get(id.toLowerCase());
+    if (!j) throw new UsageError(`Job ${id} is not waiting, suspended or failed in ${env.name}`);
+    return { id: j.id, name: j.name };
+  });
+  const actor = await whoAmI(client).then((x) => x.user, () => undefined);
+  const results = await changeJobs(client, jobs, sub, { reason: o.reason, actor, source: "cli" });
+  for (const r of results) out(`${r.ok ? c.green("✓") : c.red("✗")} ${r.name}${r.error ? c.red(` — ${r.error}`) : ""}`);
+  return results.every((r) => r.ok) ? 0 : 1;
+}
+
+async function cmdSecurity(sub: string | undefined, o: Opts, config: PcxConfig): Promise<number> {
+  const ws = new Workspace(config);
+  if (sub === "users") {
+    const res = await acrossEnvs(ws, envsFrom(config), (client) => listUserRoles(client));
+    const names = res.environments.filter((n) => res.results[n]);
+    let rows = matrix(res.results, names, (u) => u.login, (u) => ({ name: u.name, login: u.login }));
+    const cell = (u: { roles: string[] } | null) => (u ? u.roles.join(", ") || "(no roles)" : "—");
+    if (o["diff-only"]) rows = rows.filter((r) => new Set(names.map((n) => cell(r.cells[n] ?? null))).size > 1);
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    if (o.json) return out(JSON.stringify({ environments: names, rows, errors: res.errors }, null, 2)), 0;
+    out(matrixTable(names, rows.map((r) => ({ label: `${r.name} ${c.dim(r.login)}`, cells: Object.fromEntries(names.map((n) => [n, cell(r.cells[n] ?? null)])) })), "USER"));
+    return 0;
+  }
+  if (sub === "roles") {
+    const res = await acrossEnvs(ws, envsFrom(config), (client) => listRoles(client));
+    const names = res.environments.filter((n) => res.results[n]);
+    const rows = matrix(res.results, names, (r) => r.name, (r) => ({ name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
+    if (o.json) return out(JSON.stringify({ environments: names, rows, errors: res.errors }, null, 2)), 0;
+    out(matrixTable(names, rows.map((r) => ({ label: r.name, cells: Object.fromEntries(names.map((n) => [n, r.cells[n] ? `${r.cells[n]!.users} users` : c.dim("missing")])) })), "ROLE"));
+    return 0;
+  }
+  throw new UsageError("Usage: pcx security users [--diff-only] [--json] | pcx security roles [--json]");
+}
+
+async function cmdVars(sub: string | undefined, pos: string[], o: Opts, config: PcxConfig): Promise<number> {
+  const ws = new Workspace(config);
+  if (sub === "list") {
+    const res = await acrossEnvs(ws, envsFrom(config), (client) => listEnvVars(client));
+    const names = res.environments.filter((n) => res.results[n]);
+    const rows = matrix(res.results, names, (v) => v.schemaName, (v) => ({ name: v.schemaName })).sort((a, b) => a.name.localeCompare(b.name));
+    if (o.json) return out(JSON.stringify({ environments: names, rows, errors: res.errors }, null, 2)), 0;
+    out(matrixTable(names, rows.map((r) => ({ label: r.name, cells: Object.fromEntries(names.map((n) => {
+      const v = r.cells[n];
+      return [n, !v ? c.dim("—") : v.secret ? c.dim("(secret)") : v.missing ? c.red("NO VALUE") : `${(v.effective ?? "").slice(0, 40)}${v.currentValue ? "" : c.dim(" (default)")}`];
+    })) })), "VARIABLE"));
+    return 0;
+  }
+  if (sub === "set") {
+    const env = oneEnv(config, o);
+    const [name, value] = pos;
+    if (!name || value === undefined) throw new UsageError("Usage: pcx vars set --env NAME <schemaname> <value> --reason TEXT");
+    const client = ws.client(env);
+    const actor = await whoAmI(client).then((x) => x.user, () => undefined);
+    await setEnvVarValue(client, name, value, { reason: o.reason, actor, source: "cli" });
+    out(`${c.green("✓")} ${name} set in ${env.name}`);
+    return 0;
+  }
+  throw new UsageError("Usage: pcx vars list [--json] | pcx vars set --env NAME <schemaname> <value> --reason TEXT");
+}
+
+async function cmdConnections(o: Opts, config: PcxConfig): Promise<number> {
+  const res = await acrossEnvs(new Workspace(config), envsFrom(config), (client) => listConnectionRefs(client));
+  const names = res.environments.filter((n) => res.results[n]);
+  const rows = matrix(res.results, names, (r) => r.logicalName, (r) => ({ name: r.displayName, connector: r.connector })).sort((a, b) => a.name.localeCompare(b.name));
+  if (o.json) return out(JSON.stringify({ environments: names, rows, errors: res.errors }, null, 2)), 0;
+  out(matrixTable(names, rows.map((r) => ({ label: `${r.name} ${c.dim(r.connector)}`, cells: Object.fromEntries(names.map((n) => [n, !r.cells[n] ? c.dim("—") : r.cells[n]!.connected ? c.green("connected") : c.red("NOT CONNECTED")])) })), "CONNECTION REFERENCE"));
+  return rows.some((r) => names.some((n) => r.cells[n] && !r.cells[n]!.connected)) ? 1 : 0;
+}
+
 function cmdConfig(sub: string | undefined, pos: string[], config: PcxConfig, configPath: string): number {
   if (sub === "path") return out(configPath), 0;
   if (sub === "set") {
@@ -480,6 +674,14 @@ function cmdConfig(sub: string | undefined, pos: string[], config: PcxConfig, co
       else delete next.tenantId;
       saveConfig(next, configPath);
       out(`${c.green("✓")} Tenant ${value ? `set to ${value}` : "cleared (your default tenant is used)"}`);
+      return 0;
+    }
+    if (key === "teams-webhook") {
+      const next: PcxConfig = { ...config };
+      if (value) next.alerts = { teamsWebhook: validateWebhook(value) };
+      else delete next.alerts;
+      saveConfig(next, configPath);
+      out(`${c.green("✓")} Teams webhook ${value ? "saved" : "removed"}`);
       return 0;
     }
     if (key === "provider" && (value === "azps" || value === "azcli")) {
@@ -516,6 +718,7 @@ export async function main(argv: string[]): Promise<number> {
   if (o.version) return out(VERSION), 0;
   const [cmd, sub, ...rest] = positionals;
   if (!cmd || o.help || cmd === "help") return out(HELP), 0;
+  if (o.config) process.env.PCX_CONFIG = o.config;
   const configPath = defaultConfigPath();
   try {
     const config = loadConfig(configPath);
@@ -533,6 +736,18 @@ export async function main(argv: string[]): Promise<number> {
         return await cmdAudit(sub, rest, o, config);
       case "usersettings":
         return await cmdUserSettings(sub, o, config);
+      case "alerts":
+        return await cmdAlerts(sub, o, config, configPath);
+      case "report":
+        return await cmdReport(o, config);
+      case "jobs":
+        return await cmdJobs(sub, rest, o, config);
+      case "security":
+        return await cmdSecurity(sub, o, config);
+      case "vars":
+        return await cmdVars(sub, rest, o, config);
+      case "connections":
+        return await cmdConnections(o, config);
       case "flows":
       case "rules":
       case "plugins":

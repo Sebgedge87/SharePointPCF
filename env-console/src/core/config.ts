@@ -20,6 +20,8 @@ export interface PcxConfig {
   environments: EnvConfig[];
   /** Extra host suffixes to allow, for sovereign clouds. Defaults cover public, GCC, China. */
   allowedHostSuffixes?: string[];
+  /** Where `pcx alerts run --post` sends new alerts. */
+  alerts?: { teamsWebhook?: string };
 }
 
 /** Tokens are only ever requested for, and sent to, hosts ending in one of these. */
@@ -95,6 +97,18 @@ export function validateConfig(input: unknown): PcxConfig {
     return { name: r.name, url: normaliseEnvUrl(r.url, suffixes), managed: r.managed === undefined ? true : r.managed === true };
   });
   const out: PcxConfig = { auth: { provider }, environments };
+  const alertsIn = c.alerts as Record<string, unknown> | undefined;
+  if (alertsIn && typeof alertsIn === "object" && typeof alertsIn.teamsWebhook === "string" && alertsIn.teamsWebhook) {
+    const u = (() => {
+      try {
+        return new URL(alertsIn.teamsWebhook as string);
+      } catch {
+        throw new ConfigError("alerts.teamsWebhook is not a valid URL");
+      }
+    })();
+    if (u.protocol !== "https:") throw new ConfigError("alerts.teamsWebhook must use https");
+    out.alerts = { teamsWebhook: u.toString() };
+  }
   if (tenantId) out.tenantId = tenantId;
   if (c.allowedHostSuffixes) out.allowedHostSuffixes = c.allowedHostSuffixes as string[];
   return out;
