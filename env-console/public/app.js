@@ -48,7 +48,7 @@ async function api(path, body) {
     throw new NeedsLogin("Signing in…");
   }
   if (res.status === 401) throw new NeedsLogin(data.error || "Not signed in");
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { output: data.output });
   return data;
 }
 
@@ -238,6 +238,7 @@ function signIn() {
   document.body.append(dlg);
   signInDialog = dlg;
   let finished = false;
+  let mode = "code";
   let poll = null;
   const stop = () => { if (poll) clearInterval(poll); poll = null; };
   const show = (...nodes) => body.replaceChildren(...nodes.flat().filter(Boolean));
@@ -249,16 +250,21 @@ function signIn() {
     acctState.user = null;
     setTimeout(() => { dlg.close(); acctState.notice = { kind: "ok", text: "Signed in." }; overview(); refreshAlertBadge(); }, 900);
   };
-  const failed = (msg) => {
+  const failed = (msg, output) => {
     stop();
-    show(notice("bad", msg), h("div", { class: "row" },
+    show(notice("bad", msg),
+      output ? h("details", {}, h("summary", { class: "small" }, "What the sign-in tool printed"), h("div", { class: "code wrap", style: "margin-top:8px;max-height:200px" }, output.split("\n").map((l) => h("div", {}, l)))) : null,
+      h("div", { class: "row" },
       h("button", { type: "button", class: "btn primary", onclick: startCode }, "Try again"),
       h("button", { type: "button", class: "btn", onclick: startBrowser }, "Use a browser window instead")));
   };
   async function startCode() {
-    show(h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "Getting a sign-in code…"), tenantLine());
+    mode = "code";
+    show(h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "Getting a sign-in code… (up to 30 seconds)"), tenantLine(),
+      h("button", { type: "button", class: "btn link", style: "align-self:flex-start;padding:0", onclick: () => { api("/api/account/device/cancel", {}).catch(() => {}); startBrowser(); } }, "Use a browser window instead"));
     let start;
-    try { start = await api("/api/account/device/start", {}); } catch (err) { return failed(err.message); }
+    try { start = await api("/api/account/device/start", {}); } catch (err) { if (!dlg.open || mode !== "code") return; return failed(err.message, err.output); }
+    if (!dlg.open || mode !== "code") return;
     const copyBtn = h("button", { type: "button", class: "btn sm", onclick: async () => {
       try { await navigator.clipboard.writeText(start.code); copyBtn.textContent = "Copied"; } catch { copyBtn.textContent = "Select and copy"; }
     } }, "Copy");
@@ -281,6 +287,8 @@ function signIn() {
     }, 2000);
   }
   async function startBrowser() {
+    mode = "browser";
+    stop();
     show(h("div", { class: "row" }, h("span", { class: "spinner", "aria-hidden": "true" }), "A Microsoft sign-in tab has opened in your browser. Pick your work account there."), tenantLine());
     try { await api("/api/account/login", {}); success(); } catch (err) { failed(`Sign-in didn't finish: ${err.message}`); }
   }

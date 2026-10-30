@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { ConfigError, findEnv, validateConfig, type PcxConfig } from "../core/config.js";
 import { readActions } from "../core/actionLog.js";
-import { AuthError, TokenCache, type DeviceLogin, type TokenProvider } from "../core/auth.js";
+import { AuthError, DeviceLoginError, TokenCache, type DeviceLogin, type TokenProvider } from "../core/auth.js";
 import { changeState, listComponents, PolicyError, type ComponentKind } from "../core/components.js";
 import { envStatus, whoAmI, Workspace } from "../core/environments.js";
 import { buildMatrix, listSolutions, publisherCounts, type Solution } from "../core/solutions.js";
@@ -224,6 +224,10 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
           return { code: login.code, url: login.url };
         } catch (e) {
           Object.assign(current, { state: "failed", error: (e as Error).message });
+          if (e instanceof DeviceLoginError) {
+            process.stderr.write(`\n[pcx] Sign-in code not found. What the sign-in tool printed:\n${e.output}\n\n`);
+            throw new HttpError(502, e.message, { output: e.output });
+          }
           throw e;
         }
       }

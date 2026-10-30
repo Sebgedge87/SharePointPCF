@@ -36,7 +36,8 @@ function deviceLoginFrom(start: (onOutput: (t: string) => void) => CapturedProce
     let buf = "";
     let started = false;
     const proc = start((t) => {
-      buf += t;
+      // eslint-disable-next-line no-control-regex
+      buf += t.replace(/\x1b\[[0-9;]*m/g, "");
       if (started) return;
       const code = CODE_RE.exec(buf)?.[1];
       if (code) {
@@ -51,17 +52,28 @@ function deviceLoginFrom(start: (onOutput: (t: string) => void) => CapturedProce
         });
       }
     });
+    const output = () => buf.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-8).join("\n") || "(no output)";
     const timer = setTimeout(() => {
       if (!started) {
         proc.kill();
-        rejectStart(new AuthError(`${toolName} did not show a sign-in code. ${firstLine(buf) === "unknown error" ? "" : firstLine(buf)}`.trim()));
+        rejectStart(new DeviceLoginError(`${toolName} did not show a sign-in code within 30 seconds.`, output()));
       }
-    }, 60_000);
+    }, 30_000);
     proc.done.then((r) => {
       clearTimeout(timer);
-      if (!started) rejectStart(new AuthError(r.notFound ? `${toolName} was not found.` : `${toolName} sign-in stopped: ${firstLine(buf)}`));
+      if (!started) rejectStart(r.notFound ? new AuthError(`${toolName} was not found.`) : new DeviceLoginError(`${toolName} stopped before showing a sign-in code.`, output()));
     });
   });
+}
+
+/** A code sign-in that failed to start; `output` is what the tool printed, for diagnosis. */
+export class DeviceLoginError extends Error {
+  constructor(
+    message: string,
+    readonly output: string
+  ) {
+    super(message);
+  }
 }
 
 export class AuthError extends Error {
@@ -127,8 +139,15 @@ if ($env:PCX_DEVICE -eq '1') { $p.UseDeviceAuthentication = $true }
 # pcx does not use Azure subscriptions: skip the subscription picker and the per-tenant warnings.
 try { Update-AzConfig -LoginExperienceV2 Off -Scope Process -WarningAction SilentlyContinue | Out-Null } catch { }
 # Device code needs its instructions shown; otherwise hide the module's banners and announcements.
-# The sign-in code is shown as a warning, so warnings stay on here.
-if ($p.UseDeviceAuthentication) { Connect-AzAccount @p | Out-Null }
+# The sign-in code arrives as a warning or host message: pass every message on as plain text, straight away.
+if ($p.UseDeviceAuthentication) {
+  try { $PSStyle.OutputRendering = 'PlainText' } catch { }
+  Connect-AzAccount @p *>&1 | ForEach-Object {
+    if ($_ -is [System.Management.Automation.WarningRecord] -or $_ -is [System.Management.Automation.InformationRecord] -or $_ -is [System.Management.Automation.ErrorRecord] -or $_ -is [string]) {
+      [Console]::Out.WriteLine([string]$_); [Console]::Out.Flush()
+    }
+  }
+}
 else { Connect-AzAccount @p -WarningAction SilentlyContinue *> $null }
 $c = Get-AzContext
 Write-Host ("Signed in as " + $c.Account.Id + " (tenant " + $c.Tenant.Id + ")")
@@ -150,7 +169,7 @@ export class PowerShellTokenProvider implements TokenProvider {
   startDeviceLogin(tenantId?: string): Promise<DeviceLogin> {
     checkTenant(tenantId);
     const env = { ...process.env, PCX_TENANT: tenantId ?? "", PCX_DEVICE: "1" };
-    return deviceLoginFrom((onOut) => this.capture(this.shells[0]!, ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", encodePs(PS_LOGIN)], onOut, { env }), "PowerShell");
+    return deviceLoginFrom((onOut) => this.capture(this.shells[0]!, ["-NoProfile", "-OutputFormat", "Text", "-EncodedCommand", encodePs(PS_LOGIN)], onOut, { env }), "PowerShell");
   }
 
   async getToken(resource: string, tenantId?: string): Promise<AccessToken> {
