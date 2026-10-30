@@ -298,3 +298,8 @@ dialog.flyout[open] { animation: flyin 0.18s ease-out; }
 .side a.brand:hover { background: transparent; }
 /* dark theme: outline the brand-coloured labels so dark blue ones stay visible */
 :root[data-theme="dark"] .chip, :root[data-theme="dark"] .envdot { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28); }
+/* environment labels in list rows never spill into the next column; the full name is in the tooltip */
+.list li > .chip { max-width: 100%; min-width: 0; }
+@media (max-width: 720px) {
+  .list li[style*="grid-template-columns:76px 180px"] { grid-template-columns: 76px minmax(0,1fr) !important; }
+}
